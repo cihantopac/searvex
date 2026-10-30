@@ -5,6 +5,7 @@ import { crawl, type PageRecord } from '../crawl/crawler.js';
 import { RunStore } from '../crawl/store.js';
 import { loadKnowledge } from '../rules/engine.js';
 import { md } from '../report/markdown.js';
+import { renderEcosystemHtml } from '../report/html.js';
 import { crawlOptionsFrom, log, num, UsageError, type GlobalFlags } from '../cli.js';
 
 /**
@@ -283,6 +284,7 @@ export async function commandEcosystem(flags: GlobalFlags): Promise<number> {
   store.writeJson('meta.json', { kind: 'ecosystem', sites: urls, startedAt: new Date().toISOString() });
   store.writeJson('ecosystem.json', eco);
   const out = store.writeText('ecosystem.md', renderEcosystemMarkdown(eco));
+  store.writeText('ecosystem.html', renderEcosystemHtml(eco));
   if (v['json']) process.stdout.write(JSON.stringify(eco, null, 2) + '\n');
   else if (!v['quiet']) console.log(renderEcosystemMarkdown(eco) + `\nSaved: ${out}`);
   if (!fs.existsSync(out)) return 2;

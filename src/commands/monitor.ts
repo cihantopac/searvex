@@ -4,6 +4,7 @@ import { auditWebsite, type AuditReport } from '../analyze/audit.js';
 import { RunStore } from '../crawl/store.js';
 import { loadKnowledge } from '../rules/engine.js';
 import { md } from '../report/markdown.js';
+import { renderMonitorHtml } from '../report/html.js';
 import { querySearchConsole, type GscRow } from '../integrations/gsc.js';
 import { gscAccessToken } from '../integrations/google-oauth.js';
 import { parseCsv } from '../integrations/csv.js';
@@ -129,6 +130,7 @@ export async function commandMonitor(flags: GlobalFlags): Promise<number> {
   }
   store.writeJson('monitor.json', { diff, gsc });
   const out = store.writeText('monitor.md', renderDiffMarkdown(diff, gsc));
+  store.writeText('monitor.html', renderMonitorHtml(diff));
   if (v['json']) process.stdout.write(JSON.stringify({ diff, gsc }, null, 2) + '\n');
   else console.log(renderDiffMarkdown(diff, gsc) + `\nSaved: ${out}`);
   return diff.regression && v['fail-on'] ? 1 : 0;

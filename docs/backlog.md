@@ -43,7 +43,7 @@ Each item lists how it will be verified; nothing is marked done without that ver
 | # | Item | Status |
 |---|---|---|
 | 16 | Template-level issue grouping (URL-pattern clusters) in reports | ✅ URL-pattern templates per finding (DOM-structure clustering still open) |
-| 17 | HTML dashboard: charts, template view, monitor before/after, ecosystem view | ⬜ |
+| 17 | HTML dashboard: charts, template view, monitor before/after, ecosystem view | ✅ |
 | 18 | Disk-backed analysis for >50k pages | ⬜ |
 | 19 | GitHub Action wrapper + SARIF upload example tested | ⬜ |
 | 20 | MCP server exposing the engine | ⬜ |
