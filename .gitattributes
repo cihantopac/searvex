@@ -1,0 +1,4 @@
+# Force LF everywhere so fixtures, snapshots and optimizer edits behave the same on Windows.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.png binary

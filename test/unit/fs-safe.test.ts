@@ -7,6 +7,8 @@ import { anchorsWithoutHref, imgWithoutAlt } from '../../src/repo/scan.js';
 
 let root: string;
 let outside: string;
+/** Creating symlinks needs elevated rights on Windows; skip those assertions when unavailable. */
+let symlinks = true;
 
 beforeAll(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-fs-'));
@@ -18,8 +20,12 @@ beforeAll(() => {
   fs.writeFileSync(path.join(root, 'id_rsa'), 'KEY');
   fs.mkdirSync(path.join(root, 'node_modules'));
   fs.writeFileSync(path.join(root, 'node_modules', 'x.html'), '');
-  fs.symlinkSync(outside, path.join(root, 'linked'));
-  fs.symlinkSync(path.join(outside, 'secret.html'), path.join(root, 'src', 'evil.html'));
+  try {
+    fs.symlinkSync(outside, path.join(root, 'linked'), 'dir');
+    fs.symlinkSync(path.join(outside, 'secret.html'), path.join(root, 'src', 'evil.html'));
+  } catch {
+    symlinks = false;
+  }
 });
 
 afterAll(() => {
@@ -32,15 +38,17 @@ describe('safe filesystem access', () => {
     const { files, skipped } = walk(root);
     const rels = files.map((f) => f.rel);
     expect(rels).toEqual(['src/a.html']);
-    expect(skipped.symlinks).toBe(2);
+    expect(skipped.symlinks).toBe(symlinks ? 2 : 0);
     expect(skipped.secrets).toBe(2);
   });
 
   it('rejects path traversal and symlink escapes', () => {
     expect(() => resolveInside(root, '../etc/passwd')).toThrow(/escapes/);
     expect(() => resolveInside(root, '/etc/passwd')).toThrow(/escapes/);
-    expect(() => resolveInside(root, 'linked/secret.html')).toThrow(/symlink/);
-    expect(() => readText(root, 'src/evil.html')).toThrow();
+    if (symlinks) {
+      expect(() => resolveInside(root, 'linked/secret.html')).toThrow(/symlink/);
+      expect(() => readText(root, 'src/evil.html')).toThrow();
+    }
   });
 
   it('refuses to read secret files even when asked directly', () => {
