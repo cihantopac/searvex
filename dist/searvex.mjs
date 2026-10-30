@@ -24723,7 +24723,9 @@ Run "searvex --help" for usage.`);
 }
 var invoked = process.argv[1] ? path18.resolve(process.argv[1]) : "";
 if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path18.sep}searvex`))) {
-  main().then((code) => process.exit(code));
+  main().then((code) => {
+    process.exitCode = code;
+  });
 }
 export {
   SEVERITY_ORDER,

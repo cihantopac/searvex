@@ -394,6 +394,10 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
 // Run when executed directly (not when imported by tests).
 const invoked = process.argv[1] ? path.resolve(process.argv[1]) : '';
 if (invoked && (invoked.endsWith('cli.js') || invoked.endsWith('searvex.mjs') || invoked.endsWith(`${path.sep}searvex`))) {
-  main().then((code) => process.exit(code));
+  // Set exitCode instead of calling process.exit(): exit() can truncate large piped stdout (e.g. --json)
+  // before it has been flushed.
+  main().then((code) => {
+    process.exitCode = code;
+  });
 }
 
