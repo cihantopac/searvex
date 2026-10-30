@@ -144,9 +144,10 @@ describe('structured data requirements', () => {
 
 describe('CSV import', () => {
   it('parses quoted fields and maps Search Console exports', () => {
-    const rows = parseCsv('﻿Top queries,Clicks,Impressions,CTR,Position\n"a, b",10,100,10%,3.2\nc,0,5,0%,12\n');
+    const text = '﻿Top queries,Clicks,Impressions,CTR,Position\n"a, b",10,100,10%,3.2\nc,0,5,0%,12\n';
+    const rows = parseCsv(text);
     expect(rows[0]!['Top queries']).toBe('a, b');
-    const g = rowsFromCsv(rows);
+    const g = rowsFromCsv(text);
     expect(g[0]).toMatchObject({ keys: ['a, b'], clicks: 10, impressions: 100, ctr: 0.1, position: 3.2 });
   });
 });

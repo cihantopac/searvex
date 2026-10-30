@@ -2,17 +2,20 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
-import os from 'node:os';
-import path from 'node:path';
 import type { AddressInfo } from 'node:net';
+import { defaultCredentialStore, FileCredentialStore, type CredentialStore, type StoredCredential } from './credentials.js';
 
 /**
  * Google OAuth 2.0 for installed (desktop) apps: loopback redirect + PKCE (S256), per
  * https://developers.google.com/identity/protocols/oauth2/native-app.
  *
  * Users bring their own OAuth client ("Desktop app" client JSON from Google Cloud Console); Searvex ships
- * no client credentials. Refresh tokens are stored in the user's config directory with 0600 permissions
- * and are only used to call read-only Google APIs.
+ * no client credentials. Refresh tokens go to a `CredentialStore` (file in the user's config directory by
+ * default) and are only used to call read-only Google APIs.
+ *
+ * Note for clients in the "Testing" publishing status: Google issues refresh tokens that expire after 7 days
+ * (https://developers.google.com/identity/protocols/oauth2#expiration); `accessToken` explains this on
+ * `invalid_grant`.
  */
 export const GSC_SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
 
@@ -21,55 +24,58 @@ export interface OAuthClient {
   clientSecret?: string;
 }
 
-export interface StoredCredential {
-  clientId: string;
-  clientSecret?: string;
-  refreshToken: string;
-  scope: string;
-  createdAt: string;
-}
+export type { StoredCredential } from './credentials.js';
+export { configDir } from './credentials.js';
 
 const AUTH_URL = () => process.env['SEARVEX_GOOGLE_AUTH_URL'] ?? 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = () => process.env['SEARVEX_GOOGLE_TOKEN_URL'] ?? 'https://oauth2.googleapis.com/token';
+const REVOKE_URL = () => process.env['SEARVEX_GOOGLE_REVOKE_URL'] ?? 'https://oauth2.googleapis.com/revoke';
 
-export function configDir(): string {
-  if (process.env['SEARVEX_CONFIG_DIR']) return process.env['SEARVEX_CONFIG_DIR'];
-  if (process.platform === 'win32') return path.join(process.env['APPDATA'] ?? path.join(os.homedir(), 'AppData', 'Roaming'), 'searvex');
-  return path.join(process.env['XDG_CONFIG_HOME'] ?? path.join(os.homedir(), '.config'), 'searvex');
-}
+export class OAuthClientFileError extends Error {}
 
-const credFile = () => path.join(configDir(), 'credentials.json');
-
+/**
+ * Read a Google OAuth client JSON. Only "Desktop app" clients (`installed`) support the loopback redirect
+ * without registering redirect URIs; a "Web application" client fails at Google with redirect_uri_mismatch,
+ * so it is rejected here with an actionable message.
+ */
 export function loadClientFile(file: string): OAuthClient {
-  const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, { client_id?: string; client_secret?: string }>;
-  const c = raw['installed'] ?? raw['web'];
-  if (!c?.client_id) throw new Error('Not a Google OAuth client file (expected an "installed" client with client_id)');
+  let raw: Record<string, { client_id?: string; client_secret?: string }>;
+  try {
+    raw = JSON.parse(fs.readFileSync(file, 'utf8')) as typeof raw;
+  } catch (e) {
+    throw new OAuthClientFileError(`Cannot read OAuth client file ${file}: ${(e as NodeJS.ErrnoException).code ?? 'invalid JSON'}`);
+  }
+  if (raw['web'] && !raw['installed']) throw new OAuthClientFileError('This is a "Web application" OAuth client. Create a "Desktop app" client in Google Cloud Console (Google Auth Platform → Clients) and download its JSON.');
+  const c = raw['installed'];
+  if (!c?.client_id) throw new OAuthClientFileError('Not a Google OAuth client file (expected an "installed" Desktop app client with client_id)');
   return { clientId: c.client_id, clientSecret: c.client_secret };
 }
 
+const store = (): CredentialStore => defaultCredentialStore();
+
 export function readCredentials(): Record<string, StoredCredential> {
-  try {
-    return JSON.parse(fs.readFileSync(credFile(), 'utf8')) as Record<string, StoredCredential>;
-  } catch {
-    return {};
-  }
+  const s = store();
+  return s instanceof FileCredentialStore ? s.readAll() : {};
 }
 
 export function saveCredential(name: string, cred: StoredCredential): string {
-  fs.mkdirSync(configDir(), { recursive: true, mode: 0o700 });
-  const all = { ...readCredentials(), [name]: cred };
-  const file = credFile();
-  fs.writeFileSync(file, JSON.stringify(all, null, 2), { mode: 0o600 });
-  fs.chmodSync(file, 0o600);
-  return file;
+  const s = store();
+  s.set(name, cred);
+  return s instanceof FileCredentialStore ? s.file : s.describe();
 }
 
 export function deleteCredential(name: string): boolean {
-  const all = readCredentials();
-  if (!all[name]) return false;
-  delete all[name];
-  fs.writeFileSync(credFile(), JSON.stringify(all, null, 2), { mode: 0o600 });
-  return true;
+  return store().delete(name);
+}
+
+/**
+ * Revoke a refresh (or access) token at Google so the grant disappears from the user's account, per
+ * https://developers.google.com/identity/protocols/oauth2/native-app#tokenrevoke. Returns false when Google
+ * reports the token as already invalid.
+ */
+export async function revokeToken(token: string): Promise<boolean> {
+  const { status } = await postForm(REVOKE_URL(), { token });
+  return status === 200;
 }
 
 const b64url = (b: Buffer) => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -171,13 +177,16 @@ export async function accessToken(cred: StoredCredential): Promise<string> {
     refresh_token: cred.refreshToken,
     grant_type: 'refresh_token',
   });
-  if (status !== 200 || typeof json['access_token'] !== 'string') throw new Error(`Token refresh failed (${status}): ${String(json['error_description'] ?? json['error'] ?? 'unknown')}. Run "searvex gsc auth" again.`);
+  if (status !== 200 || typeof json['access_token'] !== 'string') {
+    if (json['error'] === 'invalid_grant') throw new Error('The stored Google authorization is no longer valid (revoked, expired, or older than 7 days for an OAuth app in "Testing" status). Run "searvex gsc auth --client <file>" again.');
+    throw new Error(`Token refresh failed (${status}): ${String(json['error_description'] ?? json['error'] ?? 'unknown')}. Run "searvex gsc auth" again.`);
+  }
   return json['access_token'];
 }
 
 /** Access token from SEARVEX_GSC_TOKEN, or from the stored "gsc" credential. */
 export async function gscAccessToken(): Promise<string | null> {
   if (process.env['SEARVEX_GSC_TOKEN']) return process.env['SEARVEX_GSC_TOKEN'];
-  const cred = readCredentials()['gsc'];
+  const cred = store().get('gsc');
   return cred ? accessToken(cred) : null;
 }

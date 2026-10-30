@@ -5,7 +5,7 @@ repositories for technical SEO and GEO/AEO (AI search) issues against a **source
 base**, researches competitors, and applies **safe, verified code fixes with one-command rollback**.
 It ships as a standalone CLI and as a Claude Code plugin.
 
-> Status: **v0.6.0 (early)**. The engine, rule base, CLI and plugin are tested (244 automated tests incl. Playwright rendering, CI on Linux/macOS/Windows,
+> Status: **v0.7.0 (early)**. The engine, rule base, CLI and plugin are tested (automated tests incl. Playwright rendering, CI on Linux/macOS/Windows,
 > real-site and real-repository validation — see [docs/quality.md](docs/quality.md)). Expect rough
 > edges; read [Limitations](#limitations) before relying on it.
 
@@ -80,8 +80,10 @@ searvex research https://example.com --competitor https://rival-a.com --competit
 # Regression monitoring against the previous run (optionally with Search Console data)
 searvex monitor https://example.com --fail-on high
 
-# Search performance (read-only, your own credentials)
-searvex gsc auth --client client_secret.json      # Google OAuth "Desktop app" client
+# Optional search performance data: Google / CSV / skip (asked once per site)
+searvex connect https://example.com
+searvex gsc import performance-export.zip --audit latest   # Search Console CSV export, no account access
+searvex gsc auth --client client_secret.json               # your own Google OAuth "Desktop app" client
 searvex gsc report sc-domain:example.com --audit latest
 SEARVEX_BING_API_KEY=… searvex bing report https://example.com/
 
@@ -103,7 +105,7 @@ Full reference: [docs/cli.md](docs/cli.md).
 | `SEARVEX_CRUX_API_KEY` | Real-user Core Web Vitals (Chrome UX Report API) |
 | `searvex gsc auth` (or `SEARVEX_GSC_TOKEN`) | Search Console query × page analysis, `monitor` performance |
 | `SEARVEX_BING_API_KEY` | Bing Webmaster Tools query × page analysis |
-| `--import export.csv` | Search Console Performance CSV exports |
+| `searvex gsc import export.zip` | Search Console Performance CSV/ZIP exports (no account access; no query × page data) |
 | `npm i -D playwright` | `--render`: JavaScript rendering and raw-vs-rendered comparison |
 
 Without them, Searvex reports these metrics as **not measured** — it never estimates them.

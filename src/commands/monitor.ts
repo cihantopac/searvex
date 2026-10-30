@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { auditWebsite, type AuditReport } from '../analyze/audit.js';
 import { RunStore } from '../crawl/store.js';
@@ -7,7 +6,7 @@ import { md } from '../report/markdown.js';
 import { renderMonitorHtml } from '../report/html.js';
 import { querySearchConsole, type GscRow } from '../integrations/gsc.js';
 import { gscAccessToken } from '../integrations/google-oauth.js';
-import { parseCsv } from '../integrations/csv.js';
+import { GscImportError, importGscFiles, parseGscTable } from '../integrations/gsc-csv.js';
 import { crawlOptionsFrom, log, UsageError, writeReports, type GlobalFlags } from '../cli.js';
 
 export interface FindingDelta {
@@ -123,10 +122,16 @@ export async function commandMonitor(flags: GlobalFlags): Promise<number> {
     gsc = { rows: await querySearchConsole({ token, siteUrl: site, days: 28, dimensions: ['query'] }), source: `Search Console API, ${site}, last 28 days` };
   }
   for (const file of (v['import'] as string[] | undefined) ?? []) {
-    const rows = parseCsv(fs.readFileSync(file, 'utf8'));
-    const parsed = rowsFromCsv(rows);
-    if (parsed.length) gsc = { rows: parsed, source: `imported ${path.basename(file)}` };
-    store.writeJson(`import-${path.basename(file).replace(/[^\w.-]/g, '_')}.json`, rows.slice(0, 50000));
+    let exp;
+    try {
+      exp = importGscFiles([file]);
+    } catch (e) {
+      if (e instanceof GscImportError) throw new UsageError(e.message);
+      throw e;
+    }
+    const table = exp.tables.queries ?? exp.tables.pages;
+    if (table?.length) gsc = { rows: table.map((r) => ({ keys: [r.key], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })), source: `imported ${path.basename(file)}` };
+    for (const w of exp.warnings) log(v, `warning: ${w}`);
   }
   store.writeJson('monitor.json', { diff, gsc });
   const out = store.writeText('monitor.md', renderDiffMarkdown(diff, gsc));
@@ -136,19 +141,8 @@ export async function commandMonitor(flags: GlobalFlags): Promise<number> {
   return diff.regression && v['fail-on'] ? 1 : 0;
 }
 
-/** Map a Search Console "Performance" CSV export (Top queries / Top pages) to rows. */
-export function rowsFromCsv(rows: Record<string, string>[]): GscRow[] {
-  if (!rows.length) return [];
-  const keys = Object.keys(rows[0]!);
-  const keyCol = keys.find((k) => /^(top )?(queries|pages|query|page|countries|devices)$/i.test(k.trim()));
-  const col = (re: RegExp) => keys.find((k) => re.test(k.trim()));
-  const clicks = col(/^clicks$/i), impr = col(/^impressions$/i), ctr = col(/^ctr$/i), pos = col(/^position$/i);
-  if (!keyCol || !clicks || !impr) return [];
-  return rows.map((r) => ({
-    keys: [r[keyCol] ?? ''],
-    clicks: Number(r[clicks] ?? 0) || 0,
-    impressions: Number(r[impr] ?? 0) || 0,
-    ctr: ctr ? (Number(String(r[ctr]).replace('%', '')) || 0) / (String(r[ctr]).includes('%') ? 100 : 1) : 0,
-    position: pos ? Number(r[pos]) || 0 : 0,
-  }));
+/** Map one Search Console "Performance" CSV table (queries, pages, countries, devices) to rows. */
+export function rowsFromCsv(text: string, fileName = 'export.csv'): GscRow[] {
+  const t = parseGscTable(text, fileName);
+  return t && t.kind !== 'filters' ? t.rows.map((r) => ({ keys: [r.key], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })) : [];
 }

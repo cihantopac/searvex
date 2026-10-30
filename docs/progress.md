@@ -4,8 +4,14 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Current state — 2026-10-30
 
-- Version 0.3.0: ecosystem analysis, structured-data inventory, content-language checks, template-aware
-  duplicates, Playwright rendering tests + CI job; 187 tests; lines coverage 88%; 86 rules.
+- Version 0.7.0 (branch `feat/v0.7-data-integrity`, PR pending owner merge): property-aware search-data
+  joins, Search Console CSV/ZIP import, `connect` onboarding (Google ile bağlan / CSV içe aktar / Şimdilik
+  geç), OAuth hardening (revoke, CI guard, client-type check), shared-query classification, docs consistency
+  test; 274 tests; 90 rules.
+- Product decisions (2026-10-30, owner accepted the recommended defaults): plugin + CLI first, no hosted
+  services; file credential store behind an interface (keychain later); integration order GSC live → CSV →
+  Bing live → CrUX/PSI → GA4 → Yandex; Bing via API key; no paid SERP/AI providers; branch + PR per
+  milestone, owner merges; no npm publish or release without approval.
 - Continuous real-world validation target: a permitted 7-site SaaS product family (owner-authorised). Raw
   captures stay outside the repository (scratch space); fixtures are anonymised.
 - Plugin updates require a version bump in `.claude-plugin/plugin.json` (installed copies are pinned to that version).
@@ -25,6 +31,17 @@ Use this file to resume work after an interrupted session. Newest entries first.
 4. After changes to `src/`, run `npm run bundle` so the plugin bundle stays in sync (CI checks this).
 
 ## Session log
+
+### 2026-10-30 — v0.7.0 data integrity round
+- Assessment found: `--audit latest` ignored the property (could join another site's audit); CSV import only
+  in `monitor`, English headers only, silent zero rows for localised exports; `gsc logout` did not revoke;
+  shared queries labelled "data-verified cannibalisation"; docs stuck at v0.3.0 facts.
+- Fixed all of the above with regression tests (multi-site workspace, TR/EN exports, ZIP limits, revoke,
+  CI guard, shared-query patterns) and an automated docs consistency test.
+- Real-site round 5 (see quality.md) found and fixed legal pages classified as `other`.
+- Not done yet (next): Playwright isolation review (WebSocket/WebRTC, redirect interception, per-site
+  contexts, process limits), live GSC/Bing/CrUX validation once the owner's credentials exist, OS keychain
+  backend, GA4/Yandex.
 
 ### 2026-10-30 — round 2 of the backlog (v0.5.0)
 - F: `crawl.facet-explosion`, `pagination.canonical-to-first`.
@@ -76,7 +93,10 @@ Use this file to resume work after an interrupted session. Newest entries first.
 | 7 | Research has no demand data | gaps ≠ opportunities | optional data providers, user CSV import |
 | 8 | `npm install` needs `--legacy-peer-deps` (npm 10.9 arborist `edgesOut` crash with vitest 5 peers) | contributor friction | track npm fix; `.npmrc` sets legacy-peer-deps |
 | 9 | Plugin icon missing (directory warning) | listing only | add 512 px PNG before directory submission |
-| 10 | GSC token must be obtained externally | setup friction | device-flow helper |
+| 10 | Each user needs their own Google Cloud Desktop OAuth client | setup friction | CSV import as the no-account path; hosted OAuth only with a future SaaS (owner decision) |
+| 16 | Render mode: browser re-resolves DNS (rebinding window); WebSocket/WebRTC and redirect-hop interception not verified; one browser context shared across pages | render-mode SSRF exposure on hostile sites | v0.7.x Playwright isolation round |
+| 17 | `monitor --import` does not check that the export belongs to the monitored site | wrong performance section in monitor output | reuse property checks |
+| 18 | Turkish/other-language Search Console header wording verified only against published UI terms | localised imports may need synonyms | confirm with the owner's real exports |
 | 11 | Entity/answerability signals are heuristics | could be over-read | keep `info`, documented |
 | 13 | Language detector covers 8 languages, ~30-word minimum | other locales not judged | extend word lists / n-gram model |
 | 14 | Cannibalisation uses title/H1 terms only | misses body-level intent overlap | combine with GSC query data |

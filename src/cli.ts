@@ -19,7 +19,7 @@ import { commandMonitor } from './commands/monitor.js';
 import { commandResearch } from './commands/research.js';
 import { commandRun } from './commands/run.js';
 import { commandEcosystem } from './commands/ecosystem.js';
-import { commandBing, commandGsc } from './commands/gsc.js';
+import { commandBing, commandConnect, commandGsc } from './commands/gsc.js';
 
 const HELP = `Searvex ${SEARVEX_VERSION} — open-source search intelligence & optimization engine
 
@@ -35,8 +35,12 @@ Commands
   research <url>        Site inventory, business model, topics; compare with --competitor URLs
   optimize <path>       Plan safe code fixes for a repository (dry-run by default; --apply to write)
   rollback <changeId>   Restore files changed by an applied optimization
-  gsc <auth|sites|report|logout>   Google Search Console (read-only): OAuth for your own Desktop client
-                        (--client file), list properties, query/page analysis with --audit join
+  connect <url>         Optional search data for a site: shows the three choices (Google / CSV / skip)
+                        and records one with --choice google|csv|skip; never starts OAuth by itself
+  gsc <auth|status|sites|report|import|logout>
+                        Google Search Console (read-only): OAuth with your own Desktop client (--client),
+                        property check, query/page analysis with a property-matched --audit join;
+                        "gsc import <export.zip>" reads a Performance CSV export without any account access
   bing report <siteUrl> Bing Webmaster Tools query/page analysis (SEARVEX_BING_API_KEY, read-only)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
@@ -122,6 +126,9 @@ function parse(argv: string[]): GlobalFlags {
       strict: { type: 'boolean' },
       baseline: { type: 'string' },
       import: { type: 'string', multiple: true },
+      force: { type: 'boolean' },
+      property: { type: 'string' },
+      choice: { type: 'string' },
     },
   });
   return { values, positionals };
@@ -361,6 +368,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         return await commandGsc(flags);
       case 'bing':
         return await commandBing(flags);
+      case 'connect':
+        return await commandConnect(flags);
       case 'audit':
         return await commandAudit(flags);
       case 'geo':

@@ -59,15 +59,56 @@ to check them against their sources first.
 Ask the `content-strategist` agent for clusters, briefs and an editorial order based on `summary.json`.
 Mark every fact the user must supply. Do not invent statistics or product claims.
 
-## Search data (optional, verified)
-If the user can grant Search Console access, run `gsc report <property> --audit latest` (one-time `gsc auth
---client <their Desktop OAuth client JSON>`); for Bing, `bing report <siteUrl>` with SEARVEX_BING_API_KEY. Use the
-striking-distance, low-CTR and multi-page-query sections to prioritise; label them as verified search data.
+## Search data step (optional, after the Phase 4 report)
+Searvex works fully without external accounts. After the report, offer verified search performance data
+**once**, unless a choice is already stored. Check first:
+```
+node "${CLAUDE_PLUGIN_ROOT}/dist/searvex.mjs" connect <url> --json
+```
+- `preference.choice` is `skip`: do not ask again; mention in one line that search metrics are "Not measured".
+- `googleAuthorized` is true: run `gsc report --audit latest` (it verifies the property and joins only an
+  audit of the same site) and report the results. No question needed.
+- Otherwise ask, in the user's language. For Turkish users use exactly this text and these labels (use the
+  interactive question UI when available, otherwise a numbered list):
+
+  > Teknik SEO ve GEO analizi tamamlandı. Google'daki gerçek arama sorgularınızı, gösterimlerinizi,
+  > tıklamalarınızı ve sayfa performansınızı da analiz edebilirim.
+  > 1. Google ile bağlan
+  > 2. CSV içe aktar
+  > 3. Şimdilik geç
+
+**1 — Google ile bağlan.** Read-only OAuth with the user's *own* Google Cloud "Desktop app" client. There is
+no one-click Searvex login; say so honestly. If they have no client yet, walk them through: create a Google
+Cloud project → enable "Google Search Console API" → Google Auth Platform: External audience, add
+themselves as a test user, add the `webmasters.readonly` scope → create a "Desktop app" client → download
+the JSON to a folder outside the repository. Then ask them to run, **in their own terminal** (browser
+consent cannot complete inside a non-interactive tool call; in Claude Code they can prefix it with `!`):
+`searvex gsc auth --client <path to the JSON>`. Never ask them to paste the JSON, tokens or secrets into the
+chat, and never open the file yourself. Afterwards run `gsc status`, then `gsc report --audit latest`
+(the property is picked automatically when exactly one accessible property covers the audited site;
+otherwise ask which one from `gsc sites`). Note: apps in "Testing" status get refresh tokens that expire after
+7 days; `gsc auth` again renews them.
+
+**2 — CSV içe aktar.** Explain: Search Console → Performance → pick the date range → Export → Download CSV
+(a ZIP). Ask for the file path, then run `gsc import <file.zip> --audit latest` (add `--property
+sc-domain:example.com` if the export has no pages table or several hosts). State the limits the report
+lists under "Not measured": no query → page mapping, at most 1,000 rows per table.
+
+**3 — Şimdilik geç.** Run `connect <url> --choice skip`, continue normally and do not ask again. Mark search
+metrics as "Not measured"; the user can connect or import later with `searvex connect <url>`.
+
+In CI or other non-interactive runs, never wait for a choice or for OAuth: treat it as "Şimdilik geç"
+without storing a preference.
+
+When search data is available, use the striking-distance, low-CTR, findings-on-traffic and intent sections
+to prioritise and label them as verified search data. "Queries shared by several pages" are not
+cannibalisation by default: only entries marked for review are candidates, and they still need a check over
+time. For Bing, `bing report <siteUrl> --audit latest` with SEARVEX_BING_API_KEY.
 
 ## Phase 7/7 — Monitoring
 Explain that running `searvex run <url>` again after deployment shows improvements and regressions
 (step 3). For CI, suggest `searvex audit <url> --fail-on high --format sarif`. Search Console data is
-optional and read-only (`SEARVEX_GSC_TOKEN`, or `monitor --import`).
+optional and read-only (`gsc auth`, `SEARVEX_GSC_TOKEN`, or `gsc import` / `monitor --import` of a CSV export).
 
 ## Related sites (brand family / product ecosystem)
 When the user owns several related sites (a company site plus product sites), also run

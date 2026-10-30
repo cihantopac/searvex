@@ -5,6 +5,44 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-30
+
+### Added
+- `searvex gsc import <export.zip|*.csv>`: Search Console Performance exports without any account access.
+  Reads the ZIP from "Export → Download CSV" or the individual CSVs; tables are recognised by their
+  (localised) headers — English and Turkish verified, DE/FR/ES/IT/PT/NL best-effort — with decimal commas,
+  `;`/tab delimiters and UTF-16 files. Period and search type come from the dates and filters tables;
+  filtered exports, truncated tables (1,000-row UI limit) and unreadable rows are reported. Sections that
+  need query × page data are listed under "Not measured" instead of being approximated.
+- `searvex connect <url> [--choice google|csv|skip]`: the optional search-data step ("Google ile bağlan",
+  "CSV içe aktar", "Şimdilik geç"). It never starts OAuth itself; the choice is stored per site in the user
+  config directory so Searvex does not ask again. `run` summaries state that search metrics are not measured
+  and how to add them.
+- `gsc status`; `gsc report` without a property picks the single accessible property covering the newest
+  audit.
+- Credential storage behind a `CredentialStore` interface (file backend; atomic writes), so a keychain or a
+  hosted token service can be added without touching the integrations.
+
+### Changed
+- "Queries shared by several pages" is no longer labelled data-verified cannibalisation. Each shared query
+  gets a pattern — navigational/brand, parent/child pages, one dominant page, mixed intent, possible
+  competition — and only the last two are marked for review.
+- `gsc auth` reuses a valid stored authorization (`--force` to re-authorize), refuses to run in CI, rejects
+  "Web application" client files, and `invalid_grant` errors explain the 7-day refresh-token expiry of OAuth
+  apps in "Testing" status.
+- `monitor --import` uses the new importer (localised headers, ZIP files).
+- Bing reports state that totals cover the top pages only.
+
+### Fixed
+- `gsc report` / `bing report --audit latest` joined the newest website audit in the workspace even when it
+  belonged to another site. The audit is now chosen by property scope (domain properties: all subdomains
+  and protocols; URL-prefix properties: exact protocol, host and path), explicit run ids of other sites are
+  rejected, and ambiguous choices (several subdomains of a domain property) require an explicit run id.
+  Pages without impressions are only listed inside the property.
+- `gsc report` checks that the property exists in the account with read access and suggests the right
+  spelling (`sc-domain:` vs URL prefix).
+- `gsc logout` now revokes the token at Google instead of only deleting the local copy.
+
 ## [0.6.0] - 2026-10-30
 
 ### Changed

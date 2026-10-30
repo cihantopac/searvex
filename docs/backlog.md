@@ -38,6 +38,13 @@ Each item lists how it will be verified; nothing is marked done without that ver
 | 13 | Internal-linking opportunities (topic-related pages that do not link to each other; orphans by topic) | ✅ |
 | 14 | Deeper competitor research: per-competitor topic clusters, page-type comparison per intent | ⬜ |
 | 15 | Bing AI Performance import (CSV) when exported by the user | ⬜ |
+| 26 | Property-aware audit joins (GSC/Bing), multi-site regression tests | ✅ v0.7.0 |
+| 27 | Search Console CSV/ZIP import (localised headers, decimal commas, filters/period metadata, limits) | ✅ v0.7.0 — TR wording to confirm with a real export |
+| 28 | Onboarding: `connect` with Google / CSV / skip, per-site preference, "Not measured" in summaries | ✅ v0.7.0 |
+| 29 | OAuth hardening: revoke on logout, CI guard, Desktop-client check, invalid_grant guidance, credential store interface | ✅ v0.7.0 (mock-tested; live pending) |
+| 30 | OS keychain credential backend (macOS Keychain, Windows Credential Manager, libsecret) | ⬜ v0.8 |
+| 31 | Playwright isolation round (WebSocket/WebRTC, redirect hops, per-site contexts, process limits) | ⬜ next |
+| 32 | Docs consistency checks (versions, commands, env vars) | ✅ v0.7.0 |
 
 ### P2 — Product experience
 | # | Item | Status |

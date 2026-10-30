@@ -36,7 +36,7 @@ interface PwBrowser {
 
 /**
  * Resolve and validate the host before the browser connects. The browser resolves DNS again,
- * so a rebinding window remains in render mode; this is documented in docs/SECURITY.md.
+ * so a rebinding window remains in render mode; this is documented in docs/security.md.
  */
 async function assertResolvable(host: string, policy: NetPolicy): Promise<void> {
   const h = host.replace(/^\[|\]$/g, '');
