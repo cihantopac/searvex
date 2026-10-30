@@ -17,6 +17,7 @@ import { commandOptimize, commandRollback } from './commands/optimize.js';
 import { commandMonitor } from './commands/monitor.js';
 import { commandResearch } from './commands/research.js';
 import { commandRun } from './commands/run.js';
+import { commandEcosystem } from './commands/ecosystem.js';
 
 const HELP = `Searvex ${SEARVEX_VERSION} — open-source search intelligence & optimization engine
 
@@ -27,6 +28,8 @@ Commands
                         (--competitor) → repository audit → fix plan (dry run). One crawl, one summary.
   audit <url|path>      Full technical SEO + GEO + content audit (website or repository)
   geo <url>             GEO / AI-search readiness (crawler access, snippet controls, entities)
+  ecosystem <url> <url>…  Brand-family analysis across related sites: entity graph, cross-links,
+                        topic overlap, family-wide issues, language coverage (--reuse stored runs)
   research <url>        Site inventory, business model, topics; compare with --competitor URLs
   optimize <path>       Plan safe code fixes for a repository (dry-run by default; --apply to write)
   rollback <changeId>   Restore files changed by an applied optimization
@@ -100,6 +103,7 @@ function parse(argv: string[]): GlobalFlags {
       'site-url': { type: 'string' },
       lang: { type: 'string' },
       'check-external': { type: 'boolean' },
+      reuse: { type: 'boolean' },
       competitor: { type: 'string', multiple: true },
       category: { type: 'string' },
       strict: { type: 'boolean' },
@@ -313,6 +317,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     switch (cmd) {
       case 'run':
         return await commandRun(flags);
+      case 'ecosystem':
+        return await commandEcosystem(flags);
       case 'audit':
         return await commandAudit(flags);
       case 'geo':

@@ -98,6 +98,10 @@ describe('HTML extraction', () => {
     expect(q.microdataTypes).toEqual(['Product', 'Thing']);
     expect(q.rdfaTypes).toEqual(['LocalBusiness', 'Event']);
   });
+  it('marks headings inside site chrome (footer/nav/header/aside)', () => {
+    const q = extractPage('<html><body><header><h2>Menu</h2></header><main><h1>Topic</h1></main><footer><h3>Legal</h3></footer></body></html>', 'https://e.com/');
+    expect(q.headings).toEqual([{ level: 2, text: 'Menu', chrome: true }, { level: 1, text: 'Topic' }, { level: 3, text: 'Legal', chrome: true }]);
+  });
   it('ignores <title> inside inline SVG (real-world MDN false positive)', () => {
     const q = extractPage('<html><head><title>Doc</title></head><body><svg><title>Icon</title></svg><svg><title>Logo</title></svg></body></html>', 'https://e.com/');
     expect(q.titleCount).toBe(1);
@@ -160,6 +164,9 @@ describe('unifiedDiff', () => {
 });
 
 describe('tokenize', () => {
+  it('keeps Turkish dotted capital I words whole', () => {
+    expect(tokenize('İlgili İçerik İSTANBUL')).toEqual(['ilgili', 'içerik', 'istanbul']);
+  });
   it('handles Unicode and removes stopwords', () => {
     expect(tokenize('Profesyonel mutfak ekipmanları ve the kitchen 2026')).toEqual(['profesyonel', 'mutfak', 'ekipmanları', 'kitchen']);
   });

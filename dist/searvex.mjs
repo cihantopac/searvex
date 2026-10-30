@@ -992,35 +992,35 @@ var require_Robots = __commonJS({
       }
       return formattedUserAgent.trim();
     }
-    function normaliseEncoding(path15) {
+    function normaliseEncoding(path16) {
       try {
-        return urlEncodeToUpper(encodeURI(path15).replace(/%25/g, "%"));
+        return urlEncodeToUpper(encodeURI(path16).replace(/%25/g, "%"));
       } catch (e) {
-        return path15;
+        return path16;
       }
     }
-    function urlEncodeToUpper(path15) {
-      return path15.replace(/%[0-9a-fA-F]{2}/g, function(match) {
+    function urlEncodeToUpper(path16) {
+      return path16.replace(/%[0-9a-fA-F]{2}/g, function(match) {
         return match.toUpperCase();
       });
     }
-    function matches(pattern, path15) {
-      var matchingLengths = new Array(path15.length + 1);
+    function matches(pattern, path16) {
+      var matchingLengths = new Array(path16.length + 1);
       var numMatchingLengths = 1;
       matchingLengths[0] = 0;
       for (var p = 0; p < pattern.length; p++) {
         if (pattern[p] === "$" && p + 1 === pattern.length) {
-          return matchingLengths[numMatchingLengths - 1] === path15.length;
+          return matchingLengths[numMatchingLengths - 1] === path16.length;
         }
         if (pattern[p] == "*") {
-          numMatchingLengths = path15.length - matchingLengths[0] + 1;
+          numMatchingLengths = path16.length - matchingLengths[0] + 1;
           for (var i = 1; i < numMatchingLengths; i++) {
             matchingLengths[i] = matchingLengths[i - 1] + 1;
           }
         } else {
           var numMatches = 0;
           for (var i = 0; i < numMatchingLengths; i++) {
-            if (matchingLengths[i] < path15.length && path15[matchingLengths[i]] === pattern[p]) {
+            if (matchingLengths[i] < path16.length && path16[matchingLengths[i]] === pattern[p]) {
               matchingLengths[numMatches++] = matchingLengths[i] + 1;
             }
           }
@@ -1074,11 +1074,11 @@ var require_Robots = __commonJS({
         isNoneUserAgentState = line[0].toLowerCase() !== "user-agent";
       }
     }
-    function findRule(path15, rules) {
+    function findRule(path16, rules) {
       var matchedRule = null;
       for (var i = 0; i < rules.length; i++) {
         var rule = rules[i];
-        if (!matches(rule.pattern, path15)) {
+        if (!matches(rule.pattern, path16)) {
           continue;
         }
         if (!matchedRule || rule.pattern.length > matchedRule.pattern.length) {
@@ -1145,8 +1145,8 @@ var require_Robots = __commonJS({
         return;
       }
       var rules = this._rules[userAgent] || this._rules["*"] || [];
-      var path15 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
-      var rule = findRule(path15, rules);
+      var path16 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
+      var rule = findRule(path16, rules);
       return rule;
     };
     Robots.prototype.isAllowed = function(url, ua) {
@@ -1267,8 +1267,8 @@ var init_render = __esm({
 });
 
 // src/cli.ts
-import fs9 from "node:fs";
-import path14 from "node:path";
+import fs10 from "node:fs";
+import path15 from "node:path";
 import { parseArgs } from "node:util";
 
 // src/core/url.ts
@@ -15538,7 +15538,8 @@ function extractPage(html3, pageUrl) {
   const hreflang = $2('link[rel~="alternate" i][hreflang]').map((_, el) => ({ lang: ($2(el).attr("hreflang") ?? "").trim(), href: normalizeUrl($2(el).attr("href") ?? "", base, { stripTracking: false }) ?? "" })).get().filter((h) => h.lang && h.href);
   const headings = [];
   $2("h1,h2,h3,h4,h5,h6").each((_, el) => {
-    headings.push({ level: Number(el.tagName.slice(1)), text: collapse($2(el).text()).slice(0, 300) });
+    const chrome = $2(el).closest('header, nav, footer, aside, [role="navigation"], [role="banner"], [role="contentinfo"]').length > 0;
+    headings.push({ level: Number(el.tagName.slice(1)), text: collapse($2(el).text()).slice(0, 300), ...chrome ? { chrome } : {} });
   });
   const accessibleName = (el) => {
     const $el = $2(el);
@@ -15601,6 +15602,7 @@ function extractPage(html3, pageUrl) {
   const titles = docTitles.first();
   const titleCount = docTitles.length;
   const body = $2("body").clone();
+  body.find('.__cf_email__, a[href^="/cdn-cgi/l/email-protection"]').remove();
   body.find("script,style,noscript,svg,iframe").remove();
   body.find("template").not("[shadowrootmode],[shadowroot]").remove();
   const textContent2 = visibleText(body);
@@ -17809,16 +17811,16 @@ var MatcherView = class {
    * @returns {string|undefined}
    */
   getCurrentTag() {
-    const path15 = this._matcher.path;
-    return path15.length > 0 ? path15[path15.length - 1].tag : void 0;
+    const path16 = this._matcher.path;
+    return path16.length > 0 ? path16[path16.length - 1].tag : void 0;
   }
   /**
    * Get current namespace.
    * @returns {string|undefined}
    */
   getCurrentNamespace() {
-    const path15 = this._matcher.path;
-    return path15.length > 0 ? path15[path15.length - 1].namespace : void 0;
+    const path16 = this._matcher.path;
+    return path16.length > 0 ? path16[path16.length - 1].namespace : void 0;
   }
   /**
    * Get current node's attribute value.
@@ -17826,9 +17828,9 @@ var MatcherView = class {
    * @returns {*}
    */
   getAttrValue(attrName) {
-    const path15 = this._matcher.path;
-    if (path15.length === 0) return void 0;
-    return path15[path15.length - 1].values?.[attrName];
+    const path16 = this._matcher.path;
+    if (path16.length === 0) return void 0;
+    return path16[path16.length - 1].values?.[attrName];
   }
   /**
    * Check if current node has an attribute.
@@ -17836,9 +17838,9 @@ var MatcherView = class {
    * @returns {boolean}
    */
   hasAttr(attrName) {
-    const path15 = this._matcher.path;
-    if (path15.length === 0) return false;
-    const current = path15[path15.length - 1];
+    const path16 = this._matcher.path;
+    if (path16.length === 0) return false;
+    const current = path16[path16.length - 1];
     return current.values !== void 0 && attrName in current.values;
   }
   /**
@@ -17864,18 +17866,18 @@ var MatcherView = class {
    * @returns {number}
    */
   getPosition() {
-    const path15 = this._matcher.path;
-    if (path15.length === 0) return -1;
-    return path15[path15.length - 1].position ?? 0;
+    const path16 = this._matcher.path;
+    if (path16.length === 0) return -1;
+    return path16[path16.length - 1].position ?? 0;
   }
   /**
    * Get current node's repeat counter (occurrence count of this tag name).
    * @returns {number}
    */
   getCounter() {
-    const path15 = this._matcher.path;
-    if (path15.length === 0) return -1;
-    return path15[path15.length - 1].counter ?? 0;
+    const path16 = this._matcher.path;
+    if (path16.length === 0) return -1;
+    return path16[path16.length - 1].counter ?? 0;
   }
   /**
    * Get current node's sibling index (alias for getPosition).
@@ -18279,11 +18281,11 @@ var Matcher = class {
    * Restore state from snapshot.
    * @param {Object} snapshot
    */
-  restore(snapshot) {
+  restore(snapshot2) {
     this._pathStringCache = null;
-    this.path = snapshot.path.map((node) => ({ ...node }));
-    this.siblingStacks = snapshot.siblingStacks.map((level) => level ? { counts: new Map(level.counts), total: level.total } : level);
-    this._keptAttrs = (snapshot.keptAttrs || []).map((entry) => ({ ...entry }));
+    this.path = snapshot2.path.map((node) => ({ ...node }));
+    this.siblingStacks = snapshot2.siblingStacks.map((level) => level ? { counts: new Map(level.counts), total: level.total } : level);
+    this._keptAttrs = (snapshot2.keptAttrs || []).map((entry) => ({ ...entry }));
   }
   /**
    * Return the read-only {@link MatcherView} for this matcher.
@@ -20465,7 +20467,7 @@ var STOPWORDS = new Set(
   "a about above after again against all am an and any are as at be because been before being below between both but by can could did do does doing down during each few for from further had has have having he her here hers him his how i if in into is it its itself just me more most my no nor not now of off on once only or other our ours out over own same she should so some such than that the their them then there these they this those through to too under until up very was we were what when where which while who whom why will with you your yours get got also use using used new one two may like make many much via per vs etc com www http https home page ve ile bir bu da de i\xE7in gibi daha \xE7ok en mi mu m\xFC ne o \u015Fu ama veya ya ki her olan olarak sonra \xF6nce kadar ise de\u011Fil var yok nas\u0131l neden der die das und ist nicht mit f\xFCr auf ein eine den von zu im le la les et des un une du pour dans est el los las y en del por con para una".split(/\s+/)
 );
 function tokenize(text4) {
-  return text4.toLowerCase().normalize("NFKC").split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
+  return text4.toLowerCase().replace(/\u0307/g, "").normalize("NFKC").split(/[^\p{L}\p{M}\p{N}]+/u).filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
 }
 function shingles(words, k = 5) {
   const s = /* @__PURE__ */ new Set();
@@ -20499,7 +20501,8 @@ function runContentChecks(ctx, sink) {
     const tf = /* @__PURE__ */ new Map();
     const weighted = [
       ...tokenize(f.title ?? "").flatMap((t) => [t, t, t]),
-      ...f.headings.flatMap((h) => tokenize(h.text).flatMap((t) => h.level === 1 ? [t, t, t] : [t, t])),
+      // Headings in site chrome (footer "Product family", "Legal"…) repeat on every page: not page topics.
+      ...f.headings.filter((h) => !h.chrome).flatMap((h) => tokenize(h.text).flatMap((t) => h.level === 1 ? [t, t, t] : [t, t])),
       ...tokenize(f.mainText.slice(0, 2e4))
     ];
     for (const t of weighted) tf.set(t, (tf.get(t) ?? 0) + 1);
@@ -20673,9 +20676,9 @@ function runGeoChecks(ctx, sink, llms) {
   if (llms) sink.emit("geo.llms-txt", { url: llms.url, observed: llms.present ? `present (${llms.bytes} bytes) \u2014 not used by Google; no scoring impact` : `absent (HTTP ${llms.status}) \u2014 no scoring impact` });
   const entityNames = {};
   const roles = { site: /* @__PURE__ */ new Map(), organization: /* @__PURE__ */ new Map() };
-  const norm = (n) => n.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const norm2 = (n) => n.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
   const note = (role, name, url) => {
-    const k = norm(name);
+    const k = norm2(name);
     if (!k) return;
     entityNames[name] = (entityNames[name] ?? 0) + 1;
     const set = roles[role].get(k) ?? /* @__PURE__ */ new Set();
@@ -20881,10 +20884,10 @@ function buildInventory(ctx) {
     if (!f || p.status !== 200 || p.redirects.length) continue;
     const types = /* @__PURE__ */ new Set();
     for (const b of f.jsonLd) for (const n of typedNodes(b.data)) for (const t of [].concat(n["@type"] ?? [])) if (typeof t === "string") types.add(t);
-    const path15 = new URL(p.finalUrl).pathname;
+    const path16 = new URL(p.finalUrl).pathname;
     let type = "other";
     let basis = "default";
-    if (p === ctx.homepage || path15 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path15)) {
+    if (p === ctx.homepage || path16 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path16)) {
       type = "home";
       basis = "url";
     } else {
@@ -20893,7 +20896,7 @@ function buildInventory(ctx) {
         type = s;
         basis = "schema";
       } else {
-        const r = URL_RULES.find(([re]) => re.test(path15));
+        const r = URL_RULES.find(([re]) => re.test(path16));
         if (r) {
           type = r[1];
           basis = "url";
@@ -20959,7 +20962,7 @@ function buildInventory(ctx) {
       pagesWithStructuredData: pagesWithSd,
       invalidJsonLdPages
     },
-    sections: [...sectionsMap.entries()].map(([path15, c]) => ({ path: path15, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
+    sections: [...sectionsMap.entries()].map(([path16, c]) => ({ path: path16, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
   };
 }
 function classifyBusiness(ctx, byType, sd) {
@@ -21155,8 +21158,8 @@ function runTechnicalChecks(ctx, sink) {
     const ttfb = p.ttfbMs ?? p.timingMs;
     if (ttfb > 800 && !p.redirects.length) sink.emit("perf.slow-ttfb", { url: p.url, observed: `TTFB ${ttfb} ms (single sample from the crawler's location; full response ${p.timingMs} ms)` });
     if (p.bytes > 10 * 1024 && !p.headers["content-encoding"]) sink.emit("perf.no-compression", { url: p.url, observed: `${Math.round(p.bytes / 1024)} KB uncompressed` });
-    const path15 = new URL(p.finalUrl).pathname;
-    if (path15.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
+    const path16 = new URL(p.finalUrl).pathname;
+    if (path16.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
     if (selfCanon && !noindex) checkHreflang(ctx, p.url, f, sink);
     checkStructuredData(p.url, f, sink, p === ctx.homepage);
   }
@@ -21302,7 +21305,7 @@ function failingMetrics(m) {
 // src/analyze/audit.ts
 var WEIGHT = { critical: 25, high: 10, medium: 4, low: 1.5, info: 0 };
 function computeScores(findings, pageCount) {
-  const penalty = (fs10) => fs10.reduce((sum, f) => {
+  const penalty = (fs11) => fs11.reduce((sum, f) => {
     if (f.confidence === "unmeasurable") return sum;
     const share = pageCount > 0 ? Math.min(1, f.count / pageCount) : 1;
     return sum + WEIGHT[f.severity] * Math.max(share, f.severity === "critical" ? 1 : share) * (f.confidence === "heuristic" ? 0.5 : 1);
@@ -23369,6 +23372,236 @@ Saved: ${out}`);
   return codes.some((c) => c === 1) ? 1 : 0;
 }
 
+// src/commands/ecosystem.ts
+import fs9 from "node:fs";
+import path14 from "node:path";
+var hostOf = (u) => new URL(u).hostname.replace(/^www\./, "");
+var norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+function snapshot(report, pages) {
+  const host = hostOf(report.target);
+  const outbound = {};
+  for (const p of pages) {
+    if (p.status !== 200 || p.redirects.length || !p.data) continue;
+    for (const l of (p.rendered ?? p.data).links) {
+      if (!l.url || l.internal) continue;
+      const h = hostOf(l.url);
+      if (h !== host) outbound[h] = (outbound[h] ?? 0) + 1;
+    }
+  }
+  const siteNames = /* @__PURE__ */ new Set();
+  const orgNames = /* @__PURE__ */ new Set();
+  for (const p of pages) {
+    const f = p.rendered ?? p.data;
+    if (!f || p.status !== 200 || p.redirects.length) continue;
+    if (f.openGraph["og:site_name"]) siteNames.add(f.openGraph["og:site_name"].trim());
+    for (const b of f.jsonLd) {
+      const data2 = b.data;
+      const roots = Array.isArray(data2) ? data2 : data2 && Array.isArray(data2["@graph"]) ? data2["@graph"] : [data2];
+      for (const n of roots) {
+        if (!n || typeof n !== "object") continue;
+        const node = n;
+        const t = [].concat(node["@type"] ?? []);
+        if (typeof node["name"] !== "string") continue;
+        if (t.includes("WebSite")) siteNames.add(node["name"].trim());
+        else if (t.some((x) => typeof x === "string" && /Organization|Corporation/.test(x))) orgNames.add(node["name"].trim());
+      }
+    }
+  }
+  const rel2 = report.inventory.relations ?? [];
+  return {
+    host,
+    url: report.target,
+    report,
+    outbound,
+    siteNames: [...siteNames],
+    orgNames: [...orgNames],
+    parents: rel2.filter((r) => r.relation === "parentOrganization" || r.relation === "memberOf").map((r) => ({ name: r.to, url: r.toUrl })),
+    children: rel2.filter((r) => ["subOrganization", "brand", "owns", "department"].includes(r.relation) && norm(r.to) !== norm(r.from)).map((r) => ({ name: r.to, url: r.toUrl, relation: r.relation })),
+    terms: report.content.topTerms.map((t) => t.term).slice(0, 40)
+  };
+}
+function analyzeEcosystem(snaps) {
+  const hosts = snaps.map((s) => s.host);
+  const obs = [];
+  const nameToHost = /* @__PURE__ */ new Map();
+  for (const s of snaps) for (const n of [...s.siteNames, ...s.orgNames]) if (!nameToHost.has(norm(n))) nameToHost.set(norm(n), s.host);
+  for (const s of snaps) {
+    for (const p of s.parents) {
+      const parentHost = p.url ? hostOf(p.url) : nameToHost.get(norm(p.name));
+      const parent2 = snaps.find((x) => x.host === parentHost);
+      if (!parent2) continue;
+      if (!parent2.orgNames.some((n) => norm(n) === norm(p.name))) {
+        obs.push({ kind: "entity", confidence: "verified", sites: [s.host, parent2.host], message: `${s.host} names its parent "${p.name}", but ${parent2.host} declares its organisation as ${parent2.orgNames.map((n) => `"${n}"`).join(", ") || "(none)"}.`, recommendation: "Use the same organisation name and URL on both sites." });
+      }
+      const declared = parent2.children.some((c) => c.url && hostOf(c.url) === s.host || s.siteNames.concat(s.orgNames).some((n) => norm(n) === norm(c.name)));
+      if (!declared) {
+        obs.push({ kind: "entity", confidence: "verified", sites: [parent2.host, s.host], message: `${s.host} declares parentOrganization "${p.name}", but ${parent2.host} does not reference ${s.siteNames[0] ?? s.host} in its structured data (subOrganization / brand / owns).`, recommendation: `On ${parent2.host}, describe the relationship from the parent side too (schema.org subOrganization or brand on the Organization node), using names and URLs that match the product sites. This makes the family explicit to search engines and AI systems; it is not a rich-result feature.` });
+      }
+    }
+    if (!s.orgNames.length) obs.push({ kind: "entity", confidence: "verified", sites: [s.host], message: `${s.host} has no top-level Organization markup on the crawled pages.`, recommendation: "Add Organization structured data (name, url, logo, parentOrganization where applicable)." });
+    else {
+      const own = s.orgNames.filter((n) => s.siteNames.some((sn) => norm(sn) === norm(n)));
+      const parentNames = new Set(s.parents.flatMap((p) => {
+        const ph = p.url ? hostOf(p.url) : nameToHost.get(norm(p.name));
+        return [norm(p.name), ...(snaps.find((x) => x.host === ph)?.orgNames ?? []).map(norm)];
+      }));
+      const other = s.orgNames.filter((n) => !own.includes(n) && !parentNames.has(norm(n)));
+      if (!own.length && other.length) obs.push({ kind: "entity", confidence: "verified", sites: [s.host], message: `${s.host} (site name ${s.siteNames.map((n) => `"${n}"`).join(", ") || "unknown"}) describes its Organization as ${other.map((n) => `"${n}"`).join(", ")} \u2014 another family member's name.`, recommendation: "Use the product's own Organization (or Brand) node and reference the company via parentOrganization." });
+    }
+  }
+  const links = {};
+  for (const s of snaps) {
+    links[s.host] = {};
+    for (const h of hosts) if (h !== s.host) links[s.host][h] = s.outbound[h] ?? 0;
+  }
+  const parentHosts = new Set(snaps.flatMap((s) => s.parents.map((p) => p.url ? hostOf(p.url) : nameToHost.get(norm(p.name))).filter((x) => !!x)));
+  for (const ph of parentHosts) {
+    const parent2 = snaps.find((s) => s.host === ph);
+    if (!parent2) continue;
+    const missing = snaps.filter((s) => s.host !== ph && !(links[ph]?.[s.host] ?? 0));
+    if (missing.length) obs.push({ kind: "linking", confidence: "verified", sites: [ph, ...missing.map((m) => m.host)], message: `${ph} has no crawled links to ${missing.map((m) => m.host).join(", ")}.`, recommendation: "Link the parent site to every product with descriptive anchor text so the family is discoverable." });
+    const noBack = snaps.filter((s) => s.host !== ph && !(links[s.host]?.[ph] ?? 0));
+    if (noBack.length) obs.push({ kind: "linking", confidence: "verified", sites: noBack.map((m) => m.host), message: `${noBack.map((m) => m.host).join(", ")} do not link back to ${ph} on the crawled pages.`, recommendation: 'Add a visible link to the parent company (e.g. footer "part of \u2026").' });
+  }
+  const overlap = [];
+  const primaryLang = (s) => Object.entries(s.report.inventory.languages).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+  const brandTerms = new Set(snaps.flatMap((s) => [...s.siteNames, ...s.orgNames, s.host.split(".")[0]].map((n) => n.toLowerCase())));
+  for (let i = 0; i < snaps.length; i++)
+    for (let j = i + 1; j < snaps.length; j++) {
+      const a = snaps[i], b = snaps[j];
+      if (primaryLang(a) !== primaryLang(b)) continue;
+      const ta = new Set(a.terms.filter((t) => !brandTerms.has(t)));
+      const tb = new Set(b.terms.filter((t) => !brandTerms.has(t)));
+      const shared = [...ta].filter((t) => tb.has(t));
+      const sim = shared.length / Math.max(1, ta.size + tb.size - shared.length);
+      overlap.push({ a: a.host, b: b.host, similarity: Math.round(sim * 100) / 100, shared: shared.slice(0, 12) });
+    }
+  overlap.sort((x, y) => y.similarity - x.similarity);
+  for (const o of overlap.filter((x) => x.similarity >= 0.35)) {
+    obs.push({ kind: "overlap", confidence: "heuristic", sites: [o.a, o.b], message: `${o.a} and ${o.b} share ${Math.round(o.similarity * 100)}% of their prominent terms (${o.shared.slice(0, 6).join(", ")}).`, recommendation: "Check in Search Console whether both sites rank for the same queries; give each product a distinct primary topic and cross-link instead of duplicating explanations." });
+  }
+  const byRule = /* @__PURE__ */ new Map();
+  for (const s of snaps) for (const f of s.report.findings) {
+    if (f.severity === "info" || f.confidence === "unmeasurable") continue;
+    const e = byRule.get(f.ruleId) ?? { title: f.title, severity: f.severity, sites: 0, pages: 0 };
+    e.sites++;
+    e.pages += f.count;
+    byRule.set(f.ruleId, e);
+  }
+  const sharedIssues = [...byRule.entries()].filter(([, e]) => e.sites >= Math.max(2, Math.ceil(snaps.length / 2))).map(([ruleId, e]) => ({ ruleId, ...e })).sort((a, b) => b.sites - a.sites || b.pages - a.pages);
+  for (const i of sharedIssues.filter((x) => x.severity === "critical" || x.severity === "high" || x.severity === "medium")) {
+    obs.push({ kind: "shared-issue", confidence: "heuristic", sites: snaps.filter((s) => s.report.findings.some((f) => f.ruleId === i.ruleId)).map((s) => s.host), message: `"${i.title}" (${i.ruleId}) appears on ${i.sites} of ${snaps.length} sites (${i.pages} pages) \u2014 likely a shared template or component.`, recommendation: "Fix it once in the shared layout/package and re-audit all sites." });
+  }
+  const langs = snaps.map((s) => ({ host: s.host, langs: s.report.inventory.hreflangLanguages.filter((l) => l !== "x-default") }));
+  const all = new Set(langs.flatMap((l) => l.langs));
+  for (const l of langs) {
+    const missing = [...all].filter((x) => !l.langs.includes(x));
+    if (all.size > 1 && missing.length && l.langs.length) obs.push({ kind: "coverage", confidence: "verified", sites: [l.host], message: `${l.host} has no ${missing.join(", ")} alternate while other family sites do.`, recommendation: "Decide per product whether the market needs that language; if yes, add localized pages with reciprocal hreflang." });
+    if (all.size > 1 && !l.langs.length) obs.push({ kind: "coverage", confidence: "verified", sites: [l.host], message: `${l.host} declares no hreflang alternates while other family sites are multilingual (${[...all].join(", ")}).`, recommendation: "If localized versions exist or are planned, connect them with hreflang." });
+  }
+  return {
+    sites: snaps.map((s) => ({
+      host: s.host,
+      siteName: s.siteNames.join(" / ") || "\u2014",
+      organization: s.orgNames.join(" / ") || "\u2014",
+      parent: s.parents.map((p) => p.name).join(", ") || "\u2014",
+      children: s.children.map((c) => c.name),
+      model: `${s.report.inventory.businessModel.label}${s.report.inventory.businessModel.confidence ? ` (${s.report.inventory.businessModel.confidence})` : ""}`,
+      languages: Object.keys(s.report.inventory.languages),
+      pages: s.report.crawl.crawled,
+      score: s.report.scores.overall,
+      offerings: (s.report.inventory.offerings ?? []).map((o) => `${o.kind}: ${o.name}`)
+    })),
+    links,
+    overlap,
+    sharedIssues,
+    observations: obs,
+    limitations: [
+      "Based on the crawled pages of each site (page limits apply); links and markup on uncrawled pages are not seen.",
+      "Topic overlap compares on-page term statistics; it does not show search demand or actual ranking competition \u2014 confirm with Search Console."
+    ]
+  };
+}
+function renderEcosystemMarkdown(r) {
+  const L = ["# Searvex ecosystem analysis", ""];
+  L.push("## Sites", "", "| Site | Site name | Organization | Parent | Declares children | Model (heuristic) | Languages | Pages | Score |", "|---|---|---|---|---|---|---|---|---|");
+  for (const s of r.sites) L.push(`| ${md(s.host)} | ${md(s.siteName)} | ${md(s.organization)} | ${md(s.parent)} | ${s.children.map(md).join(", ") || "\u2014"} | ${md(s.model)} | ${s.languages.map(md).join(", ")} | ${s.pages} | ${s.score} |`);
+  L.push("", "## Cross-links (links from row site to column site, crawled pages)", "");
+  const hosts = r.sites.map((s) => s.host);
+  L.push(`| from \\ to | ${hosts.map(md).join(" | ")} |`, `|---|${hosts.map(() => "---").join("|")}|`);
+  for (const h of hosts) L.push(`| ${md(h)} | ${hosts.map((t) => t === h ? "\xB7" : String(r.links[h]?.[t] ?? 0)).join(" | ")} |`);
+  L.push("", "## Observations", "");
+  if (!r.observations.length) L.push("_No ecosystem issues found._");
+  for (const kind of ["entity", "linking", "shared-issue", "overlap", "coverage"]) {
+    const list = r.observations.filter((o) => o.kind === kind);
+    if (!list.length) continue;
+    L.push(`### ${{ entity: "Entity & brand graph", linking: "Cross-linking", "shared-issue": "Issues shared across the family", overlap: "Topic overlap", coverage: "Language coverage" }[kind]}`, "");
+    for (const o of list) L.push(`- ${o.confidence === "heuristic" ? "~ " : ""}${md(o.message)}${o.recommendation ? `
+  - **Recommendation:** ${md(o.recommendation)}` : ""}`);
+    L.push("");
+  }
+  if (r.overlap.length) {
+    L.push("## Topic similarity (same primary language)", "", "| Sites | Similarity | Shared prominent terms |", "|---|---|---|");
+    for (const o of r.overlap.slice(0, 15)) L.push(`| ${md(o.a)} \u2194 ${md(o.b)} | ${Math.round(o.similarity * 100)}% | ${o.shared.slice(0, 8).map(md).join(", ")} |`);
+    L.push("");
+  }
+  L.push("## Limitations", "", ...r.limitations.map((l) => `- ${md(l)}`), "", "`~` marks heuristic observations.", "");
+  return L.join("\n");
+}
+function reuseLatest(workspace, url) {
+  const target = new URL(url).toString();
+  for (const id of RunStore.list(workspace).reverse()) {
+    const store = new RunStore(workspace, id);
+    const report = store.readJson("report.json");
+    if (report?.mode === "website" && hostOf(report.target) === hostOf(target)) {
+      const pages = store.readLines("pages.jsonl");
+      if (pages.length) return { report, pages };
+    }
+  }
+  return null;
+}
+async function commandEcosystem(flags) {
+  const v = flags.values;
+  const urls = flags.positionals.slice(1);
+  if (urls.length < 2) throw new UsageError("ecosystem requires at least two site URLs");
+  if (urls.length > 20) throw new UsageError("At most 20 sites");
+  for (const u of urls) if (!/^https?:\/\//i.test(u)) throw new UsageError(`Invalid URL: ${u}`);
+  const kb = loadKnowledge();
+  const workspace = path14.resolve(String(v["out"] ?? process.cwd()));
+  const opts = { ...crawlOptionsFrom(v), maxPages: num(v["max-pages"], 60, 1, 1e5) };
+  const snaps = new Array(urls.length);
+  let next2 = 0;
+  const worker = async () => {
+    for (let i = next2++; i < urls.length; i = next2++) {
+      const u = urls[i];
+      const reused = v["reuse"] ? reuseLatest(workspace, u) : null;
+      if (reused) {
+        log(v, `Reusing stored run for ${u}`);
+        snaps[i] = snapshot(reused.report, reused.pages);
+        continue;
+      }
+      log(v, `Crawling ${u} (max ${opts.maxPages} pages)\u2026`);
+      const store2 = new RunStore(workspace, RunStore.newRunId("audit"));
+      const result = await crawl(u, opts, store2);
+      const report = await analyzeCrawl(result, kb, { ...opts, probes: false });
+      report.runId = store2.runId;
+      store2.writeJson("report.json", report);
+      snaps[i] = snapshot(report, result.pages);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, urls.length) }, worker));
+  const eco = analyzeEcosystem(snaps);
+  const store = new RunStore(workspace, RunStore.newRunId("ecosystem"));
+  store.writeJson("meta.json", { kind: "ecosystem", sites: urls, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
+  store.writeJson("ecosystem.json", eco);
+  const out = store.writeText("ecosystem.md", renderEcosystemMarkdown(eco));
+  if (v["json"]) process.stdout.write(JSON.stringify(eco, null, 2) + "\n");
+  else if (!v["quiet"]) console.log(renderEcosystemMarkdown(eco) + `
+Saved: ${out}`);
+  if (!fs9.existsSync(out)) return 2;
+  return 0;
+}
+
 // src/cli.ts
 var HELP = `Searvex ${SEARVEX_VERSION} \u2014 open-source search intelligence & optimization engine
 
@@ -23379,6 +23612,8 @@ Commands
                         (--competitor) \u2192 repository audit \u2192 fix plan (dry run). One crawl, one summary.
   audit <url|path>      Full technical SEO + GEO + content audit (website or repository)
   geo <url>             GEO / AI-search readiness (crawler access, snippet controls, entities)
+  ecosystem <url> <url>\u2026  Brand-family analysis across related sites: entity graph, cross-links,
+                        topic overlap, family-wide issues, language coverage (--reuse stored runs)
   research <url>        Site inventory, business model, topics; compare with --competitor URLs
   optimize <path>       Plan safe code fixes for a repository (dry-run by default; --apply to write)
   rollback <changeId>   Restore files changed by an applied optimization
@@ -23445,6 +23680,7 @@ function parse7(argv) {
       "site-url": { type: "string" },
       lang: { type: "string" },
       "check-external": { type: "boolean" },
+      reuse: { type: "boolean" },
       competitor: { type: "string", multiple: true },
       category: { type: "string" },
       strict: { type: "boolean" },
@@ -23519,11 +23755,11 @@ async function commandAudit(flags) {
   const target = positionals[1];
   if (!target) throw new UsageError("audit requires a URL or a repository path");
   if (!/^https?:\/\//i.test(target)) {
-    if (fs9.existsSync(target)) return commandRepo(flags);
+    if (fs10.existsSync(target)) return commandRepo(flags);
     throw new UsageError(`Not a URL and not an existing path: ${target}`);
   }
   const kb = loadKnowledge();
-  const workspace = path14.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path15.resolve(String(v["out"] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
   const render3 = v["render"] ? await (await Promise.resolve().then(() => (init_render(), render_exports))).createRenderer(opts.policy) : void 0;
   try {
@@ -23559,7 +23795,7 @@ async function commandGeo(flags) {
   if (!target || !/^https?:\/\//i.test(target)) throw new UsageError("geo requires a URL");
   const kb = loadKnowledge();
   const opts = crawlOptionsFrom({ ...v, "max-pages": v["max-pages"] ?? "50" });
-  const { report, store } = await auditWebsite(target, { workspace: path14.resolve(String(v["out"] ?? process.cwd())), kb, crawl: opts });
+  const { report, store } = await auditWebsite(target, { workspace: path15.resolve(String(v["out"] ?? process.cwd())), kb, crawl: opts });
   const files = writeReports(store, report, kb, String(v["format"] ?? "md,html,json").split(","));
   if (v["json"]) {
     process.stdout.write(JSON.stringify({ target: report.target, geo: report.geo, findings: report.findings.filter((f) => f.category === "geo" || f.ruleId.startsWith("sd.")) }, null, 2) + "\n");
@@ -23625,9 +23861,9 @@ ${kb.rules.size} rules, ${errors.length} errors, ${issues.length - errors.length
 }
 async function commandReport(flags) {
   const v = flags.values;
-  const workspace = path14.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path15.resolve(String(v["out"] ?? process.cwd()));
   let id = flags.positionals[1] ?? "latest";
-  if (id === "latest") id = RunStore.list(workspace).filter((r) => fs9.existsSync(path14.join(workspace, ".searvex", "runs", r, "report.json"))).at(-1) ?? "";
+  if (id === "latest") id = RunStore.list(workspace).filter((r) => fs10.existsSync(path15.join(workspace, ".searvex", "runs", r, "report.json"))).at(-1) ?? "";
   if (!id) throw new UsageError("No stored runs found");
   const store = new RunStore(workspace, id);
   const report = store.readJson("report.json");
@@ -23638,7 +23874,7 @@ async function commandReport(flags) {
   return 0;
 }
 function commandRuns(flags) {
-  const workspace = path14.resolve(String(flags.values["out"] ?? process.cwd()));
+  const workspace = path15.resolve(String(flags.values["out"] ?? process.cwd()));
   for (const id of RunStore.list(workspace)) {
     const meta = new RunStore(workspace, id).readJson("meta.json");
     console.log(`${id}  ${meta?.kind ?? ""}  ${meta?.startUrl ?? meta?.target ?? ""}`);
@@ -23661,6 +23897,8 @@ Run "searvex --help" for usage.`);
     switch (cmd) {
       case "run":
         return await commandRun(flags);
+      case "ecosystem":
+        return await commandEcosystem(flags);
       case "audit":
         return await commandAudit(flags);
       case "geo":
@@ -23691,8 +23929,8 @@ Run "searvex --help" for usage.`);
     return 2;
   }
 }
-var invoked = process.argv[1] ? path14.resolve(process.argv[1]) : "";
-if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path14.sep}searvex`))) {
+var invoked = process.argv[1] ? path15.resolve(process.argv[1]) : "";
+if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path15.sep}searvex`))) {
   main().then((code) => process.exit(code));
 }
 export {

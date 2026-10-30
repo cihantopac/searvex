@@ -22,8 +22,10 @@ const STOPWORDS = new Set(
 export function tokenize(text: string): string[] {
   return text
     .toLowerCase()
+    // "İ".toLowerCase() is "i" + U+0307 (combining dot); drop it so Turkish words stay whole ("İlgili" → "ilgili").
+    .replace(/\u0307/g, '')
     .normalize('NFKC')
-    .split(/[^\p{L}\p{N}]+/u)
+    .split(/[^\p{L}\p{M}\p{N}]+/u)
     .filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
 }
 
@@ -73,7 +75,8 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
     const tf = new Map<string, number>();
     const weighted = [
       ...tokenize(f.title ?? '').flatMap((t) => [t, t, t]),
-      ...f.headings.flatMap((h) => tokenize(h.text).flatMap((t) => (h.level === 1 ? [t, t, t] : [t, t]))),
+      // Headings in site chrome (footer "Product family", "Legal"…) repeat on every page: not page topics.
+      ...f.headings.filter((h) => !h.chrome).flatMap((h) => tokenize(h.text).flatMap((t) => (h.level === 1 ? [t, t, t] : [t, t]))),
       ...tokenize(f.mainText.slice(0, 20000)),
     ];
     for (const t of weighted) tf.set(t, (tf.get(t) ?? 0) + 1);

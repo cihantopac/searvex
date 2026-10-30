@@ -51,7 +51,8 @@ export interface PageData {
   hasMetaKeywords: boolean;
   viewport: string | null;
   charset: string | null;
-  headings: Array<{ level: number; text: string }>;
+  /** `chrome` marks headings inside header/nav/footer/aside (site chrome, repeated on every page). */
+  headings: Array<{ level: number; text: string; chrome?: boolean }>;
   links: LinkInfo[];
   images: ImageInfo[];
   jsonLd: JsonLdBlock[];
@@ -178,7 +179,8 @@ export function extractPage(html: string, pageUrl: string): PageData {
 
   const headings: PageData['headings'] = [];
   $('h1,h2,h3,h4,h5,h6').each((_, el) => {
-    headings.push({ level: Number(el.tagName.slice(1)), text: collapse($(el).text()).slice(0, 300) });
+    const chrome = $(el).closest('header, nav, footer, aside, [role="navigation"], [role="banner"], [role="contentinfo"]').length > 0;
+    headings.push({ level: Number(el.tagName.slice(1)), text: collapse($(el).text()).slice(0, 300), ...(chrome ? { chrome } : {}) });
   });
 
   /** Accessible name per WAI-ARIA naming order (aria-labelledby → aria-label → content incl. img alt → title). */
@@ -263,6 +265,8 @@ export function extractPage(html: string, pageUrl: string): PageData {
 
   // Visible text: drop non-content elements before measuring.
   const body = $('body').clone();
+  // Cloudflare email obfuscation placeholders ("[email protected]") are not page content.
+  body.find('.__cf_email__, a[href^="/cdn-cgi/l/email-protection"]').remove();
   // Declarative shadow DOM (<template shadowrootmode>) is rendered content; Google flattens shadow DOM.
   body.find('script,style,noscript,svg,iframe').remove();
   body.find('template').not('[shadowrootmode],[shadowroot]').remove();
