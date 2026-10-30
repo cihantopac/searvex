@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resolveInside, isSecretPath } from '../repo/fs-safe.js';
 import type { Fix } from './fixes.js';
+import { ensureSelfIgnored } from '../crawl/store.js';
 
 /**
  * Transactional file changes with backups, integrity hashes and rollback.
@@ -60,6 +61,7 @@ export function applyFixes(root: string, fixes: Fix[]): Manifest {
     if (c.action === 'modify' && (!exists || fs.readFileSync(abs, 'utf8') !== c.before)) throw new ConflictError(`File changed since planning: ${p}`);
   }
   fs.mkdirSync(path.join(dir, 'backup'), { recursive: true });
+  ensureSelfIgnored(root);
   const manifest: Manifest = { changeId, createdAt: new Date().toISOString(), root, fixes: fixes.map((f) => ({ id: f.id, ruleId: f.ruleId, title: f.title })), files: [], status: 'applied' };
   let n = 0;
   const written: ManifestEntry[] = [];

@@ -2,6 +2,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+/** Keep Searvex artifacts out of the user's git status without touching their .gitignore. */
+export function ensureSelfIgnored(root: string): void {
+  const f = path.join(root, '.searvex', '.gitignore');
+  if (!fs.existsSync(f)) {
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, '# Created by Searvex: run data, reports and change backups stay local.\n*\n');
+  }
+}
+
 /**
  * Run storage under `<workspace>/.searvex/runs/<runId>/`.
  * Files are append-only JSONL plus small JSON checkpoints written atomically
@@ -40,6 +49,7 @@ export class RunStore {
 
   ensure(): void {
     fs.mkdirSync(this.dir, { recursive: true });
+    ensureSelfIgnored(this.root);
   }
 
   file(name: string): string {

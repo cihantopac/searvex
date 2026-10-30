@@ -32,7 +32,8 @@
     "coverage": "vitest run --coverage",
     "rules:validate": "node dist/cli.js rules validate",
     "prepublishOnly": "npm run build && npm test",
-    "bundle": "node scripts/bundle.mjs"
+    "bundle": "node scripts/bundle.mjs",
+    "benchmark": "node scripts/benchmark.mjs"
   },
   "keywords": [
     "seo",

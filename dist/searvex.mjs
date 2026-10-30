@@ -20125,6 +20125,13 @@ async function crawl(startUrl, partial = {}, store) {
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+function ensureSelfIgnored(root2) {
+  const f = path.join(root2, ".searvex", ".gitignore");
+  if (!fs.existsSync(f)) {
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, "# Created by Searvex: run data, reports and change backups stay local.\n*\n");
+  }
+}
 var RunStore = class {
   constructor(root2, runId) {
     this.root = root2;
@@ -20150,6 +20157,7 @@ var RunStore = class {
   }
   ensure() {
     fs.mkdirSync(this.dir, { recursive: true });
+    ensureSelfIgnored(this.root);
   }
   file(name) {
     if (name.includes("/") || name.includes("\\") || name.includes("..")) throw new Error(`Invalid store file name: ${name}`);
@@ -21955,9 +21963,10 @@ function scanApp(root2, appRoot, framework, files, read, sink, opts) {
       for (const p of find4(appFiles, /src\/pages\/.+\.(astro|md|mdx)$/)) {
         const route = "/" + p.rel.replace(/^.*src\/pages\//, "").replace(/\.(astro|mdx?)$/, "").replace(/(^|\/)index$/, "");
         const src = read(p.rel);
-        const hasTitle = /<title\b/i.test(src) || /\btitle\s*=\s*[{"']/.test(src) || /^---[\s\S]*?\ntitle\s*:/m.test(src);
+        const spread = /<[A-Z]\w*\s+[^>]*\{\s*\.\.\.[^}]+\}/.test(src);
+        const hasTitle = /<title\b/i.test(src) || /\btitle\s*=\s*[{"']/.test(src) || /^---[\s\S]*?\ntitle\s*:/m.test(src) ? true : spread ? null : false;
         scan.routes.push({ route, file: p.rel, framework: "astro", dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: /description\s*[=:]/.test(src), noindex: /noindex/.test(src) });
-        if (!hasTitle) sink.emit("title.missing", { file: p.rel, observed: `route ${route}: no title passed to layout and no <title>` });
+        if (hasTitle === false) sink.emit("title.missing", { file: p.rel, observed: `route ${route}: no title passed to layout and no <title>` });
       }
       const cfg = appFiles.find((f) => /astro\.config\.\w+$/.test(f.rel));
       if (cfg && /@astrojs\/sitemap/.test(read(cfg.rel))) scan.locations.hasSitemapGenerator = `${cfg.rel} (@astrojs/sitemap)`;
@@ -22579,6 +22588,7 @@ function applyFixes(root2, fixes) {
     if (c.action === "modify" && (!exists || fs5.readFileSync(abs, "utf8") !== c.before)) throw new ConflictError(`File changed since planning: ${p}`);
   }
   fs5.mkdirSync(path9.join(dir, "backup"), { recursive: true });
+  ensureSelfIgnored(root2);
   const manifest = { changeId, createdAt: (/* @__PURE__ */ new Date()).toISOString(), root: root2, fixes: fixes.map((f) => ({ id: f.id, ruleId: f.ruleId, title: f.title })), files: [], status: "applied" };
   let n = 0;
   const written = [];
@@ -22646,7 +22656,8 @@ function listChanges(root2) {
 // src/commands/optimize.ts
 function gitDirty(root2) {
   try {
-    return execFileSync("git", ["status", "--porcelain"], { cwd: root2, stdio: ["ignore", "pipe", "ignore"] }).toString().trim().length > 0;
+    const out = execFileSync("git", ["status", "--porcelain"], { cwd: root2, stdio: ["ignore", "pipe", "ignore"] }).toString();
+    return out.split("\n").some((l) => l.trim() && !l.includes(".searvex/"));
   } catch {
     return null;
   }

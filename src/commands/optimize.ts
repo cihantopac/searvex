@@ -12,7 +12,8 @@ import { UsageError, type GlobalFlags } from '../cli.js';
 
 function gitDirty(root: string): boolean | null {
   try {
-    return execFileSync('git', ['status', '--porcelain'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim().length > 0;
+    const out = execFileSync('git', ['status', '--porcelain'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+    return out.split('\n').some((l) => l.trim() && !l.includes('.searvex/'));
   } catch {
     return null;
   }

@@ -71,6 +71,12 @@ describe('repository detection and audit', () => {
     expect(scan.routes.length).toBe(2);
   });
 
+  it('treats spread props as an unknown title, not a missing one (real-world Astro blog)', () => {
+    const r = auditRepository(path.join(FIX, 'astro')).report;
+    const missing = r.findings.find((f) => f.ruleId === 'title.missing')!;
+    expect(missing.evidence.map((e) => e.file)).toEqual(['src/pages/notes.astro']);
+  });
+
   it('accepts a correct Next.js app without false positives on titles', () => {
     const r = auditRepository(path.join(FIX, 'monorepo')).report;
     expect(r.findings.filter((f) => f.ruleId === 'title.missing' && f.evidence.some((e) => e.file?.startsWith('apps/web')))).toEqual([]);

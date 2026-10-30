@@ -279,9 +279,11 @@ function scanApp(root: string, appRoot: string, framework: Framework, files: Wal
       for (const p of find(appFiles, /src\/pages\/.+\.(astro|md|mdx)$/)) {
         const route = '/' + p.rel.replace(/^.*src\/pages\//, '').replace(/\.(astro|mdx?)$/, '').replace(/(^|\/)index$/, '');
         const src = read(p.rel);
-        const hasTitle = /<title\b/i.test(src) || /\btitle\s*=\s*[{"']/.test(src) || /^---[\s\S]*?\ntitle\s*:/m.test(src);
+        // Props spread into a layout (<Layout {...post.data}>) usually carry the title: unknown, not missing.
+        const spread = /<[A-Z]\w*\s+[^>]*\{\s*\.\.\.[^}]+\}/.test(src);
+        const hasTitle = /<title\b/i.test(src) || /\btitle\s*=\s*[{"']/.test(src) || /^---[\s\S]*?\ntitle\s*:/m.test(src) ? true : spread ? null : false;
         scan.routes.push({ route, file: p.rel, framework: 'astro', dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: /description\s*[=:]/.test(src), noindex: /noindex/.test(src) });
-        if (!hasTitle) sink.emit('title.missing', { file: p.rel, observed: `route ${route}: no title passed to layout and no <title>` });
+        if (hasTitle === false) sink.emit('title.missing', { file: p.rel, observed: `route ${route}: no title passed to layout and no <title>` });
       }
       const cfg = appFiles.find((f) => /astro\.config\.\w+$/.test(f.rel));
       if (cfg && /@astrojs\/sitemap/.test(read(cfg.rel))) scan.locations.hasSitemapGenerator = `${cfg.rel} (@astrojs/sitemap)`;
