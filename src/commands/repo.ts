@@ -16,11 +16,11 @@ export async function commandRepo(flags: GlobalFlags): Promise<number> {
   const store = new RunStore(path.resolve(String(v['out'] ?? root)), RunStore.newRunId('repo'));
   report.runId = store.runId;
   store.writeJson('meta.json', { kind: 'repository', target: root, framework: scan.detection.framework, startedAt: report.generatedAt });
-  store.writeJson('scan.json', { detection: scan.detection, routes: scan.routes, locations: scan.locations, skipped: scan.skipped });
+  store.writeJson('scan.json', { detection: scan.detection, apps: scan.apps.map((a) => ({ appRoot: a.appRoot, framework: a.framework, routes: a.routes, locations: a.locations, originSource: a.originSource })), skipped: scan.skipped });
   const files = writeReports(store, report, kb, String(v['format'] ?? 'md,html,json').split(','));
   if (!v['json'] && !v['quiet']) {
     console.log(`\nRepository: ${root}`);
-    console.log(`Framework: ${scan.detection.framework}${scan.detection.candidates.length > 1 ? ` (+${scan.detection.candidates.length - 1} more app(s): ${scan.detection.candidates.slice(1).map((c) => `${c.framework}@${c.root}`).join(', ')})` : ''}`);
+    console.log(`Apps: ${scan.apps.map((a) => `${a.framework}${a.appRoot === '.' ? '' : ' @ ' + a.appRoot}`).join(', ')}`);
     console.log(`Routes/pages found: ${scan.routes.length} · files scanned: ${scan.files.length}`);
   }
   printSummary(report, files, v);

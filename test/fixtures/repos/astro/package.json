@@ -1,0 +1,1 @@
+{ "name": "astro-blog", "private": true, "dependencies": { "astro": "5.13.0" } }

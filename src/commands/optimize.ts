@@ -51,15 +51,15 @@ export async function commandOptimize(flags: GlobalFlags): Promise<number> {
   const plan = planFixes(before.report, before.scan, { siteUrl, lang, only: v['only'] as string[] | undefined });
   const store = new RunStore(root, RunStore.newRunId('optimize'));
   store.writeJson('meta.json', { kind: 'optimize', target: root, startedAt: new Date().toISOString() });
-  const patch = plan.fixes.flatMap((f) => f.changes.map((c) => unifiedDiff(c.path, c.before, c.after))).join('\n');
-  store.writeJson('plan.json', { ...plan, fixes: plan.fixes.map((f) => ({ ...f, changes: f.changes.map((c) => ({ path: c.path, action: c.action })) })) });
+  const patch = plan.files.map((c) => unifiedDiff(c.path, c.before, c.after)).join('\n');
+  store.writeJson('plan.json', { ...plan, files: plan.files.map((c) => ({ path: c.path, action: c.action })), fixes: plan.fixes.map((f) => ({ ...f, changes: f.changes.map((c) => ({ path: c.path, action: c.action })) })) });
   store.writeText('plan.patch', patch + '\n');
 
   if (v['json'] && !v['apply']) {
-    process.stdout.write(JSON.stringify({ framework: before.scan.detection.framework, plan: { ...plan, fixes: plan.fixes.map((f) => ({ ...f, diff: f.changes.map((c) => unifiedDiff(c.path, c.before, c.after)).join('\n'), changes: f.changes.map((c) => ({ path: c.path, action: c.action })) })) } }, null, 2) + '\n');
+    process.stdout.write(JSON.stringify({ apps: before.scan.apps.map((a) => ({ appRoot: a.appRoot, framework: a.framework })), patch, plan: { ...plan, files: plan.files.map((c) => ({ path: c.path, action: c.action })), fixes: plan.fixes.map((f) => ({ ...f, diff: f.changes.map((c) => unifiedDiff(c.path, c.before, c.after)).join('\n'), changes: f.changes.map((c) => ({ path: c.path, action: c.action })) })) } }, null, 2) + '\n');
     return 0;
   }
-  console.log(`Repository: ${root} (${before.scan.detection.framework})\n`);
+  console.log(`Repository: ${root} (${before.scan.apps.map((a) => a.framework + (a.appRoot === '.' ? '' : '@' + a.appRoot)).join(', ')})\n`);
   console.log(renderPlan(plan));
   if (!plan.fixes.length) return 0;
   if (!v['apply']) {

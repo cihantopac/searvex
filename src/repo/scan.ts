@@ -17,27 +17,38 @@ export interface RouteInfo {
   noindex: boolean;
 }
 
-export interface RepoScan {
-  root: string;
-  detection: Detection;
+export interface AppLocations {
+  publicDir: string | null;
+  robotsFile: string | null;
+  sitemapFiles: string[];
+  rootLayout: string | null;
+  layouts: string[];
+  hasSitemapGenerator: string | null;
+  hasRobotsGenerator: string | null;
+}
+
+/** One application inside the repository (monorepos contain several). */
+export interface AppScan {
   appRoot: string;
+  framework: Framework;
   routes: RouteInfo[];
-  files: WalkedFile[];
-  skipped: { symlinks: number; secrets: number; large: number; truncated: boolean };
+  locations: AppLocations;
   /** Synthetic crawl over static HTML files (if any) so web-mode analyzers can run. */
   staticSite?: CrawlResult;
   /** URL → file mapping for evidence rewriting. */
   urlToFile: Map<string, string>;
-  /** Locations useful to the optimizer. */
-  locations: {
-    publicDir: string | null;
-    robotsFile: string | null;
-    sitemapFiles: string[];
-    rootLayout: string | null;
-    layouts: string[];
-    hasSitemapGenerator: string | null;
-    hasRobotsGenerator: string | null;
-  };
+  /** How the site origin used for static analysis was determined. */
+  originSource?: 'site-url' | 'inferred' | 'placeholder';
+}
+
+export interface RepoScan {
+  root: string;
+  detection: Detection;
+  apps: AppScan[];
+  files: WalkedFile[];
+  skipped: { symlinks: number; secrets: number; large: number; truncated: boolean };
+  /** All routes across apps. */
+  routes: RouteInfo[];
 }
 
 export const PLACEHOLDER_ORIGIN = 'https://site.invalid';
@@ -87,7 +98,7 @@ function hasKey(src: string, key: string): boolean {
 }
 
 /** Scan Next.js (app router) sources. */
-function scanNextApp(appRoot: string, files: WalkedFile[], read: (f: string) => string, sink: FindingSink, scan: RepoScan): void {
+function scanNextApp(appRoot: string, files: WalkedFile[], read: (f: string) => string, sink: FindingSink, scan: AppScan): void {
   const appBase = files.some((f) => f.rel.startsWith(rel(appRoot, 'src/app/'))) ? rel(appRoot, 'src/app/') : rel(appRoot, 'app/');
   const baseRe = new RegExp('^' + appBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const pages = files.filter((f) => f.rel.startsWith(appBase) && /\/page\.(tsx|jsx|ts|js|mdx)$|^page\./.test(f.rel.slice(appBase.length - 1)) && !/\/(@[^/]+|\(\.+\)[^/]*)\//.test(f.rel));
@@ -135,7 +146,7 @@ function scanNextApp(appRoot: string, files: WalkedFile[], read: (f: string) => 
   if (sitemapGen) scan.locations.hasSitemapGenerator = sitemapGen.rel;
 }
 
-function scanNextPages(appRoot: string, files: WalkedFile[], read: (f: string) => string, sink: FindingSink, scan: RepoScan): void {
+function scanNextPages(appRoot: string, files: WalkedFile[], read: (f: string) => string, sink: FindingSink, scan: AppScan): void {
   const base = files.some((f) => f.rel.startsWith(rel(appRoot, 'src/pages/'))) ? rel(appRoot, 'src/pages/') : rel(appRoot, 'pages/');
   const pages = files.filter((f) => f.rel.startsWith(base) && /\.(tsx|jsx|ts|js|mdx)$/.test(f.rel) && !/\/(_app|_document|_error|404|500)\.|\/api\//.test('/' + f.rel.slice(base.length)));
   const appFile = files.find((f) => f.rel.startsWith(base + '_app.'));
@@ -162,7 +173,7 @@ function scanNextPages(appRoot: string, files: WalkedFile[], read: (f: string) =
 }
 
 /** Shared checks for template-driven frameworks: layouts must carry <title>, description, viewport, lang. */
-function scanLayouts(layoutFiles: string[], read: (f: string) => string, sink: FindingSink, scan: RepoScan, idioms: { titleRe: RegExp; langRe: RegExp }): void {
+function scanLayouts(layoutFiles: string[], read: (f: string) => string, sink: FindingSink, scan: AppScan, idioms: { titleRe: RegExp; langRe: RegExp }): void {
   scan.locations.layouts = layoutFiles;
   for (const f of layoutFiles) {
     const src = read(f);
@@ -176,6 +187,7 @@ function scanLayouts(layoutFiles: string[], read: (f: string) => string, sink: F
     }
     const html = /<html\b[^>]*>/i.exec(src);
     if (html && !idioms.langRe.test(html[0])) sink.emit('html.lang-missing', { file: f, line: lineOf(src, html.index), observed: html[0] });
+    if (!/rel=["']canonical["']/i.test(src)) sink.emit('canonical.missing', { file: f, observed: 'layout <head> has no rel=canonical' });
   }
 }
 
@@ -191,7 +203,7 @@ function scanSources(files: WalkedFile[], read: (f: string) => string, sink: Fin
 }
 
 /** Build a synthetic crawl from static HTML files so the website analyzers can be reused. */
-function staticCrawl(htmlFiles: string[], dirBase: string, read: (f: string) => string, scan: RepoScan, siteOrigin: string): CrawlResult {
+function staticCrawl(htmlFiles: string[], dirBase: string, read: (f: string) => string, scan: AppScan, files: WalkedFile[], siteOrigin: string): CrawlResult {
   const pages: PageRecord[] = [];
   for (const f of htmlFiles) {
     let urlPath = '/' + f.slice(dirBase.length).replace(/^\/+/, '');
@@ -205,9 +217,9 @@ function staticCrawl(htmlFiles: string[], dirBase: string, read: (f: string) => 
       blockedByRobots: false, inSitemap: false, data: extractPage(html, url),
     });
   }
-  const robotsRel = [`${dirBase}robots.txt`, 'public/robots.txt', 'robots.txt'].find((r) => scan.files.some((f) => f.rel === r));
+  const robotsRel = [`${dirBase}robots.txt`, 'public/robots.txt', 'robots.txt'].find((r) => files.some((f) => f.rel === r));
   const robots: RobotsInfo = robotsRel ? parseRobots(new URL('/robots.txt', siteOrigin).toString(), read(robotsRel), 200) : { ...parseRobots(new URL('/robots.txt', siteOrigin).toString(), '', 404), state: 'missing' };
-  const sitemapFiles = scan.files.filter((f) => f.rel.startsWith(dirBase) && /sitemap[^/]*\.xml$/i.test(f.rel)).map((f) => f.rel);
+  const sitemapFiles = files.filter((f) => f.rel.startsWith(dirBase) && /sitemap[^/]*\.xml$/i.test(f.rel)).map((f) => f.rel);
   const smUrls = sitemapFiles.flatMap((s) => parseSitemapXml(read(s), s).urls);
   const smSet = new Set(smUrls.map((u) => u.loc));
   for (const p of pages) p.inSitemap = smSet.has(p.url);
@@ -218,31 +230,41 @@ function staticCrawl(htmlFiles: string[], dirBase: string, read: (f: string) => 
   };
 }
 
-export function scanRepository(root: string, sink: FindingSink, opts: { siteUrl?: string } = {}): RepoScan {
-  const detection = detect(root);
-  const { files, skipped } = walk(root, { include: (r) => SOURCE_EXT.test(r) || /(^|\/)(robots\.txt|sitemap[^/]*\.xml|package\.json|composer\.json|astro\.config\.\w+|nuxt\.config\.\w+|next\.config\.\w+)$/.test(r) });
-  const cache = new Map<string, string>();
-  const read = (f: string) => {
-    let t = cache.get(f);
-    if (t === undefined) cache.set(f, (t = readText(root, f)));
-    return t;
-  };
-  const primary = detection.candidates[0];
-  const appRoot = primary?.root ?? '.';
-  const scan: RepoScan = {
-    root, detection, appRoot, routes: [], files, skipped, urlToFile: new Map(),
+/** Most common origin among absolute canonical / og:url / hreflang URLs in the HTML files. */
+export function inferSiteOrigin(htmls: string[]): string | null {
+  const counts = new Map<string, number>();
+  for (const h of htmls) {
+    for (const m of h.matchAll(/<(?:link|meta)\b[^>]*(?:rel=["']?(?:canonical|alternate)["']?|property=["']og:url["'])[^>]*>/gi)) {
+      const url = /(?:href|content)=["'](https?:\/\/[^"']+)/i.exec(m[0])?.[1];
+      if (!url) continue;
+      try {
+        const o = new URL(url).origin;
+        counts.set(o, (counts.get(o) ?? 0) + 1);
+      } catch {
+        /* ignore malformed */
+      }
+    }
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+}
+
+const OUTPUT_DIRS = /(^|\/)(dist|build|out|_site|public|node_modules|vendor)\//;
+
+function scanApp(root: string, appRoot: string, framework: Framework, files: WalkedFile[], read: (f: string) => string, sink: FindingSink, opts: { siteUrl?: string }): AppScan {
+  const scan: AppScan = {
+    appRoot, framework, routes: [], urlToFile: new Map(),
     locations: { publicDir: null, robotsFile: null, sitemapFiles: [], rootLayout: null, layouts: [], hasSitemapGenerator: null, hasRobotsGenerator: null },
   };
   const appFiles = appRoot === '.' ? files : files.filter((f) => f.rel.startsWith(appRoot + '/'));
-  const publicDir = ['public', 'static', 'web'].map((d) => rel(appRoot, d)).find((d) => files.some((f) => f.rel.startsWith(d + '/'))) ?? (['laravel', 'nextjs-app', 'nextjs-pages', 'astro', 'nuxt', 'vite-spa', 'cra-spa'].includes(detection.framework) ? rel(appRoot, 'public') : null);
+  const publicDir = ['public', 'static', 'web'].map((d) => rel(appRoot, d)).find((d) => appFiles.some((f) => f.rel.startsWith(d + '/'))) ?? (['laravel', 'nextjs-app', 'nextjs-pages', 'astro', 'nuxt', 'vite-spa', 'cra-spa'].includes(framework) ? rel(appRoot, 'public') : null);
   scan.locations.publicDir = publicDir;
-  scan.locations.robotsFile = files.find((f) => f.rel === (publicDir ? `${publicDir}/robots.txt` : 'robots.txt') || f.rel === rel(appRoot, 'robots.txt'))?.rel ?? null;
-  scan.locations.sitemapFiles = files.filter((f) => /sitemap[^/]*\.xml$/i.test(f.rel) && !/(^|\/)(dist|build|out)\//.test(f.rel)).map((f) => f.rel);
+  scan.locations.robotsFile = appFiles.find((f) => f.rel === (publicDir ? `${publicDir}/robots.txt` : 'robots.txt') || f.rel === rel(appRoot, 'robots.txt'))?.rel ?? null;
+  scan.locations.sitemapFiles = appFiles.filter((f) => /sitemap[^/]*\.xml$/i.test(f.rel) && !/(^|\/)(dist|build|out)\//.test(f.rel)).map((f) => f.rel);
 
-  const pkgText = files.find((f) => f.rel === rel(appRoot, 'package.json')) ? read(rel(appRoot, 'package.json')) : '';
-  const composerText = files.find((f) => f.rel === rel(appRoot, 'composer.json')) ? read(rel(appRoot, 'composer.json')) : '';
+  const pkgText = appFiles.find((f) => f.rel === rel(appRoot, 'package.json')) ? read(rel(appRoot, 'package.json')) : '';
+  const composerText = appFiles.find((f) => f.rel === rel(appRoot, 'composer.json')) ? read(rel(appRoot, 'composer.json')) : '';
 
-  switch (detection.framework) {
+  switch (framework) {
     case 'nextjs-app':
       scanNextApp(appRoot, appFiles, read, sink, scan);
       if (/"next-sitemap"/.test(pkgText)) scan.locations.hasSitemapGenerator ??= 'next-sitemap (package.json)';
@@ -312,34 +334,50 @@ export function scanRepository(root: string, sink: FindingSink, opts: { siteUrl?
     }
     case 'vite-spa':
     case 'cra-spa': {
-      const index = [rel(appRoot, 'index.html'), rel(appRoot, 'public/index.html')].find((f) => files.some((x) => x.rel === f));
-      if (index) sink.emit('index.client-rendered', { file: index, observed: `${detection.framework}: pages are rendered in the browser; crawlers that do not execute JavaScript see an empty shell` }, { confidence: 'verified' });
+      const index = [rel(appRoot, 'index.html'), rel(appRoot, 'public/index.html')].find((f) => appFiles.some((x) => x.rel === f));
+      if (index) sink.emit('index.client-rendered', { file: index, observed: `${framework}: pages are rendered in the browser; crawlers that do not execute JavaScript see an empty shell` }, { confidence: 'verified' });
       break;
     }
     default:
       break;
   }
 
-  scanSources(appFiles, read, sink);
-
   // Static HTML (plain sites, or a committed build output) → reuse website analyzers.
-  const htmlDirs = ['', 'public/', 'dist/', 'out/', 'build/', '_site/', 'docs/'].map((d) => (appRoot === '.' ? d : `${appRoot}/${d}`));
-  const SPA = detection.framework === 'vite-spa' || detection.framework === 'cra-spa';
-  for (const d of htmlDirs) {
-    const html = files.filter((f) => f.rel.startsWith(d) && /\.html?$/i.test(f.rel) && !f.rel.slice(d.length).includes('/node_modules/'))
-      .filter((f) => d !== '' || !f.rel.includes('/'))
+  const SPA = framework === 'vite-spa' || framework === 'cra-spa';
+  const staticKinds = framework === 'static-html' || framework === 'unknown' || framework === 'jekyll' || framework === 'hugo' || framework === 'eleventy';
+  for (const d of ['', 'public/', 'dist/', 'out/', 'build/', '_site/', 'docs/'].map((x) => (appRoot === '.' ? x : `${appRoot}/${x}`))) {
+    const isOutput = ['dist/', 'out/', 'build/', '_site/'].some((x) => d.endsWith(x));
+    if (SPA || (!staticKinds && !isOutput)) continue;
+    const html = appFiles
+      .filter((f) => f.rel.startsWith(d) && /\.html?$/i.test(f.rel))
+      // At the app root, skip output/vendor folders (they are scanned as their own candidates).
+      .filter((f) => d !== (appRoot === '.' ? '' : `${appRoot}/`) || !OUTPUT_DIRS.test(f.rel.slice(d.length)))
       .filter((f) => !/(^|\/)(googl[a-z0-9]+|yandex_[a-z0-9]+|BingSiteAuth)\.html$/i.test(f.rel));
-    if (html.length && !SPA && (detection.framework === 'static-html' || detection.framework === 'unknown' || ['dist/', 'out/', 'build/', '_site/'].some((x) => d.endsWith(x)) || detection.framework === 'jekyll' || detection.framework === 'hugo')) {
-      const origin = opts.siteUrl ? new URL(opts.siteUrl).origin : PLACEHOLDER_ORIGIN;
-      scan.staticSite = staticCrawl(html.map((f) => f.rel), d, read, scan, origin);
-      for (const f of html) scan.routes.push({ route: '/' + f.rel.slice(d.length).replace(/(^|\/)index\.html?$/i, '$1'), file: f.rel, framework: 'static-html', dynamic: false, hasTitle: null, hasDescription: null, noindex: false });
-      break;
+    if (!html.length) continue;
+    let origin = PLACEHOLDER_ORIGIN;
+    scan.originSource = 'placeholder';
+    if (opts.siteUrl) {
+      origin = new URL(opts.siteUrl).origin;
+      scan.originSource = 'site-url';
+    } else {
+      const inferred = inferSiteOrigin(html.slice(0, 500).map((f) => read(f.rel)));
+      if (inferred) {
+        origin = inferred;
+        scan.originSource = 'inferred';
+      }
     }
+    scan.staticSite = staticCrawl(html.map((f) => f.rel), d, read, scan, appFiles, origin);
+    for (const f of html) scan.routes.push({ route: '/' + f.rel.slice(d.length).replace(/(^|\/)index\.html?$/i, '$1'), file: f.rel, framework: 'static-html', dynamic: false, hasTitle: null, hasDescription: null, noindex: false });
+    break;
   }
+
+  // Source pattern checks (HTML files already analysed by the static crawl are skipped to avoid double counting).
+  const staticFiles = new Set(scan.urlToFile.values());
+  scanSources(appFiles.filter((f) => !staticFiles.has(f.rel)), read, sink);
 
   // robots.txt / sitemap presence for framework apps (static sites are covered by the synthetic crawl).
   if (!scan.staticSite) {
-    if (!scan.locations.hasSitemapGenerator && !scan.locations.sitemapFiles.length && detection.framework !== 'wordpress-theme') {
+    if (!scan.locations.hasSitemapGenerator && !scan.locations.sitemapFiles.length && framework !== 'wordpress-theme' && framework !== 'unknown') {
       sink.emit('robots.no-sitemap', { file: publicDir ?? appRoot, observed: 'no sitemap file or generator found in the repository' });
     }
     if (scan.locations.robotsFile) {
@@ -351,4 +389,25 @@ export function scanRepository(root: string, sink: FindingSink, opts: { siteUrl?
     }
   }
   return scan;
+}
+
+export function scanRepository(root: string, sink: FindingSink, opts: { siteUrl?: string } = {}): RepoScan {
+  const detection = detect(root);
+  const { files, skipped } = walk(root, { include: (r) => SOURCE_EXT.test(r) || /(^|\/)(robots\.txt|sitemap[^/]*\.xml|package\.json|composer\.json|astro\.config\.\w+|nuxt\.config\.\w+|next\.config\.\w+)$/.test(r) });
+  const cache = new Map<string, string>();
+  const read = (f: string) => {
+    let t = cache.get(f);
+    if (t === undefined) cache.set(f, (t = readText(root, f)));
+    return t;
+  };
+  const candidates = detection.candidates.length ? detection.candidates : [{ framework: 'unknown' as Framework, root: '.', evidence: 'no framework detected' }];
+  // De-duplicate (an app can match twice, e.g. WordPress style.css + wp-content).
+  const seen = new Set<string>();
+  const apps: AppScan[] = [];
+  for (const c of candidates) {
+    if (seen.has(c.root)) continue;
+    seen.add(c.root);
+    apps.push(scanApp(root, c.root, c.framework, files, read, sink, opts));
+  }
+  return { root, detection, apps, files, skipped, routes: apps.flatMap((a) => a.routes) };
 }

@@ -31,20 +31,29 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
     byType: {}, languages: {}, hreflangLanguages: [], statusCodes: {}, businessModel: { label: 'unknown (repository mode)', evidence: [] }, sections: [],
   };
 
-  if (scan.staticSite) {
+  let first = true;
+  for (const app of scan.apps) {
+    if (!app.staticSite) continue;
     // Run the website analyzers against the synthetic crawl, then drop network-only rules.
     const inner = new FindingSink(kb);
-    const ctx = buildContext(scan.staticSite);
+    const ctx = buildContext(app.staticSite);
     runTechnicalChecks(ctx, inner);
-    geo = runGeoChecks(ctx, inner);
-    content = runContentChecks(ctx, inner);
-    inventory = buildInventory(ctx);
+    const appGeo = runGeoChecks(ctx, inner);
+    const appContent = runContentChecks(ctx, inner);
+    if (first) {
+      geo = appGeo;
+      content = appContent;
+      inventory = buildInventory(ctx);
+      first = false;
+    }
+    const origin = app.staticSite.origin;
     for (const f of inner.findings()) {
       if (NETWORK_ONLY.has(f.ruleId)) continue;
-      // canonical.missing without a known site URL cannot be fixed reliably; still report it.
+      // Without a real site URL, cross-domain comparisons against the placeholder origin are meaningless.
+      if (app.originSource === 'placeholder' && f.ruleId === 'canonical.cross-domain') continue;
       sink.emit(
         f.ruleId,
-        f.evidence.map((e) => ({ ...e, file: e.url ? scan.urlToFile.get(e.url) ?? e.file : e.file, url: e.url?.startsWith(PLACEHOLDER_ORIGIN) ? e.url.slice(PLACEHOLDER_ORIGIN.length) : e.url })),
+        f.evidence.map((e) => ({ ...e, file: e.url ? app.urlToFile.get(e.url) ?? e.file : e.file, url: e.url?.startsWith(origin) ? e.url.slice(origin.length) || '/' : e.url })),
         { message: f.message, severity: f.severity, confidence: f.confidence },
       );
     }
@@ -54,7 +63,11 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
     'Repository mode analyses source files statically. Values computed at runtime (CMS data, generateMetadata fetching, i18n) cannot be fully resolved; such cases are reported conservatively.',
     'HTTP behaviour (status codes, redirects, headers, compression, speed) requires website mode against a running deployment.',
   ];
-  if (!scan.staticSite && scan.detection.framework !== 'static-html') limitations.push(`Framework "${scan.detection.framework}" was analysed via source patterns; run "searvex audit <deployed-url>" for rendered-output verification.`);
+  for (const app of scan.apps) {
+    if (!app.staticSite && app.framework !== 'static-html') limitations.push(`App "${app.appRoot}" (${app.framework}) was analysed via source patterns; run "searvex audit <deployed-url>" for rendered-output verification.`);
+    if (app.originSource === 'inferred') limitations.push(`App "${app.appRoot}": site origin ${app.staticSite!.origin} was inferred from canonical/og:url/hreflang URLs; pass --site-url to override.`);
+    if (app.originSource === 'placeholder') limitations.push(`App "${app.appRoot}": site URL unknown; canonical cross-domain checks were skipped. Pass --site-url for complete results.`);
+  }
   if (scan.skipped.secrets) limitations.push(`${scan.skipped.secrets} secret-bearing file(s) (.env, keys, credentials) were skipped and never read.`);
   if (scan.skipped.symlinks) limitations.push(`${scan.skipped.symlinks} symlink(s) were not followed.`);
   if (scan.skipped.truncated) limitations.push('File limit reached; repository scan is partial.');
@@ -67,8 +80,8 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
     generatedAt: new Date().toISOString(),
     crawl: {
       crawled: scan.routes.length, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: 0, avgResponseMs: 0, truncated: scan.skipped.truncated,
-      startUrl: opts.siteUrl ?? '', robots: { url: scan.locations.robotsFile ?? '', state: scan.locations.robotsFile ? 'ok' : 'missing', status: 0, sitemaps: [] },
-      sitemaps: scan.locations.sitemapFiles, sitemapUrls: scan.staticSite?.sitemap.urls.length ?? 0, sitemapIssues: [],
+      startUrl: opts.siteUrl ?? '', robots: { url: scan.apps[0]?.locations.robotsFile ?? '', state: scan.apps[0]?.locations.robotsFile ? 'ok' : 'missing', status: 0, sitemaps: [] },
+      sitemaps: scan.apps.flatMap((a) => a.locations.sitemapFiles), sitemapUrls: scan.apps.reduce((n, a) => n + (a.staticSite?.sitemap.urls.length ?? 0), 0), sitemapIssues: [],
     },
     inventory,
     findings,

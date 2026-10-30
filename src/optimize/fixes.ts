@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { AuditReport } from '../analyze/audit.js';
 import { readText } from '../repo/fs-safe.js';
-import type { RepoScan } from '../repo/scan.js';
+import type { AppScan, RepoScan } from '../repo/scan.js';
 
 /**
  * Deterministic, framework-aware fix planners.
@@ -35,6 +35,8 @@ export interface AgentTask {
 
 export interface FixPlan {
   fixes: Fix[];
+  /** Final state per file after all fixes (for the combined patch and the transaction). */
+  files: FileChange[];
   tasks: AgentTask[];
   skipped: Array<{ ruleId: string; reason: string }>;
 }
@@ -67,7 +69,7 @@ const HREFLANG_FIXES: Record<string, string> = { 'en-uk': 'en-GB', uk: 'uk', jp:
 
 export function planFixes(report: AuditReport, scan: RepoScan, opts: PlanOptions = {}): FixPlan {
   const root = scan.root;
-  const plan: FixPlan = { fixes: [], tasks: [], skipped: [] };
+  const plan: FixPlan = { fixes: [], files: [], tasks: [], skipped: [] };
   const wanted = (ruleId: string) => !opts.only?.length || opts.only.includes(ruleId);
   const pending = new Map<string, FileChange>();
   const read = (f: string) => pending.get(f)?.after ?? readText(root, f);
@@ -79,14 +81,18 @@ export function planFixes(report: AuditReport, scan: RepoScan, opts: PlanOptions
     }
   };
   const stage = (ruleId: string, title: string, rationale: string, file: string, after: string, action: 'modify' | 'create' = 'modify') => {
-    const before = pending.get(file)?.before ?? (action === 'create' ? null : original(file));
-    if (before === after) return;
-    const change: FileChange = { path: file, action: before === null ? 'create' : action, before, after };
-    pending.set(file, change);
-    plan.fixes.push({ id: `fix-${plan.fixes.length + 1}`, ruleId, title, rationale, changes: [{ ...change }] });
+    const prev = pending.get(file);
+    // `before` of the merged change is the original file; each fix records its own step diff.
+    const original0 = prev ? prev.before : action === 'create' ? null : original(file);
+    const stepBefore = prev ? prev.after : original0;
+    if (stepBefore === after) return;
+    pending.set(file, { path: file, action: original0 === null ? 'create' : 'modify', before: original0, after });
+    plan.fixes.push({ id: `fix-${plan.fixes.length + 1}`, ruleId, title, rationale, changes: [{ path: file, action: stepBefore === null ? 'create' : 'modify', before: stepBefore, after }] });
   };
   const byRule = new Map(report.findings.map((f) => [f.ruleId, f]));
-  const fw = scan.detection.framework;
+  // Framework of the app that owns a file (monorepos mix frameworks).
+  const appOf = (file?: string): AppScan | undefined => [...scan.apps].sort((a, b) => b.appRoot.length - a.appRoot.length).find((a) => a.appRoot === '.' || (file ?? '').startsWith(a.appRoot + '/'));
+  const fwOf = (file?: string) => appOf(file)?.framework ?? 'unknown';
 
   // ---- html lang ----
   const lang = byRule.get('html.lang-missing');
@@ -94,6 +100,7 @@ export function planFixes(report: AuditReport, scan: RepoScan, opts: PlanOptions
     for (const e of lang.evidence) {
       if (!e.file || !/\.(php|html?|tsx|jsx|astro|vue)$/.test(e.file)) continue;
       const src = read(e.file);
+      const fw = fwOf(e.file);
       let idiom: string | null = null;
       if (fw === 'laravel' && e.file.endsWith('.blade.php')) idiom = `lang="{{ str_replace('_', '-', app()->getLocale()) }}"`;
       else if (fw === 'wordpress-theme' && e.file.endsWith('.php')) idiom = '<?php language_attributes(); ?>';
@@ -127,12 +134,12 @@ export function planFixes(report: AuditReport, scan: RepoScan, opts: PlanOptions
     if (!f || !wanted(ruleId)) continue;
     for (const e of f.evidence) {
       if (!e.file || !/\.html?$/.test(e.file)) {
-        if (ruleId === 'canonical.missing' && e.file) plan.tasks.push({ ruleId, title: 'Add canonical URL', instruction: frameworkCanonicalHint(fw), locations: [{ file: e.file, observed: e.observed }] });
+        if (ruleId === 'canonical.missing' && e.file) plan.tasks.push({ ruleId, title: 'Add canonical URL', instruction: frameworkCanonicalHint(fwOf(e.file)), locations: [{ file: e.file, observed: e.observed }] });
         continue;
       }
       const src = read(e.file);
       if (ruleId === 'canonical.multiple') {
-        const all = [...src.matchAll(/[ \t]*<link\b[^>]*rel=["']?canonical["']?[^>]*>\s*\n?/gi)];
+        const all = [...src.matchAll(/^[ \t]*<link\b[^>]*rel=["']?canonical["']?[^>]*>[ \t]*\r?\n?/gim)];
         const hrefs = new Set(all.map((m) => /href=["']([^"']+)/i.exec(m[0])?.[1]));
         if (hrefs.size !== 1) {
           plan.tasks.push({ ruleId, title: 'Resolve conflicting canonicals', instruction: 'Multiple canonical links point to different URLs; keep the one for the preferred URL and remove the others (check templates/plugins injecting a second one).', locations: [{ file: e.file, observed: [...hrefs].join(' vs ') }] });
@@ -187,8 +194,8 @@ export function planFixes(report: AuditReport, scan: RepoScan, opts: PlanOptions
   }
 
   // ---- WordPress title-tag ----
-  const wpTitle = byRule.get('title.missing')?.evidence.find((e) => e.file?.endsWith('functions.php'));
-  if (fw === 'wordpress-theme' && wpTitle?.file && wanted('title.missing')) {
+  const wpTitle = byRule.get('title.missing')?.evidence.find((e) => e.file?.endsWith('functions.php') && fwOf(e.file) === 'wordpress-theme');
+  if (wpTitle?.file && wanted('title.missing')) {
     const src = read(wpTitle.file);
     const snippet = "\n\n// Let WordPress manage the document title (added by Searvex).\nadd_action( 'after_setup_theme', function () {\n\tadd_theme_support( 'title-tag' );\n} );\n";
     stage('title.missing', "Enable add_theme_support('title-tag')", 'WordPress core generates <title> via wp_head() when title-tag support is declared.', wpTitle.file, src.replace(/\s*(\?>\s*)?$/, '') + snippet);
@@ -196,7 +203,7 @@ export function planFixes(report: AuditReport, scan: RepoScan, opts: PlanOptions
 
   // ---- robots.txt Sitemap directive / sitemap generation ----
   const noSitemap = byRule.get('robots.no-sitemap');
-  if (noSitemap && wanted('robots.no-sitemap')) planSitemap(scan, opts, plan, stage, read, report);
+  if (noSitemap && wanted('robots.no-sitemap')) for (const app of scan.apps) planSitemap(app, opts, plan, stage, read, report);
 
   // ---- tasks needing judgement ----
   const TASKS: Record<string, string> = {
@@ -214,9 +221,10 @@ export function planFixes(report: AuditReport, scan: RepoScan, opts: PlanOptions
   for (const [ruleId, instruction] of Object.entries(TASKS)) {
     const f = byRule.get(ruleId);
     if (!f || !wanted(ruleId)) continue;
-    const locs = f.evidence.filter((e) => !(ruleId === 'title.missing' && e.file?.endsWith('functions.php') && fw === 'wordpress-theme'));
+    const locs = f.evidence.filter((e) => !(ruleId === 'title.missing' && e.file?.endsWith('functions.php') && fwOf(e.file) === 'wordpress-theme'));
     if (locs.length) plan.tasks.push({ ruleId, title: f.title, instruction, locations: locs.map((e) => ({ file: e.file, line: e.line, url: e.url, observed: e.observed })) });
   }
+  plan.files = [...pending.values()];
   return plan;
 }
 
@@ -240,7 +248,7 @@ function frameworkCanonicalHint(fw: string): string {
 }
 
 export function urlForFile(file: string, scan: RepoScan, siteUrl: string): string | null {
-  for (const [url, f] of scan.urlToFile) {
+  for (const [url, f] of scan.apps.flatMap((a) => [...a.urlToFile])) {
     if (f === file) {
       const u = new URL(url);
       return new URL(u.pathname + u.search, siteUrl).toString();
@@ -250,14 +258,14 @@ export function urlForFile(file: string, scan: RepoScan, siteUrl: string): strin
 }
 
 function planSitemap(
-  scan: RepoScan,
+  scan: AppScan,
   opts: PlanOptions,
   plan: FixPlan,
   stage: (ruleId: string, title: string, rationale: string, file: string, after: string, action?: 'modify' | 'create') => void,
   read: (f: string) => string,
   report: AuditReport,
 ): void {
-  const fw = scan.detection.framework;
+  const fw = scan.framework;
   if (!opts.siteUrl) {
     plan.skipped.push({ ruleId: 'robots.no-sitemap', reason: 'site URL unknown — pass --site-url to generate sitemap/robots files' });
     return;
@@ -267,10 +275,9 @@ function planSitemap(
   let sitemapPath: string | null = null;
   if (scan.staticSite) {
     // Static HTML: only indexable, self-canonical pages.
-    const noindex = new Set(report.findings.filter((f) => f.ruleId === 'index.noindex' || f.ruleId === 'index.sitemap-non-canonical').flatMap((f) => f.evidence.map((e) => e.file)));
-    const urls = [...scan.urlToFile.entries()].filter(([, file]) => !noindex.has(file)).map(([u]) => new URL(new URL(u).pathname, origin).toString()).sort();
-    const base = scan.routes.find((r) => r.framework === 'static-html')?.file.split('/').slice(0, -1).join('/') ?? '';
-    const dir = scan.urlToFile.size ? path.posix.dirname([...scan.urlToFile.values()].sort((a, b) => a.length - b.length)[0]!) : base;
+    const excluded = new Set(report.findings.filter((f) => ['index.noindex', 'index.sitemap-non-canonical', 'index.soft-404'].includes(f.ruleId)).flatMap((f) => f.evidence.map((e) => e.file)));
+    const urls = [...scan.urlToFile.entries()].filter(([, file]) => !excluded.has(file)).map(([u]) => new URL(new URL(u).pathname, origin).toString()).sort();
+    const dir = path.posix.dirname([...scan.urlToFile.values()].sort((a, b) => a.split('/').length - b.split('/').length || a.length - b.length)[0]!);
     sitemapPath = (dir === '.' ? '' : dir + '/') + 'sitemap.xml';
     stage('robots.no-sitemap', 'Generate sitemap.xml', `Lists ${urls.length} indexable static pages (noindex/non-canonical pages excluded).`, sitemapPath, sitemapXml(urls), 'create');
   } else if (fw === 'nextjs-app') {
