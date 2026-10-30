@@ -44,5 +44,6 @@ own idioms in `src/optimize/fixes.ts`, and a fixture in `test/fixtures/repos/<na
 - `npm run typecheck && npm test`
 - `npm run bundle` (the committed plugin bundle must match `src/`; CI verifies this)
 - Update `CHANGELOG.md` and docs when behaviour changes.
+- Releases: bump the version in `package.json`, `.claude-plugin/plugin.json` and `src/net/fetcher.ts` together — installed plugins only update when `plugin.json`'s version changes.
 
 By contributing you agree that your contributions are licensed under Apache-2.0.

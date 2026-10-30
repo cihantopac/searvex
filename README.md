@@ -5,7 +5,7 @@ repositories for technical SEO and GEO/AEO (AI search) issues against a **source
 base**, researches competitors, and applies **safe, verified code fixes with one-command rollback**.
 It ships as a standalone CLI and as a Claude Code plugin.
 
-> Status: **v0.1.0 (early)**. The engine, rule base, CLI and plugin are tested (159 automated tests,
+> Status: **v0.2.0 (early)**. The engine, rule base, CLI and plugin are tested (160 automated tests, CI on Linux/macOS/Windows,
 > real-site and real-repository validation — see [docs/quality.md](docs/quality.md)). Expect rough
 > edges; read [Limitations](#limitations) before relying on it.
 

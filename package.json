@@ -1,6 +1,6 @@
 {
   "name": "searvex",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Open-source AI search intelligence & optimization engine: technical SEO, GEO/AEO, sourced rule base, safe code fixes with rollback.",
   "license": "Apache-2.0",
   "type": "module",

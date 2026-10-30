@@ -4,7 +4,8 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Current state — 2026-10-30
 
-- Version 0.1.0, all phase-1 items implemented; 159 tests passing; lines coverage 87%.
+- Version 0.2.0 (adds `searvex run` / 7-phase `/searvex` workflow); 160 tests passing; lines coverage 87%.
+- Plugin updates require a version bump in `.claude-plugin/plugin.json` (installed copies are pinned to that version).
 - Build: `npm run build` (tsc → `dist/`, esbuild → `dist/searvex.mjs`). The bundle is committed for the plugin.
 - Validate: `npm test`, `node bin/searvex rules validate`, `claude plugin validate .`.
 - Real-world validation done on 6 sites and 4 open-source repositories ([quality.md](quality.md)).
