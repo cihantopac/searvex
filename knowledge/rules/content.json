@@ -125,9 +125,9 @@
         },
         {
           "title": "Google: Large site owner's guide to managing crawl budget",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/large-site-managing-crawl-budget",
+          "url": "https://developers.google.com/crawling/docs/crawl-budget",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         }
       ],
       "status": "active"

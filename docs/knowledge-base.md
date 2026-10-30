@@ -50,6 +50,20 @@ Documented in [research/official-sources-2026-10.md](research/official-sources-2
 Popular practices without official support are **not** rules, or appear only as `info` with an explicit
 "no effect" explanation (meta keywords, llms.txt, title truncation). Tests guard these.
 
+## Automatic source revalidation
+
+`searvex rules check-sources` fetches every cited source (politely, per-host delay) and compares it with
+`knowledge/source-snapshots.json`: HTTP status, redirects, page title, the page's own "last updated" date
+(Google/web.dev/MDN patterns) and a SHA-256 of its normalised main text. Results: `unchanged`, `new`,
+`date-changed`, `content-changed`, `redirected`, `broken`, `unreadable` (client-rendered pages, e.g. Bing
+help). Exit code 1 when anything needs review. `--update` records the new snapshot. A weekly GitHub
+workflow (`.github/workflows/sources.yml`) runs the check; rules are never changed automatically.
+
+First run (2026-10-30): 14 sources redirected — Google moved its crawling documentation to
+`developers.google.com/crawling/…`. The cited facts (500 KiB robots.txt limit, no crawl-delay, 10 redirect
+hops, 429 handling, 15 MB fetch limit, Google-Extended not affecting Search) were re-verified on the new pages
+before the URLs were updated.
+
 ## Updating the knowledge base
 
 1. Re-read each source (prioritise `excerpt` and `url-resolved` levels and anything older than 6 months).

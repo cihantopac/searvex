@@ -26,18 +26,18 @@ export interface BotInfo {
 }
 
 const OPENAI = 'https://developers.openai.com/api/docs/bots';
-const ANTHROPIC = 'https://support.claude.com/en/articles/8896518';
-const PERPLEXITY = 'https://docs.perplexity.ai/guides/bots';
+const ANTHROPIC = 'https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler';
+const PERPLEXITY = 'https://docs.perplexity.ai/docs/resources/perplexity-crawlers';
 const APPLE = 'https://support.apple.com/en-us/119829';
-const GOOGLE = 'https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers';
-const META = 'https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/';
+const GOOGLE = 'https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers';
+const META = 'https://developers.facebook.com/documentation/sharing/webmasters/web-crawlers';
 const AMAZON = 'https://developer.amazon.com/amazonbot';
 
 export const KNOWN_BOTS: BotInfo[] = [
   { token: 'Googlebot', operator: 'Google', purpose: 'search', docs: GOOGLE },
   { token: 'Google-Extended', operator: 'Google', purpose: 'ai-training', docs: GOOGLE },
   { token: 'Bingbot', operator: 'Microsoft', purpose: 'search', docs: 'https://www.bing.com/webmasters/help/which-crawlers-does-bing-use-8c184ec0' },
-  { token: 'YandexBot', operator: 'Yandex', purpose: 'search', docs: 'https://yandex.com/support/webmaster/controlling-robot/robots-txt.html' },
+  { token: 'YandexBot', operator: 'Yandex', purpose: 'search', docs: 'https://yandex.com/support/webmaster/en/controlling-robot/robots-txt.html' },
   { token: 'GPTBot', operator: 'OpenAI', purpose: 'ai-training', docs: OPENAI },
   { token: 'OAI-SearchBot', operator: 'OpenAI', purpose: 'ai-search', docs: OPENAI },
   { token: 'ChatGPT-User', operator: 'OpenAI', purpose: 'user-fetch', docs: OPENAI },

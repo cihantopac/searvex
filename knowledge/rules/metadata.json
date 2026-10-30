@@ -179,7 +179,7 @@
         },
         {
           "title": "MDN: Viewport meta element",
-          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Guides/Viewport_meta_element",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/name/viewport",
           "checked": "2026-10-30",
           "level": "url-resolved"
         }

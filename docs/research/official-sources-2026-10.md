@@ -24,21 +24,21 @@ verified from excerpts; no official ByteDance (Bytespider) documentation exists.
 | Fact | Engines | Source | Level |
 |---|---|---|---|
 | RFC 9309 robots.txt; parsers read ≥500 KiB; 4xx = allow all, 5xx = disallow all; crawl-delay undefined | all | <https://www.rfc-editor.org/rfc/rfc9309.html> | fetched |
-| Google ignores crawl-delay; 500 KiB limit; cached ≤24h; 5xx → crawl pause then last good copy ≤30 days | google | <https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt> | fetched |
+| Google ignores crawl-delay; 500 KiB limit; cached ≤24h; 5xx → crawl pause then last good copy ≤30 days | google | <https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec> | fetched |
 | Bing honours crawl-delay | bing | <https://www.bing.com/webmasters/help/crawl-control-55a30303> | excerpt |
-| Yandex ignores Crawl-delay since 2018-02-22 (use Crawl rate setting); supports Clean-param | yandex | <https://yandex.com/support/webmaster/controlling-robot/robots-txt.html> | fetched |
+| Yandex ignores Crawl-delay since 2018-02-22 (use Crawl rate setting); supports Clean-param | yandex | <https://yandex.com/support/webmaster/en/controlling-robot/robots-txt.html> | fetched |
 | robots.txt does not prevent indexing; noindex must be crawlable | google | <https://developers.google.com/search/docs/crawling-indexing/block-indexing> | fetched |
 | Google robots meta directives (noindex, nofollow, none, nosnippet, indexifembedded, max-snippet, max-image-preview, max-video-preview, notranslate, noimageindex, unavailable_after); noarchive/nocache no longer used by Google | google | <https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag> | fetched |
-| Bing NOARCHIVE excludes content from Copilot answers/training; NOCACHE limits to URL/title/snippet | bing | <https://blogs.bing.com/webmaster/september-2023/Announcing-new-options-for-webmasters-to-control-usage-of-their-content-in-Bing-Chat> | fetched |
-| Yandex meta robots: noindex, nofollow, none, noarchive (meta + header) | yandex | <https://yandex.com/support/webmaster/controlling-robot/html.html> | fetched |
-| Google crawlers fetch the first 15 MB of a file | google | <https://developers.google.com/search/docs/crawling-indexing/overview-google-crawlers> | fetched (partial) |
+| Bing NOARCHIVE excludes content from Copilot answers/training; NOCACHE limits to URL/title/snippet | bing | <https://blogs.bing.com/webmaster/2023/9/Announcing-new-options-for-webmasters-to-control-usage-of-their-content-in-Bing-Chat/> | fetched |
+| Yandex meta robots: noindex, nofollow, none, noarchive (meta + header) | yandex | <https://yandex.com/showcaptcha?cc=1&form-fb-hint=2.115&mt=29E12DC1BB66015BB4FE79DF9797AE99094C10B8B16BB4C219B90302CE5D413AFA70A3D7254DC0AA1F74E5844459FC87BFC3907B61830FBC19C907A6080E5070B70370761DC3C5C5641AC902F29E106856AE83E2CD2108388A474DEA17B5346C55662AF7BFE8488E18CCB56EC551B39B028F5F685CA04F8BD7468F9365D8F113E4B14A6DE8FC1650C5&retpath=aHR0cHM6Ly95YW5kZXguY29tL3N1cHBvcnQvd2VibWFzdGVyL2NvbnRyb2xsaW5nLXJvYm90L2h0bWwuaHRtbA%2C%2C_04b6f9e07c157641d47111d5f22abcae&t=2%252F1793371317%252Fb0a414ab64b21cfe33b53b40fd8e0123&u=9670647425019679259&s=d696889c6fc2d917594019078c379394> | fetched |
+| Google crawlers fetch the first 15 MB of a file | google | <https://developers.google.com/crawling/docs/crawlers-fetchers/overview-google-crawlers> | fetched (partial) |
 
 ## Canonical, hreflang, titles
 
 | Fact | Engines | Source | Level |
 |---|---|---|---|
 | rel=canonical is a strong signal (below redirects); absolute URLs; no robots.txt / noindex for canonicalisation | google | <https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls> | fetched |
-| Bing: canonical consolidates signals for search and Copilot; sitemaps list canonical URLs only | bing | <https://blogs.bing.com/webmaster/December-2025/Does-Duplicate-Content-Hurt-SEO-and-AI-Search-Visibility> | excerpt |
+| Bing: canonical consolidates signals for search and Copilot; sitemaps list canonical URLs only | bing | <https://blogs.bing.com/webmaster/2025/12/Does-Duplicate-Content-Hurt-SEO-and-AI-Search-Visibility/> | excerpt |
 | hreflang: reciprocal, self-reference, x-default, ISO 639-1 (+ ISO 3166-1 alpha-2), fully-qualified; Google ignores `lang` attr for language detection | google | <https://developers.google.com/search/docs/specialty/international/localized-versions> | fetched |
 | Bing recommends hreflang (2025) | bing | same Bing blog post as above | excerpt |
 | Yandex supports hreflang link elements and x-default | yandex | <https://yandex.com/support/webmaster/en/yandex-indexing/locale-pages> | excerpt |
@@ -70,13 +70,13 @@ verified from excerpts; no official ByteDance (Bytespider) documentation exists.
 |---|---|---|
 | AI Overviews / AI Mode: no additional requirements, no special files or schema; controls: nosnippet, data-nosnippet, max-snippet, noindex | <https://developers.google.com/search/docs/appearance/ai-features> | fetched |
 | Google mythbusting: no llms.txt, no chunking, no special schema needed ("neither harm nor help") | <https://developers.google.com/search/docs/fundamentals/ai-optimization-guide#mythbusting> | fetched |
-| Google-Extended: robots token only; Gemini training/grounding; no effect on Search inclusion or ranking | <https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers> | fetched |
+| Google-Extended: robots token only; Gemini training/grounding; no effect on Search inclusion or ranking | <https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers> | fetched |
 | OpenAI: GPTBot (training), OAI-SearchBot (ChatGPT search), ChatGPT-User (user-triggered; robots may not apply) | <https://developers.openai.com/api/docs/bots> | fetched |
-| Anthropic: ClaudeBot (training), Claude-SearchBot (search), Claude-User (user fetch) | <https://support.claude.com/en/articles/8896518> | fetched |
-| Perplexity: PerplexityBot (search, not training), Perplexity-User (user fetch) | <https://docs.perplexity.ai/guides/bots> | fetched |
+| Anthropic: ClaudeBot (training), Claude-SearchBot (search), Claude-User (user fetch) | <https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler> | fetched |
+| Perplexity: PerplexityBot (search, not training), Perplexity-User (user fetch) | <https://docs.perplexity.ai/docs/resources/perplexity-crawlers> | fetched |
 | Apple: Applebot (search), Applebot-Extended (training opt-out token, does not crawl) | <https://support.apple.com/en-us/119829> | fetched |
 | CCBot (Common Crawl dataset) | <https://commoncrawl.org/ccbot> | fetched |
-| Meta: meta-externalagent (training/indexing), meta-externalfetcher (user fetch) | <https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/> | fetched |
+| Meta: meta-externalagent (training/indexing), meta-externalfetcher (user fetch) | <https://developers.facebook.com/documentation/sharing/webmasters/web-crawlers> | fetched |
 | Amazon: Amazonbot (may train), Amzn-SearchBot (search), Amzn-User (user) | <https://developer.amazon.com/amazonbot> | fetched |
 | Bytespider | — | **unverified** (no official docs) |
 | llms.txt is a 2024 proposal, not a standard | <https://llmstxt.org/> | fetched |
@@ -97,7 +97,7 @@ verified from excerpts; no official ByteDance (Bytespider) documentation exists.
 |---|---|
 | Spam policies (cloaking, doorways, expired domain abuse, scaled content abuse, site reputation abuse, link spam, …) | <https://developers.google.com/search/docs/essentials/spam-policies> |
 | JS SEO: crawl → render → index; links must be `<a href>`; noindex in raw HTML may skip rendering | <https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics>, <https://developers.google.com/search/docs/crawling-indexing/links-crawlable> |
-| 5xx/429 slow crawling; up to 10 redirect hops; soft 404 definition | <https://developers.google.com/search/docs/crawling-indexing/http-network-errors> |
+| 5xx/429 slow crawling; up to 10 redirect hops; soft 404 definition | <https://developers.google.com/crawling/docs/troubleshooting/http-status-codes> |
 | Permanent: 301, 308, instant meta refresh; temporary: 302, 303, 307; JS redirects last resort | <https://developers.google.com/search/docs/crawling-indexing/301-redirects> |
 | E-E-A-T is not itself a ranking factor; no preferred word count | <https://developers.google.com/search/docs/fundamentals/creating-helpful-content> |
 

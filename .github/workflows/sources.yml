@@ -1,0 +1,21 @@
+name: Official source check
+
+# Weekly re-fetch of every official source cited by the rule base. The job fails when a source is
+# broken, redirected, or its content/update date changed since the committed snapshot, so a maintainer
+# re-reads it. Nothing is changed automatically.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node bin/searvex rules check-sources

@@ -17,7 +17,7 @@
       "sources": [
         {
           "title": "Google: HTTP status codes, network and DNS errors",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/http-network-errors",
+          "url": "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes",
           "checked": "2026-10-30",
           "level": "fetched"
         }
@@ -45,7 +45,7 @@
         },
         {
           "title": "Google: How Google interprets robots.txt",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt",
+          "url": "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec",
           "checked": "2026-10-30",
           "level": "fetched"
         }
@@ -68,13 +68,13 @@
       "sources": [
         {
           "title": "Google: How Google interprets robots.txt",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt",
+          "url": "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec",
           "checked": "2026-10-30",
           "level": "fetched"
         },
         {
           "title": "Yandex: Using robots.txt",
-          "url": "https://yandex.com/support/webmaster/controlling-robot/robots-txt.html",
+          "url": "https://yandex.com/support/webmaster/en/controlling-robot/robots-txt.html",
           "checked": "2026-10-30",
           "level": "fetched"
         },
@@ -102,7 +102,7 @@
       "sources": [
         {
           "title": "Google: How Google interprets robots.txt",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt",
+          "url": "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec",
           "checked": "2026-10-30",
           "level": "fetched"
         },
@@ -132,13 +132,13 @@
       "sources": [
         {
           "title": "Google: How Google interprets robots.txt",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt",
+          "url": "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec",
           "checked": "2026-10-30",
           "level": "fetched"
         },
         {
           "title": "Yandex: Using robots.txt",
-          "url": "https://yandex.com/support/webmaster/controlling-robot/robots-txt.html",
+          "url": "https://yandex.com/support/webmaster/en/controlling-robot/robots-txt.html",
           "checked": "2026-10-30",
           "level": "fetched"
         },
@@ -202,7 +202,7 @@
         },
         {
           "title": "Google: How Google interprets robots.txt",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt",
+          "url": "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec",
           "checked": "2026-10-30",
           "level": "fetched"
         }
@@ -224,7 +224,7 @@
       "sources": [
         {
           "title": "Google: HTTP status codes, network and DNS errors",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/http-network-errors",
+          "url": "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes",
           "checked": "2026-10-30",
           "level": "fetched"
         }
@@ -246,7 +246,7 @@
       "sources": [
         {
           "title": "Google: HTTP status codes, network and DNS errors",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/http-network-errors",
+          "url": "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes",
           "checked": "2026-10-30",
           "level": "fetched"
         }
@@ -268,7 +268,7 @@
       "sources": [
         {
           "title": "Google: HTTP status codes, network and DNS errors",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/http-network-errors",
+          "url": "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes",
           "checked": "2026-10-30",
           "level": "fetched"
         },
@@ -375,7 +375,7 @@
         },
         {
           "title": "Google: HTTP status codes, network and DNS errors",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/http-network-errors",
+          "url": "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes",
           "checked": "2026-10-30",
           "level": "fetched"
         }
@@ -403,7 +403,7 @@
         },
         {
           "title": "Google: HTTP status codes, network and DNS errors",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/http-network-errors",
+          "url": "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes",
           "checked": "2026-10-30",
           "level": "fetched"
         }
@@ -475,9 +475,9 @@
         },
         {
           "title": "Google: Large site owner's guide to managing crawl budget",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/large-site-managing-crawl-budget",
+          "url": "https://developers.google.com/crawling/docs/crawl-budget",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         }
       ],
       "status": "active"

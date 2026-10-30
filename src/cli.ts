@@ -10,7 +10,8 @@ import { DEFAULT_POLICY } from './net/ssrf.js';
 import { renderHtml } from './report/html.js';
 import { renderMarkdown } from './report/markdown.js';
 import { renderSarif } from './report/sarif.js';
-import { loadKnowledge, validateKnowledge, type KnowledgeBase } from './rules/engine.js';
+import { defaultKnowledgeDir, loadKnowledge, validateKnowledge, type KnowledgeBase } from './rules/engine.js';
+import { checkSources, readSnapshots, snapshotFile, writeSnapshots } from './rules/sources.js';
 import { IMPLEMENTED_RULES } from './rules/implemented.js';
 import { commandRepo } from './commands/repo.js';
 import { commandOptimize, commandRollback } from './commands/optimize.js';
@@ -34,7 +35,9 @@ Commands
   optimize <path>       Plan safe code fixes for a repository (dry-run by default; --apply to write)
   rollback <changeId>   Restore files changed by an applied optimization
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
-  rules <list|show|validate> [id]   Inspect and validate the sourced rule base
+  rules <list|show|validate|check-sources> [id]
+                        Inspect/validate the rule base; check-sources re-fetches official sources and
+                        reports changed, redirected or broken pages (--update records a new snapshot)
   report <runId|latest>  Re-render a stored report (--format)
   runs                  List stored runs
 
@@ -104,6 +107,7 @@ function parse(argv: string[]): GlobalFlags {
       lang: { type: 'string' },
       'check-external': { type: 'boolean' },
       reuse: { type: 'boolean' },
+      update: { type: 'boolean' },
       competitor: { type: 'string', multiple: true },
       category: { type: 'string' },
       strict: { type: 'boolean' },
@@ -240,7 +244,7 @@ async function commandGeo(flags: GlobalFlags): Promise<number> {
   return 0;
 }
 
-function commandRules(flags: GlobalFlags): number {
+async function commandRules(flags: GlobalFlags): Promise<number> {
   const kb = loadKnowledge();
   const sub = flags.positionals[1] ?? 'list';
   const v = flags.values;
@@ -273,6 +277,30 @@ function commandRules(flags: GlobalFlags): number {
     for (const i of issues) console.log(`${i.level.toUpperCase().padEnd(7)} ${i.ruleId}: ${i.message}`);
     console.log(`\n${kb.rules.size} rules, ${errors.length} errors, ${issues.length - errors.length} warnings`);
     return errors.length || (v['strict'] && issues.length) ? 1 : 0;
+  }
+  if (sub === 'check-sources') {
+    const file = snapshotFile(defaultKnowledgeDir());
+    const previous = readSnapshots(file);
+    const results = await checkSources(kb, previous, { onProgress: (d, t, u) => log(v, `  [${d}/${t}] ${u}`) });
+    if (v['update']) {
+      const next = { ...previous };
+      for (const r of results) if (r.change !== 'broken') next[r.url] = r.current;
+      writeSnapshots(file, next);
+    }
+    const attention = results.filter((r) => ['broken', 'redirected', 'content-changed', 'date-changed'].includes(r.change));
+    if (v['json']) process.stdout.write(JSON.stringify(results.map((r) => ({ url: r.url, change: r.change, detail: r.detail, rules: r.rules })), null, 2) + '\n');
+    else {
+      const order = ['broken', 'redirected', 'date-changed', 'content-changed', 'unreadable', 'new', 'unchanged'];
+      for (const kind of order) {
+        const list = results.filter((r) => r.change === kind);
+        if (!list.length) continue;
+        console.log(`\n${kind.toUpperCase()} (${list.length})`);
+        for (const r of list) console.log(`  ${r.url}\n    ${r.detail} — rules: ${r.rules.join(', ')}`);
+      }
+      console.log(`\n${results.length} sources: ${attention.length} need review${v['update'] ? '; snapshots updated' : ' (run with --update to record this snapshot)'}.`);
+      if (attention.length) console.log('Re-read the listed sources, update rule text/severity if guidance changed, then bump each source\'s "checked" date.');
+    }
+    return attention.length ? 1 : 0;
   }
   throw new UsageError(`Unknown rules subcommand: ${sub}`);
 }
@@ -332,7 +360,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       case 'monitor':
         return await commandMonitor(flags);
       case 'rules':
-        return commandRules(flags);
+        return await commandRules(flags);
       case 'report':
         return await commandReport(flags);
       case 'runs':

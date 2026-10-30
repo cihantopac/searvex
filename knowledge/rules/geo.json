@@ -24,7 +24,7 @@
         },
         {
           "title": "Google: Google common crawlers",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+          "url": "https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers",
           "checked": "2026-10-30",
           "level": "fetched"
         },
@@ -58,13 +58,13 @@
         },
         {
           "title": "Anthropic: Does Anthropic crawl data from the web",
-          "url": "https://support.claude.com/en/articles/8896518",
+          "url": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
           "checked": "2026-10-30",
           "level": "fetched"
         },
         {
           "title": "Perplexity: Perplexity crawlers",
-          "url": "https://docs.perplexity.ai/guides/bots",
+          "url": "https://docs.perplexity.ai/docs/resources/perplexity-crawlers",
           "checked": "2026-10-30",
           "level": "fetched"
         }
@@ -87,7 +87,7 @@
       "sources": [
         {
           "title": "Google: Google common crawlers",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+          "url": "https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers",
           "checked": "2026-10-30",
           "level": "fetched"
         },
@@ -99,7 +99,7 @@
         },
         {
           "title": "Anthropic: Does Anthropic crawl data from the web",
-          "url": "https://support.claude.com/en/articles/8896518",
+          "url": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
           "checked": "2026-10-30",
           "level": "fetched"
         },
@@ -117,7 +117,7 @@
         },
         {
           "title": "Meta: Web crawlers",
-          "url": "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/",
+          "url": "https://developers.facebook.com/documentation/sharing/webmasters/web-crawlers",
           "checked": "2026-10-30",
           "level": "fetched"
         }
@@ -152,7 +152,7 @@
         },
         {
           "title": "Bing: Options to control content usage in Bing Chat (NOARCHIVE/NOCACHE)",
-          "url": "https://blogs.bing.com/webmaster/september-2023/Announcing-new-options-for-webmasters-to-control-usage-of-their-content-in-Bing-Chat",
+          "url": "https://blogs.bing.com/webmaster/2023/9/Announcing-new-options-for-webmasters-to-control-usage-of-their-content-in-Bing-Chat/",
           "checked": "2026-10-30",
           "level": "fetched"
         }
