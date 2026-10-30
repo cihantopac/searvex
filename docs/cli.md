@@ -17,6 +17,9 @@ Exit codes: `0` success · `1` `--fail-on` threshold met, optimize verification 
 | `research <url> [--competitor <url>…]` | Target profile, competitor profiles (max 10), topic/page-type gaps (default 150 pages per site). |
 | `optimize <path>` | Plan deterministic fixes; dry run by default. `--apply` (with confirmation or `--yes`) writes, verifies and auto-rolls back on failure. |
 | `rollback <changeId> [path]` | Restore files changed by an optimization. Refuses if files changed afterwards (use `--yes` to force). `rollback list [path]` lists changes. |
+| `gsc auth --client <file>` | Authorise read-only Search Console access with **your own** OAuth "Desktop app" client (loopback + PKCE). Refresh token stored in the user config dir (`~/.config/searvex/credentials.json`, `%APPDATA%\searvex` on Windows) with 0600 permissions. `gsc logout` removes it. |
+| `gsc sites` | List the properties the credential can read. |
+| `gsc report <property> [--days 28] [--audit latest\|<runId>] [--max-rows n]` | Query × page analysis: top queries/pages, page → primary query, striking distance (positions 8–20), low CTR vs the site's own median at the same position, queries shared by several pages, indexable pages without impressions, audit issues on pages with traffic. Writes `search-performance.md/json`. |
 | `monitor <url>` | Re-audit and diff with the previous run of the same target (`--baseline <runId>` to choose). Regression = new/worsened critical or high issues. |
 | `rules list [--category c]` · `rules show <id>` · `rules validate [--strict]` | Inspect and validate the knowledge base. |
 | `report <runId\|latest> [--format …]` | Re-render a stored report. |

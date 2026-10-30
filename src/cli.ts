@@ -19,6 +19,7 @@ import { commandMonitor } from './commands/monitor.js';
 import { commandResearch } from './commands/research.js';
 import { commandRun } from './commands/run.js';
 import { commandEcosystem } from './commands/ecosystem.js';
+import { commandGsc } from './commands/gsc.js';
 
 const HELP = `Searvex ${SEARVEX_VERSION} — open-source search intelligence & optimization engine
 
@@ -34,6 +35,8 @@ Commands
   research <url>        Site inventory, business model, topics; compare with --competitor URLs
   optimize <path>       Plan safe code fixes for a repository (dry-run by default; --apply to write)
   rollback <changeId>   Restore files changed by an applied optimization
+  gsc <auth|sites|report|logout>   Google Search Console (read-only): OAuth for your own Desktop client
+                        (--client file), list properties, query/page analysis with --audit join
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and
@@ -63,7 +66,7 @@ Common options
 
 Environment (all optional, read-only integrations)
   SEARVEX_CRUX_API_KEY  Chrome UX Report API key → real Core Web Vitals field data
-  SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly) → Search Console data in monitor
+  SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
 
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
@@ -108,6 +111,10 @@ function parse(argv: string[]): GlobalFlags {
       'check-external': { type: 'boolean' },
       reuse: { type: 'boolean' },
       update: { type: 'boolean' },
+      client: { type: 'string' },
+      days: { type: 'string' },
+      audit: { type: 'string' },
+      'max-rows': { type: 'string' },
       competitor: { type: 'string', multiple: true },
       category: { type: 'string' },
       strict: { type: 'boolean' },
@@ -347,6 +354,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         return await commandRun(flags);
       case 'ecosystem':
         return await commandEcosystem(flags);
+      case 'gsc':
+        return await commandGsc(flags);
       case 'audit':
         return await commandAudit(flags);
       case 'geo':

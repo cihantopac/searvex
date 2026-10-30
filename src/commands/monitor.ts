@@ -5,6 +5,7 @@ import { RunStore } from '../crawl/store.js';
 import { loadKnowledge } from '../rules/engine.js';
 import { md } from '../report/markdown.js';
 import { querySearchConsole, type GscRow } from '../integrations/gsc.js';
+import { gscAccessToken } from '../integrations/google-oauth.js';
 import { parseCsv } from '../integrations/csv.js';
 import { crawlOptionsFrom, log, UsageError, writeReports, type GlobalFlags } from '../cli.js';
 
@@ -114,7 +115,7 @@ export async function commandMonitor(flags: GlobalFlags): Promise<number> {
   const diff = diffReports(base?.report ?? null, report, base?.id ?? null);
 
   let gsc: { rows: GscRow[]; source: string } | undefined;
-  const token = process.env['SEARVEX_GSC_TOKEN'];
+  const token = await gscAccessToken();
   const site = (v['site-url'] as string | undefined) ?? process.env['SEARVEX_GSC_SITE'];
   if (token && site) {
     log(v, `Querying Search Console for ${site} (read-only)…`);

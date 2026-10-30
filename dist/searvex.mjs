@@ -992,35 +992,35 @@ var require_Robots = __commonJS({
       }
       return formattedUserAgent.trim();
     }
-    function normaliseEncoding(path17) {
+    function normaliseEncoding(path19) {
       try {
-        return urlEncodeToUpper(encodeURI(path17).replace(/%25/g, "%"));
+        return urlEncodeToUpper(encodeURI(path19).replace(/%25/g, "%"));
       } catch (e) {
-        return path17;
+        return path19;
       }
     }
-    function urlEncodeToUpper(path17) {
-      return path17.replace(/%[0-9a-fA-F]{2}/g, function(match) {
+    function urlEncodeToUpper(path19) {
+      return path19.replace(/%[0-9a-fA-F]{2}/g, function(match) {
         return match.toUpperCase();
       });
     }
-    function matches(pattern, path17) {
-      var matchingLengths = new Array(path17.length + 1);
+    function matches(pattern, path19) {
+      var matchingLengths = new Array(path19.length + 1);
       var numMatchingLengths = 1;
       matchingLengths[0] = 0;
       for (var p = 0; p < pattern.length; p++) {
         if (pattern[p] === "$" && p + 1 === pattern.length) {
-          return matchingLengths[numMatchingLengths - 1] === path17.length;
+          return matchingLengths[numMatchingLengths - 1] === path19.length;
         }
         if (pattern[p] == "*") {
-          numMatchingLengths = path17.length - matchingLengths[0] + 1;
+          numMatchingLengths = path19.length - matchingLengths[0] + 1;
           for (var i = 1; i < numMatchingLengths; i++) {
             matchingLengths[i] = matchingLengths[i - 1] + 1;
           }
         } else {
           var numMatches = 0;
           for (var i = 0; i < numMatchingLengths; i++) {
-            if (matchingLengths[i] < path17.length && path17[matchingLengths[i]] === pattern[p]) {
+            if (matchingLengths[i] < path19.length && path19[matchingLengths[i]] === pattern[p]) {
               matchingLengths[numMatches++] = matchingLengths[i] + 1;
             }
           }
@@ -1074,11 +1074,11 @@ var require_Robots = __commonJS({
         isNoneUserAgentState = line[0].toLowerCase() !== "user-agent";
       }
     }
-    function findRule(path17, rules) {
+    function findRule(path19, rules) {
       var matchedRule = null;
       for (var i = 0; i < rules.length; i++) {
         var rule = rules[i];
-        if (!matches(rule.pattern, path17)) {
+        if (!matches(rule.pattern, path19)) {
           continue;
         }
         if (!matchedRule || rule.pattern.length > matchedRule.pattern.length) {
@@ -1145,8 +1145,8 @@ var require_Robots = __commonJS({
         return;
       }
       var rules = this._rules[userAgent] || this._rules["*"] || [];
-      var path17 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
-      var rule = findRule(path17, rules);
+      var path19 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
+      var rule = findRule(path19, rules);
       return rule;
     };
     Robots.prototype.isAllowed = function(url, ua) {
@@ -1267,8 +1267,8 @@ var init_render = __esm({
 });
 
 // src/cli.ts
-import fs11 from "node:fs";
-import path16 from "node:path";
+import fs12 from "node:fs";
+import path18 from "node:path";
 import { parseArgs } from "node:util";
 
 // src/core/url.ts
@@ -17811,16 +17811,16 @@ var MatcherView = class {
    * @returns {string|undefined}
    */
   getCurrentTag() {
-    const path17 = this._matcher.path;
-    return path17.length > 0 ? path17[path17.length - 1].tag : void 0;
+    const path19 = this._matcher.path;
+    return path19.length > 0 ? path19[path19.length - 1].tag : void 0;
   }
   /**
    * Get current namespace.
    * @returns {string|undefined}
    */
   getCurrentNamespace() {
-    const path17 = this._matcher.path;
-    return path17.length > 0 ? path17[path17.length - 1].namespace : void 0;
+    const path19 = this._matcher.path;
+    return path19.length > 0 ? path19[path19.length - 1].namespace : void 0;
   }
   /**
    * Get current node's attribute value.
@@ -17828,9 +17828,9 @@ var MatcherView = class {
    * @returns {*}
    */
   getAttrValue(attrName) {
-    const path17 = this._matcher.path;
-    if (path17.length === 0) return void 0;
-    return path17[path17.length - 1].values?.[attrName];
+    const path19 = this._matcher.path;
+    if (path19.length === 0) return void 0;
+    return path19[path19.length - 1].values?.[attrName];
   }
   /**
    * Check if current node has an attribute.
@@ -17838,9 +17838,9 @@ var MatcherView = class {
    * @returns {boolean}
    */
   hasAttr(attrName) {
-    const path17 = this._matcher.path;
-    if (path17.length === 0) return false;
-    const current = path17[path17.length - 1];
+    const path19 = this._matcher.path;
+    if (path19.length === 0) return false;
+    const current = path19[path19.length - 1];
     return current.values !== void 0 && attrName in current.values;
   }
   /**
@@ -17866,18 +17866,18 @@ var MatcherView = class {
    * @returns {number}
    */
   getPosition() {
-    const path17 = this._matcher.path;
-    if (path17.length === 0) return -1;
-    return path17[path17.length - 1].position ?? 0;
+    const path19 = this._matcher.path;
+    if (path19.length === 0) return -1;
+    return path19[path19.length - 1].position ?? 0;
   }
   /**
    * Get current node's repeat counter (occurrence count of this tag name).
    * @returns {number}
    */
   getCounter() {
-    const path17 = this._matcher.path;
-    if (path17.length === 0) return -1;
-    return path17[path17.length - 1].counter ?? 0;
+    const path19 = this._matcher.path;
+    if (path19.length === 0) return -1;
+    return path19[path19.length - 1].counter ?? 0;
   }
   /**
    * Get current node's sibling index (alias for getPosition).
@@ -20943,10 +20943,10 @@ function buildInventory(ctx) {
     if (!f || p.status !== 200 || p.redirects.length) continue;
     const types = /* @__PURE__ */ new Set();
     for (const b of f.jsonLd) for (const n of typedNodes(b.data)) for (const t of [].concat(n["@type"] ?? [])) if (typeof t === "string") types.add(t);
-    const path17 = new URL(p.finalUrl).pathname;
+    const path19 = new URL(p.finalUrl).pathname;
     let type = "other";
     let basis = "default";
-    if (p === ctx.homepage || path17 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path17)) {
+    if (p === ctx.homepage || path19 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path19)) {
       type = "home";
       basis = "url";
     } else {
@@ -20955,7 +20955,7 @@ function buildInventory(ctx) {
         type = s;
         basis = "schema";
       } else {
-        const r = URL_RULES.find(([re]) => re.test(path17));
+        const r = URL_RULES.find(([re]) => re.test(path19));
         if (r) {
           type = r[1];
           basis = "url";
@@ -21021,7 +21021,7 @@ function buildInventory(ctx) {
       pagesWithStructuredData: pagesWithSd,
       invalidJsonLdPages
     },
-    sections: [...sectionsMap.entries()].map(([path17, c]) => ({ path: path17, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
+    sections: [...sectionsMap.entries()].map(([path19, c]) => ({ path: path19, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
   };
 }
 function classifyBusiness(ctx, byType, sd) {
@@ -21268,8 +21268,8 @@ function runTechnicalChecks(ctx, sink) {
     const ttfb = p.ttfbMs ?? p.timingMs;
     if (ttfb > 800 && !p.redirects.length) sink.emit("perf.slow-ttfb", { url: p.url, observed: `TTFB ${ttfb} ms (single sample from the crawler's location; full response ${p.timingMs} ms)` });
     if (p.bytes > 10 * 1024 && !p.headers["content-encoding"]) sink.emit("perf.no-compression", { url: p.url, observed: `${Math.round(p.bytes / 1024)} KB uncompressed` });
-    const path17 = new URL(p.finalUrl).pathname;
-    if (path17.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
+    const path19 = new URL(p.finalUrl).pathname;
+    if (path19.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
     const declared = primaryTag(f.lang);
     if (declared && ["en", "tr", "de", "fr", "es", "it", "pt", "nl"].includes(declared) && !noindex) {
       const detected = detectLanguage(f.mainText);
@@ -21343,13 +21343,13 @@ function checkHreflang(ctx, url, f, sink) {
 // src/analyze/priority.ts
 var SEVERITY = { critical: 1, high: 0.7, medium: 0.4, low: 0.15, info: 0 };
 function urlPattern(urlOrPath) {
-  let path17;
+  let path19;
   try {
-    path17 = new URL(urlOrPath).pathname;
+    path19 = new URL(urlOrPath).pathname;
   } catch {
-    path17 = urlOrPath.startsWith("/") ? urlOrPath : "/" + urlOrPath;
+    path19 = urlOrPath.startsWith("/") ? urlOrPath : "/" + urlOrPath;
   }
-  const segs = path17.split("/").filter(Boolean);
+  const segs = path19.split("/").filter(Boolean);
   if (!segs.length) return "/";
   const out = [];
   if (/^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0])) out.push(segs.shift());
@@ -21492,7 +21492,7 @@ function failingMetrics(m) {
 // src/analyze/audit.ts
 var WEIGHT = { critical: 25, high: 10, medium: 4, low: 1.5, info: 0 };
 function computeScores(findings, pageCount) {
-  const penalty = (fs12) => fs12.reduce((sum, f) => {
+  const penalty = (fs13) => fs13.reduce((sum, f) => {
     if (f.confidence === "unmeasurable") return sum;
     const share = pageCount > 0 ? Math.min(1, f.count / pageCount) : 1;
     return sum + WEIGHT[f.severity] * Math.max(share, f.severity === "critical" ? 1 : share) * (f.confidence === "heuristic" ? 0.5 : 1);
@@ -21516,10 +21516,10 @@ async function probeLlmsTxt(origin, opts) {
 async function probeHostVariants(startUrl, opts, sink) {
   const u = new URL(startUrl);
   if (u.protocol === "https:") {
-    const http2 = new URL(startUrl);
-    http2.protocol = "http:";
-    const res2 = await safeFetch(http2.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
-    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http2.toString(), observed: "HTTP 200 without redirect to HTTPS" });
+    const http4 = new URL(startUrl);
+    http4.protocol = "http:";
+    const res2 = await safeFetch(http4.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
+    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http4.toString(), observed: "HTTP 200 without redirect to HTTPS" });
   }
   if (/^[\d.]+$/.test(u.hostname) || u.hostname === "localhost" || u.hostname.split(".").length < 2) return;
   const alt = new URL(startUrl);
@@ -23259,21 +23259,17 @@ Re-run with --yes to overwrite those edits with the original content.`);
 }
 
 // src/commands/monitor.ts
-import fs8 from "node:fs";
-import path12 from "node:path";
+import fs9 from "node:fs";
+import path13 from "node:path";
 
 // src/integrations/gsc.ts
+import http2 from "node:http";
 import https3 from "node:https";
-function isoDate(d) {
-  return d.toISOString().slice(0, 10);
-}
-async function querySearchConsole(q) {
-  const end2 = new Date(Date.now() - 2 * 864e5);
-  const start = new Date(end2.getTime() - q.days * 864e5);
-  const body = JSON.stringify({ startDate: isoDate(start), endDate: isoDate(end2), dimensions: q.dimensions, rowLimit: Math.min(q.rowLimit ?? 1e3, 25e3) });
-  const url = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(q.siteUrl)}/searchAnalytics/query`;
-  const res = await new Promise((resolve, reject) => {
-    const req = https3.request(url, { method: "POST", headers: { authorization: `Bearer ${q.token}`, "content-type": "application/json" }, timeout: 3e4 }, (r) => {
+var API_BASE = () => process.env["SEARVEX_GSC_API_BASE"] ?? "https://www.googleapis.com/webmasters/v3";
+function request(method, url, token, body) {
+  const mod = url.startsWith("https:") ? https3 : http2;
+  return new Promise((resolve, reject) => {
+    const req = mod.request(url, { method, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, timeout: 3e4 }, (r) => {
       const chunks = [];
       r.on("data", (c) => chunks.push(c));
       r.on("end", () => resolve({ status: r.statusCode ?? 0, text: Buffer.concat(chunks).toString("utf8") }));
@@ -23282,16 +23278,184 @@ async function querySearchConsole(q) {
     req.on("error", reject);
     req.end(body);
   });
-  if (res.status !== 200) {
-    let msg = res.text.slice(0, 300);
-    try {
-      msg = JSON.parse(res.text).error?.message ?? msg;
-    } catch {
-    }
-    throw new Error(`Search Console API error ${res.status}: ${msg}`);
+}
+function apiError(status, text4) {
+  let msg = text4.slice(0, 300);
+  try {
+    msg = JSON.parse(text4).error?.message ?? msg;
+  } catch {
   }
-  const data2 = JSON.parse(res.text);
-  return data2.rows ?? [];
+  return new Error(`Search Console API error ${status}: ${msg}`);
+}
+function isoDate(d) {
+  return d.toISOString().slice(0, 10);
+}
+function dateRange(days, now = /* @__PURE__ */ new Date()) {
+  const end2 = new Date(now.getTime() - 2 * 864e5);
+  const start = new Date(end2.getTime() - (days - 1) * 864e5);
+  return { startDate: isoDate(start), endDate: isoDate(end2) };
+}
+async function listSites(token) {
+  const res = await request("GET", `${API_BASE()}/sites`, token);
+  if (res.status !== 200) throw apiError(res.status, res.text);
+  return JSON.parse(res.text).siteEntry ?? [];
+}
+async function querySearchConsole(q) {
+  const { startDate, endDate } = dateRange(q.days);
+  const pageSize = Math.min(q.rowLimit ?? 25e3, 25e3);
+  const maxRows = q.maxRows ?? 25e3;
+  const url = `${API_BASE()}/sites/${encodeURIComponent(q.siteUrl)}/searchAnalytics/query`;
+  const rows = [];
+  for (let startRow = 0; rows.length < maxRows; startRow += pageSize) {
+    const body = JSON.stringify({ startDate, endDate, dimensions: q.dimensions, rowLimit: Math.min(pageSize, maxRows - rows.length), startRow, type: q.searchType ?? "web" });
+    const res = await request("POST", url, q.token, body);
+    if (res.status !== 200) throw apiError(res.status, res.text);
+    const page = JSON.parse(res.text).rows ?? [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
+}
+
+// src/integrations/google-oauth.ts
+import crypto5 from "node:crypto";
+import fs8 from "node:fs";
+import http3 from "node:http";
+import https4 from "node:https";
+import os from "node:os";
+import path12 from "node:path";
+var GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
+var AUTH_URL = () => process.env["SEARVEX_GOOGLE_AUTH_URL"] ?? "https://accounts.google.com/o/oauth2/v2/auth";
+var TOKEN_URL = () => process.env["SEARVEX_GOOGLE_TOKEN_URL"] ?? "https://oauth2.googleapis.com/token";
+function configDir() {
+  if (process.env["SEARVEX_CONFIG_DIR"]) return process.env["SEARVEX_CONFIG_DIR"];
+  if (process.platform === "win32") return path12.join(process.env["APPDATA"] ?? path12.join(os.homedir(), "AppData", "Roaming"), "searvex");
+  return path12.join(process.env["XDG_CONFIG_HOME"] ?? path12.join(os.homedir(), ".config"), "searvex");
+}
+var credFile = () => path12.join(configDir(), "credentials.json");
+function loadClientFile(file) {
+  const raw = JSON.parse(fs8.readFileSync(file, "utf8"));
+  const c = raw["installed"] ?? raw["web"];
+  if (!c?.client_id) throw new Error('Not a Google OAuth client file (expected an "installed" client with client_id)');
+  return { clientId: c.client_id, clientSecret: c.client_secret };
+}
+function readCredentials() {
+  try {
+    return JSON.parse(fs8.readFileSync(credFile(), "utf8"));
+  } catch {
+    return {};
+  }
+}
+function saveCredential(name, cred) {
+  fs8.mkdirSync(configDir(), { recursive: true, mode: 448 });
+  const all = { ...readCredentials(), [name]: cred };
+  const file = credFile();
+  fs8.writeFileSync(file, JSON.stringify(all, null, 2), { mode: 384 });
+  fs8.chmodSync(file, 384);
+  return file;
+}
+function deleteCredential(name) {
+  const all = readCredentials();
+  if (!all[name]) return false;
+  delete all[name];
+  fs8.writeFileSync(credFile(), JSON.stringify(all, null, 2), { mode: 384 });
+  return true;
+}
+var b64url = (b) => b.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+function pkcePair() {
+  const verifier = b64url(crypto5.randomBytes(48));
+  return { verifier, challenge: b64url(crypto5.createHash("sha256").update(verifier).digest()) };
+}
+function postForm(url, form) {
+  const body = new URLSearchParams(form).toString();
+  const mod = url.startsWith("https:") ? https4 : http3;
+  return new Promise((resolve, reject) => {
+    const req = mod.request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "content-length": Buffer.byteLength(body) }, timeout: 3e4 }, (res) => {
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
+      res.on("end", () => {
+        const text4 = Buffer.concat(chunks).toString("utf8");
+        let json = {};
+        try {
+          json = JSON.parse(text4);
+        } catch {
+          json = { error: text4.slice(0, 200) };
+        }
+        resolve({ status: res.statusCode ?? 0, json });
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error("OAuth request timed out")));
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+async function authorize(client, scope, onUrl, timeoutMs = 5 * 60 * 1e3) {
+  const { verifier, challenge } = pkcePair();
+  const state = b64url(crypto5.randomBytes(16));
+  const server = http3.createServer();
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const redirectUri = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const codePromise = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Authorization timed out")), timeoutMs);
+      server.on("request", (req, res) => {
+        const u = new URL(req.url ?? "/", redirectUri);
+        const code2 = u.searchParams.get("code");
+        const err = u.searchParams.get("error");
+        if (!code2 && !err) {
+          res.writeHead(404).end();
+          return;
+        }
+        const ok = !!code2 && u.searchParams.get("state") === state;
+        res.writeHead(ok ? 200 : 400, { "content-type": "text/html; charset=utf-8" });
+        res.end(ok ? "<p>Searvex is authorized. You can close this tab.</p>" : "<p>Authorization failed. Return to the terminal.</p>");
+        clearTimeout(timer);
+        if (err) reject(new Error(`Authorization denied: ${err}`));
+        else if (!ok) reject(new Error("State mismatch \u2014 possible CSRF; aborting"));
+        else resolve(code2);
+      });
+    });
+    const params = new URLSearchParams({
+      client_id: client.clientId,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope,
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      state,
+      access_type: "offline",
+      prompt: "consent"
+    });
+    await onUrl(`${AUTH_URL()}?${params}`);
+    const code = await codePromise;
+    const { status, json } = await postForm(TOKEN_URL(), {
+      code,
+      client_id: client.clientId,
+      ...client.clientSecret ? { client_secret: client.clientSecret } : {},
+      redirect_uri: redirectUri,
+      grant_type: "authorization_code",
+      code_verifier: verifier
+    });
+    if (status !== 200 || typeof json["refresh_token"] !== "string") throw new Error(`Token exchange failed (${status}): ${String(json["error_description"] ?? json["error"] ?? "no refresh_token returned")}`);
+    return { clientId: client.clientId, clientSecret: client.clientSecret, refreshToken: json["refresh_token"], scope: String(json["scope"] ?? scope), createdAt: (/* @__PURE__ */ new Date()).toISOString() };
+  } finally {
+    server.close();
+  }
+}
+async function accessToken(cred) {
+  const { status, json } = await postForm(TOKEN_URL(), {
+    client_id: cred.clientId,
+    ...cred.clientSecret ? { client_secret: cred.clientSecret } : {},
+    refresh_token: cred.refreshToken,
+    grant_type: "refresh_token"
+  });
+  if (status !== 200 || typeof json["access_token"] !== "string") throw new Error(`Token refresh failed (${status}): ${String(json["error_description"] ?? json["error"] ?? "unknown")}. Run "searvex gsc auth" again.`);
+  return json["access_token"];
+}
+async function gscAccessToken() {
+  if (process.env["SEARVEX_GSC_TOKEN"]) return process.env["SEARVEX_GSC_TOKEN"];
+  const cred = readCredentials()["gsc"];
+  return cred ? accessToken(cred) : null;
 }
 
 // src/integrations/csv.ts
@@ -23399,7 +23563,7 @@ async function commandMonitor(flags) {
   const target = flags.positionals[1];
   if (!target || !/^https?:\/\//i.test(target)) throw new UsageError("monitor requires a URL");
   const kb = loadKnowledge();
-  const workspace = path12.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path13.resolve(String(v["out"] ?? process.cwd()));
   log(v, `Re-auditing ${target}\u2026`);
   const { report, store } = await auditWebsite(target, { workspace, kb, crawl: crawlOptionsFrom(v) });
   writeReports(store, report, kb, ["json", "md", "html"]);
@@ -23408,17 +23572,17 @@ async function commandMonitor(flags) {
   if (explicit && !base?.report) throw new UsageError(`Baseline run ${explicit} has no report.json`);
   const diff = diffReports(base?.report ?? null, report, base?.id ?? null);
   let gsc;
-  const token = process.env["SEARVEX_GSC_TOKEN"];
+  const token = await gscAccessToken();
   const site = v["site-url"] ?? process.env["SEARVEX_GSC_SITE"];
   if (token && site) {
     log(v, `Querying Search Console for ${site} (read-only)\u2026`);
     gsc = { rows: await querySearchConsole({ token, siteUrl: site, days: 28, dimensions: ["query"] }), source: `Search Console API, ${site}, last 28 days` };
   }
   for (const file of v["import"] ?? []) {
-    const rows = parseCsv(fs8.readFileSync(file, "utf8"));
+    const rows = parseCsv(fs9.readFileSync(file, "utf8"));
     const parsed = rowsFromCsv(rows);
-    if (parsed.length) gsc = { rows: parsed, source: `imported ${path12.basename(file)}` };
-    store.writeJson(`import-${path12.basename(file).replace(/[^\w.-]/g, "_")}.json`, rows.slice(0, 5e4));
+    if (parsed.length) gsc = { rows: parsed, source: `imported ${path13.basename(file)}` };
+    store.writeJson(`import-${path13.basename(file).replace(/[^\w.-]/g, "_")}.json`, rows.slice(0, 5e4));
   }
   store.writeJson("monitor.json", { diff, gsc });
   const out = store.writeText("monitor.md", renderDiffMarkdown(diff, gsc));
@@ -23444,7 +23608,7 @@ function rowsFromCsv(rows) {
 }
 
 // src/commands/research.ts
-import path13 from "node:path";
+import path14 from "node:path";
 function profile(r) {
   return {
     url: r.target,
@@ -23500,7 +23664,7 @@ async function commandResearch(flags) {
   if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
   for (const c of competitors) if (!/^https?:\/\//i.test(c)) throw new UsageError(`Invalid competitor URL: ${c}`);
   const kb = loadKnowledge();
-  const workspace = path13.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path14.resolve(String(v["out"] ?? process.cwd()));
   const store = new RunStore(workspace, RunStore.newRunId("research"));
   const perSite = num(v["max-pages"], 150, 1, 1e5);
   const base = { ...crawlOptionsFrom(v), maxPages: perSite };
@@ -23536,8 +23700,8 @@ async function commandResearch(flags) {
 }
 
 // src/commands/run.ts
-import fs9 from "node:fs";
-import path14 from "node:path";
+import fs10 from "node:fs";
+import path15 from "node:path";
 var top = (r, n = 5) => r.findings.filter((f) => f.severity !== "info").slice(0, n);
 function renderRunSummary(s) {
   const L = ["# Searvex run summary", ""];
@@ -23579,12 +23743,12 @@ async function commandRun(flags) {
   const url = targets.find((t) => /^https?:\/\//i.test(t));
   const repo = targets.find((t) => !/^https?:\/\//i.test(t));
   if (!url && !repo) throw new UsageError("run requires a URL, a repository path, or both (e.g. searvex run https://example.com ./site)");
-  if (repo && !(fs9.existsSync(repo) && fs9.statSync(repo).isDirectory())) throw new UsageError(`Not a directory: ${repo}`);
+  if (repo && !(fs10.existsSync(repo) && fs10.statSync(repo).isDirectory())) throw new UsageError(`Not a directory: ${repo}`);
   const competitors = v["competitor"] ?? [];
   if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
   if (competitors.length && !url) throw new UsageError("--competitor requires a website URL");
   const kb = loadKnowledge();
-  const workspace = path14.resolve(String(v["out"] ?? (repo ?? process.cwd())));
+  const workspace = path15.resolve(String(v["out"] ?? (repo ?? process.cwd())));
   const opts = crawlOptionsFrom(v);
   const summary = { steps: [] };
   const step = (n, name, status, note) => {
@@ -23626,7 +23790,7 @@ async function commandRun(flags) {
     step(4, "Competitor research", "skipped", "no URL given");
   }
   if (repo) {
-    const root2 = fs9.realpathSync(repo);
+    const root2 = fs10.realpathSync(repo);
     const siteUrl = v["site-url"] ?? (url ? new URL(url).origin : void 0);
     log(v, `5. Auditing repository ${root2}\u2026`);
     const ra = auditRepository(root2, { siteUrl, kb });
@@ -23659,8 +23823,8 @@ Saved: ${out}`);
 }
 
 // src/commands/ecosystem.ts
-import fs10 from "node:fs";
-import path15 from "node:path";
+import fs11 from "node:fs";
+import path16 from "node:path";
 var hostOf = (u) => new URL(u).hostname.replace(/^www\./, "");
 var norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 function snapshot(report, pages) {
@@ -23853,7 +24017,7 @@ async function commandEcosystem(flags) {
   if (urls.length > 20) throw new UsageError("At most 20 sites");
   for (const u of urls) if (!/^https?:\/\//i.test(u)) throw new UsageError(`Invalid URL: ${u}`);
   const kb = loadKnowledge();
-  const workspace = path15.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path16.resolve(String(v["out"] ?? process.cwd()));
   const opts = { ...crawlOptionsFrom(v), maxPages: num(v["max-pages"], 60, 1, 1e5) };
   const snaps = new Array(urls.length);
   let next2 = 0;
@@ -23884,8 +24048,165 @@ async function commandEcosystem(flags) {
   if (v["json"]) process.stdout.write(JSON.stringify(eco, null, 2) + "\n");
   else if (!v["quiet"]) console.log(renderEcosystemMarkdown(eco) + `
 Saved: ${out}`);
-  if (!fs10.existsSync(out)) return 2;
+  if (!fs11.existsSync(out)) return 2;
   return 0;
+}
+
+// src/commands/gsc.ts
+import path17 from "node:path";
+
+// src/analyze/search-performance.ts
+function rowsToQueryPage(rows) {
+  return rows.filter((r) => r.keys.length >= 2).map((r) => ({ query: r.keys[0], page: r.keys[1], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
+}
+function median(xs) {
+  if (!xs.length) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+var r4 = (x) => Math.round(x * 1e4) / 1e4;
+var r1 = (x) => Math.round(x * 10) / 10;
+function analyzeSearchPerformance(data2, opts) {
+  const minImp = opts.minImpressions ?? 50;
+  const notes = [];
+  const byQuery = /* @__PURE__ */ new Map();
+  const byPage = /* @__PURE__ */ new Map();
+  for (const d of data2) {
+    (byQuery.get(d.query) ?? byQuery.set(d.query, []).get(d.query)).push(d);
+    (byPage.get(d.page) ?? byPage.set(d.page, []).get(d.page)).push(d);
+  }
+  const sum = (xs, k) => xs.reduce((a, x) => a + x[k], 0);
+  const wPos = (xs) => {
+    const imp = sum(xs, "impressions");
+    return imp ? xs.reduce((a, x) => a + x.position * x.impressions, 0) / imp : 0;
+  };
+  const clicks = sum(data2, "clicks");
+  const impressions = sum(data2, "impressions");
+  const topQueries = [...byQuery.entries()].map(([query, xs]) => ({ query, clicks: sum(xs, "clicks"), impressions: sum(xs, "impressions"), ctr: r4(sum(xs, "clicks") / Math.max(1, sum(xs, "impressions"))), position: r1(wPos(xs)), pages: xs.length })).sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
+  const topPages = [...byPage.entries()].map(([page, xs]) => {
+    const primary = [...xs].sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions)[0];
+    return { page, clicks: sum(xs, "clicks"), impressions: sum(xs, "impressions"), ctr: r4(sum(xs, "clicks") / Math.max(1, sum(xs, "impressions"))), position: r1(wPos(xs)), queries: xs.length, primaryQuery: primary.query };
+  }).sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
+  const strikingDistance = data2.filter((d) => d.position >= 8 && d.position <= 20 && d.impressions >= minImp).sort((a, b) => b.impressions - a.impressions).slice(0, 100).map((d) => ({ query: d.query, page: d.page, position: r1(d.position), impressions: d.impressions, clicks: d.clicks }));
+  const ctrByPos = /* @__PURE__ */ new Map();
+  for (const d of data2) if (d.impressions >= minImp && d.position <= 10) (ctrByPos.get(Math.round(d.position)) ?? ctrByPos.set(Math.round(d.position), []).get(Math.round(d.position))).push(d.ctr);
+  const lowCtr = data2.filter((d) => d.impressions >= minImp && d.position <= 10).map((d) => ({ d, med: median(ctrByPos.get(Math.round(d.position)) ?? []), n: (ctrByPos.get(Math.round(d.position)) ?? []).length })).filter((x) => x.n >= 5 && x.med > 0 && x.d.ctr < x.med * 0.5).sort((a, b) => b.d.impressions - a.d.impressions).slice(0, 100).map((x) => ({ query: x.d.query, page: x.d.page, position: r1(x.d.position), impressions: x.d.impressions, ctr: r4(x.d.ctr), siteMedianCtr: r4(x.med) }));
+  if (![...ctrByPos.values()].some((v) => v.length >= 5)) notes.push("Not enough rows per position to compare CTR against the property's own median.");
+  const multiPageQueries = [...byQuery.entries()].map(([query, xs]) => ({ query, impressions: sum(xs, "impressions"), xs })).filter((q) => q.impressions >= minImp).map((q) => ({ ...q, sharing: q.xs.filter((x) => x.impressions >= q.impressions * 0.1) })).filter((q) => q.sharing.length >= 2).sort((a, b) => b.impressions - a.impressions).slice(0, 100).map((q) => ({ query: q.query, impressions: q.impressions, pages: q.sharing.sort((a, b) => b.impressions - a.impressions).map((x) => ({ page: x.page, impressions: x.impressions, clicks: x.clicks, position: r1(x.position) })) }));
+  let noImpressions = [];
+  const findingsOnTrafficPages = [];
+  if (opts.audit) {
+    const seen = new Set([...byPage.keys()].map((u) => normalizeUrl(u) ?? u));
+    noImpressions = opts.audit.inventory.pages.filter((p) => p.indexable && !seen.has(normalizeUrl(p.url) ?? p.url)).map((p) => p.url);
+    const pageStats = new Map(topPages.map((p) => [normalizeUrl(p.page) ?? p.page, p]));
+    for (const f of opts.audit.findings) {
+      if (f.severity === "info") continue;
+      const hit = f.evidence.map((e) => e.url ? pageStats.get(normalizeUrl(e.url) ?? e.url) : void 0).filter((x) => !!x);
+      if (!hit.length) continue;
+      findingsOnTrafficPages.push({ ruleId: f.ruleId, title: f.title, severity: f.severity, pages: hit.length, clicks: hit.reduce((a, p) => a + p.clicks, 0), impressions: hit.reduce((a, p) => a + p.impressions, 0) });
+    }
+    findingsOnTrafficPages.sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
+    notes.push("Findings-on-traffic uses the evidence URLs recorded in the audit (up to 50 per rule).");
+  }
+  notes.push("Search Console anonymises rare queries; query-level totals are lower than property totals.");
+  return {
+    source: opts.source,
+    period: { days: opts.days },
+    totals: { clicks, impressions, ctr: r4(clicks / Math.max(1, impressions)), queries: byQuery.size, pages: byPage.size },
+    topQueries: topQueries.slice(0, 100),
+    topPages: topPages.slice(0, 100),
+    strikingDistance,
+    lowCtr,
+    multiPageQueries,
+    noImpressions: noImpressions.slice(0, 500),
+    findingsOnTrafficPages: findingsOnTrafficPages.slice(0, 50),
+    notes
+  };
+}
+
+// src/commands/gsc.ts
+var pct = (x) => `${(x * 100).toFixed(1)}%`;
+function renderSearchPerformanceMarkdown(r) {
+  const L = [`# Search performance \u2014 ${md(r.source)}`, ""];
+  L.push(`Last ${r.period.days} days \xB7 clicks **${r.totals.clicks}** \xB7 impressions **${r.totals.impressions}** \xB7 CTR ${pct(r.totals.ctr)} \xB7 ${r.totals.queries} queries \xB7 ${r.totals.pages} pages`, "");
+  L.push("_All figures are verified Search Console data for this property. Searvex adds no estimates._", "");
+  const table = (head, rows) => {
+    L.push(`| ${head.join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((r2) => `| ${r2.join(" | ")} |`), "");
+  };
+  if (r.findingsOnTrafficPages.length) {
+    L.push("## Audit issues on pages that get search traffic", "");
+    table(["Issue", "Severity", "Pages", "Clicks", "Impressions"], r.findingsOnTrafficPages.slice(0, 15).map((f) => [`${md(f.title)} \`${f.ruleId}\``, f.severity, String(f.pages), String(f.clicks), String(f.impressions)]));
+  }
+  L.push("## Striking distance (positions 8\u201320 with real impressions)", "");
+  if (r.strikingDistance.length) table(["Query", "Page", "Position", "Impressions", "Clicks"], r.strikingDistance.slice(0, 20).map((x) => [md(x.query), md(x.page), String(x.position), String(x.impressions), String(x.clicks)]));
+  else L.push("_None above the impression threshold._", "");
+  L.push("## Low CTR versus this site's own median at the same position", "");
+  if (r.lowCtr.length) table(["Query", "Page", "Position", "Impressions", "CTR", "Site median"], r.lowCtr.slice(0, 20).map((x) => [md(x.query), md(x.page), String(x.position), String(x.impressions), pct(x.ctr), pct(x.siteMedianCtr)]));
+  else L.push("_None found (or not enough data per position)._", "");
+  L.push("## Queries shared by several pages (data-verified cannibalisation)", "");
+  if (r.multiPageQueries.length) for (const q of r.multiPageQueries.slice(0, 15)) L.push(`- **${md(q.query)}** (${q.impressions} impressions): ${q.pages.map((p) => `${md(p.page)} \u2014 ${p.impressions} imp, pos ${p.position}`).join("; ")}`);
+  else L.push("_None._");
+  L.push("", "## Page \u2192 primary query", "");
+  table(["Page", "Clicks", "Impressions", "Position", "Primary query", "Queries"], r.topPages.slice(0, 25).map((p) => [md(p.page), String(p.clicks), String(p.impressions), String(p.position), md(p.primaryQuery), String(p.queries)]));
+  L.push("## Top queries", "");
+  table(["Query", "Clicks", "Impressions", "CTR", "Position", "Pages"], r.topQueries.slice(0, 25).map((q) => [md(q.query), String(q.clicks), String(q.impressions), pct(q.ctr), String(q.position), String(q.pages)]));
+  if (r.noImpressions.length) L.push(`## Indexable pages without impressions (${r.noImpressions.length})`, "", ...r.noImpressions.slice(0, 30).map((u) => `- ${md(u)}`), "");
+  L.push("## Notes", "", ...r.notes.map((n) => `- ${md(n)}`), "");
+  return L.join("\n");
+}
+async function commandGsc(flags) {
+  const v = flags.values;
+  const sub = flags.positionals[1];
+  if (sub === "auth") {
+    const clientFile = v["client"];
+    if (!clientFile) throw new UsageError('gsc auth requires --client <client_secret.json> (a "Desktop app" OAuth client from Google Cloud Console)');
+    const client = loadClientFile(clientFile);
+    const cred = await authorize(client, GSC_SCOPE, (url) => {
+      console.log("\nOpen this URL in your browser and approve read-only Search Console access:\n");
+      console.log(url + "\n");
+      console.log("Waiting for Google to redirect back to http://127.0.0.1 \u2026");
+    });
+    const file = saveCredential("gsc", cred);
+    console.log(`Authorized (scope: ${cred.scope}). Refresh token stored in ${file} (permissions 0600).`);
+    return 0;
+  }
+  if (sub === "logout") {
+    console.log(deleteCredential("gsc") ? "Removed stored Search Console credential." : "No stored Search Console credential.");
+    return 0;
+  }
+  const token = await gscAccessToken();
+  if (!token) throw new UsageError('No Search Console credential: run "searvex gsc auth --client client_secret.json" or set SEARVEX_GSC_TOKEN');
+  if (sub === "sites") {
+    const sites = await listSites(token);
+    if (v["json"]) process.stdout.write(JSON.stringify(sites, null, 2) + "\n");
+    else for (const s of sites) console.log(`${s.siteUrl}  (${s.permissionLevel})`);
+    return 0;
+  }
+  if (sub === "report") {
+    const siteUrl = flags.positionals[2];
+    if (!siteUrl) throw new UsageError("gsc report requires a property, e.g. sc-domain:example.com or https://example.com/");
+    const days = num(v["days"], 28, 1, 480);
+    const workspace = path17.resolve(String(v["out"] ?? process.cwd()));
+    let audit;
+    const auditRef = v["audit"];
+    if (auditRef) {
+      const id = auditRef === "latest" ? RunStore.list(workspace).filter((r) => new RunStore(workspace, r).readJson("report.json")?.mode === "website").at(-1) : auditRef;
+      audit = id ? new RunStore(workspace, id).readJson("report.json") ?? void 0 : void 0;
+      if (!audit) throw new UsageError(`No website audit report found for --audit ${auditRef}`);
+    }
+    const rows = await querySearchConsole({ token, siteUrl, days, dimensions: ["query", "page"], maxRows: num(v["max-rows"], 25e3, 1, 1e5) });
+    const report = analyzeSearchPerformance(rowsToQueryPage(rows), { days, source: `Search Console ${siteUrl}`, audit });
+    const store = new RunStore(workspace, RunStore.newRunId("gsc"));
+    store.writeJson("meta.json", { kind: "gsc", target: siteUrl, days, audit: audit?.runId, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
+    store.writeJson("search-performance.json", report);
+    const out = store.writeText("search-performance.md", renderSearchPerformanceMarkdown(report));
+    if (v["json"]) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+    else if (!v["quiet"]) console.log(renderSearchPerformanceMarkdown(report) + `
+Saved: ${out}`);
+    return 0;
+  }
+  throw new UsageError("gsc subcommands: auth --client <file> | sites | report <property> [--days 28] [--audit latest|<runId>] | logout");
 }
 
 // src/cli.ts
@@ -23903,6 +24224,8 @@ Commands
   research <url>        Site inventory, business model, topics; compare with --competitor URLs
   optimize <path>       Plan safe code fixes for a repository (dry-run by default; --apply to write)
   rollback <changeId>   Restore files changed by an applied optimization
+  gsc <auth|sites|report|logout>   Google Search Console (read-only): OAuth for your own Desktop client
+                        (--client file), list properties, query/page analysis with --audit join
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and
@@ -23932,7 +24255,7 @@ Common options
 
 Environment (all optional, read-only integrations)
   SEARVEX_CRUX_API_KEY  Chrome UX Report API key \u2192 real Core Web Vitals field data
-  SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly) \u2192 Search Console data in monitor
+  SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
 
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
@@ -23970,6 +24293,10 @@ function parse7(argv) {
       "check-external": { type: "boolean" },
       reuse: { type: "boolean" },
       update: { type: "boolean" },
+      client: { type: "string" },
+      days: { type: "string" },
+      audit: { type: "string" },
+      "max-rows": { type: "string" },
       competitor: { type: "string", multiple: true },
       category: { type: "string" },
       strict: { type: "boolean" },
@@ -24044,11 +24371,11 @@ async function commandAudit(flags) {
   const target = positionals[1];
   if (!target) throw new UsageError("audit requires a URL or a repository path");
   if (!/^https?:\/\//i.test(target)) {
-    if (fs11.existsSync(target)) return commandRepo(flags);
+    if (fs12.existsSync(target)) return commandRepo(flags);
     throw new UsageError(`Not a URL and not an existing path: ${target}`);
   }
   const kb = loadKnowledge();
-  const workspace = path16.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path18.resolve(String(v["out"] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
   const render3 = v["render"] ? await (await Promise.resolve().then(() => (init_render(), render_exports))).createRenderer(opts.policy) : void 0;
   try {
@@ -24084,7 +24411,7 @@ async function commandGeo(flags) {
   if (!target || !/^https?:\/\//i.test(target)) throw new UsageError("geo requires a URL");
   const kb = loadKnowledge();
   const opts = crawlOptionsFrom({ ...v, "max-pages": v["max-pages"] ?? "50" });
-  const { report, store } = await auditWebsite(target, { workspace: path16.resolve(String(v["out"] ?? process.cwd())), kb, crawl: opts });
+  const { report, store } = await auditWebsite(target, { workspace: path18.resolve(String(v["out"] ?? process.cwd())), kb, crawl: opts });
   const files = writeReports(store, report, kb, String(v["format"] ?? "md,html,json").split(","));
   if (v["json"]) {
     process.stdout.write(JSON.stringify({ target: report.target, geo: report.geo, findings: report.findings.filter((f) => f.category === "geo" || f.ruleId.startsWith("sd.")) }, null, 2) + "\n");
@@ -24177,9 +24504,9 @@ ${results.length} sources: ${attention.length} need review${v["update"] ? "; sna
 }
 async function commandReport(flags) {
   const v = flags.values;
-  const workspace = path16.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path18.resolve(String(v["out"] ?? process.cwd()));
   let id = flags.positionals[1] ?? "latest";
-  if (id === "latest") id = RunStore.list(workspace).filter((r) => fs11.existsSync(path16.join(workspace, ".searvex", "runs", r, "report.json"))).at(-1) ?? "";
+  if (id === "latest") id = RunStore.list(workspace).filter((r) => fs12.existsSync(path18.join(workspace, ".searvex", "runs", r, "report.json"))).at(-1) ?? "";
   if (!id) throw new UsageError("No stored runs found");
   const store = new RunStore(workspace, id);
   const report = store.readJson("report.json");
@@ -24190,7 +24517,7 @@ async function commandReport(flags) {
   return 0;
 }
 function commandRuns(flags) {
-  const workspace = path16.resolve(String(flags.values["out"] ?? process.cwd()));
+  const workspace = path18.resolve(String(flags.values["out"] ?? process.cwd()));
   for (const id of RunStore.list(workspace)) {
     const meta = new RunStore(workspace, id).readJson("meta.json");
     console.log(`${id}  ${meta?.kind ?? ""}  ${meta?.startUrl ?? meta?.target ?? ""}`);
@@ -24215,6 +24542,8 @@ Run "searvex --help" for usage.`);
         return await commandRun(flags);
       case "ecosystem":
         return await commandEcosystem(flags);
+      case "gsc":
+        return await commandGsc(flags);
       case "audit":
         return await commandAudit(flags);
       case "geo":
@@ -24245,8 +24574,8 @@ Run "searvex --help" for usage.`);
     return 2;
   }
 }
-var invoked = process.argv[1] ? path16.resolve(process.argv[1]) : "";
-if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path16.sep}searvex`))) {
+var invoked = process.argv[1] ? path18.resolve(process.argv[1]) : "";
+if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path18.sep}searvex`))) {
   main().then((code) => process.exit(code));
 }
 export {

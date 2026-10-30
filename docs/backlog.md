@@ -28,8 +28,8 @@ Each item lists how it will be verified; nothing is marked done without that ver
 ### P1 — Search data & intelligence
 | # | Item | Status |
 |---|---|---|
-| 6 | GSC OAuth (loopback, read-only scope, refresh-token storage with 0600 permissions) | ⬜ (C) |
-| 7 | GSC analysis: top queries/pages, CTR vs position outliers, striking distance (pos 8–20), query→page mapping, multi-page queries (data-verified cannibalisation), pages without impressions | ⬜ (C) |
+| 6 | GSC OAuth (loopback, read-only scope, refresh-token storage with 0600 permissions) | ✅ mock-server tested (PKCE, state/CSRF, refresh); **live run pending owner credentials** |
+| 7 | GSC analysis: top queries/pages, CTR vs position outliers, striking distance (pos 8–20), query→page mapping, multi-page queries (data-verified cannibalisation), pages without impressions | ✅ `gsc report` with `--audit` join; traffic-weighted priorities still open |
 | 8 | Bing Webmaster API (query/page stats) | ⬜ (D) |
 | 9 | GA4 Data API (landing-page sessions / conversions from organic search) | ⬜ |
 | 10 | Yandex Webmaster API | ⬜ |
