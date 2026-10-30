@@ -67,6 +67,7 @@ export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = 
   if (r.inventory.relations?.length) L.push(`Organisation relations: ${r.inventory.relations.map((x) => `${md(x.from)} → ${x.relation} → ${md(x.to)}`).join('; ')}`, '');
   L.push('| Page type | Count |', '|---|---|');
   for (const [t, c] of Object.entries(r.inventory.byType).sort((a, b) => b[1] - a[1])) L.push(`| ${t} | ${c} |`);
+  if (r.inventory.intents) L.push('', `Intent the pages are built for (inferred from page type): ${Object.entries(r.inventory.intents).sort((a, b) => b[1] - a[1]).map(([i, c]) => `${i} (${c})`).join(', ')}`);
   L.push('', `Languages (html lang): ${Object.entries(r.inventory.languages).map(([l, c]) => `${md(l)} (${c})`).join(', ') || '—'}`);
   if (r.inventory.hreflangLanguages.length) L.push(`hreflang languages: ${r.inventory.hreflangLanguages.map(md).join(', ')}`);
   L.push(`HTTP status: ${Object.entries(r.inventory.statusCodes).map(([s, c]) => `${s}: ${c}`).join(', ')}`, '');

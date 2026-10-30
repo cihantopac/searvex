@@ -34,7 +34,7 @@ Each item lists how it will be verified; nothing is marked done without that ver
 | 9 | GA4 Data API (landing-page sessions / conversions from organic search) | ⬜ |
 | 10 | Yandex Webmaster API | ⬜ |
 | 11 | Impact-based prioritisation (severity × affected share × page importance × traffic when available) | ✅ score/bucket/effort/reasons; "Fix first" table; traffic input pending GSC |
-| 12 | Search-intent classification of pages and queries (rules + agent), separate verified vs inferred | ⬜ |
+| 12 | Search-intent classification of pages and queries (rules + agent), separate verified vs inferred | ✅ |
 | 13 | Internal-linking opportunities (topic-related pages that do not link to each other; orphans by topic) | ✅ |
 | 14 | Deeper competitor research: per-competitor topic clusters, page-type comparison per intent | ⬜ |
 | 15 | Bing AI Performance import (CSV) when exported by the user | ⬜ |

@@ -107,9 +107,10 @@ describe('search performance analysis', () => {
     qp('almost there', 'https://s.example/a', 300, 3, 11.4), // striking distance
     qp('shared topic', 'https://s.example/x', 120, 5, 6),
     qp('shared topic', 'https://s.example/y', 100, 2, 9),
+    qp('how to choose a plan', 'https://s.example/pricing', 400, 4, 5), // informational query on a pricing page
   ];
   const audit = {
-    inventory: { pages: [{ url: 'https://s.example/w', indexable: true }, { url: 'https://s.example/never', indexable: true }] },
+    inventory: { pages: [{ url: 'https://s.example/w', indexable: true }, { url: 'https://s.example/never', indexable: true }, { url: 'https://s.example/pricing', indexable: true, type: 'pricing', intent: 'transactional' }] },
     findings: [{ ruleId: 'title.multiple', title: 'Multiple title elements', severity: 'medium', evidence: [{ url: 'https://s.example/w' }] }],
   } as never;
   const r = analyzeSearchPerformance(data, { days: 28, source: 'test', audit });
@@ -125,6 +126,13 @@ describe('search performance analysis', () => {
     expect(r.topPages.find((p) => p.page.endsWith('/w'))!.primaryQuery).toBe('weak snippet');
     expect(r.noImpressions).toEqual(['https://s.example/never']);
     expect(r.findingsOnTrafficPages[0]).toMatchObject({ ruleId: 'title.multiple', impressions: 500 });
+  });
+
+  it('labels query intent (inferred) and flags intent mismatches against the ranking page type', () => {
+    expect(r.topQueries.find((q) => q.query === 'how to choose a plan')?.intent).toBe('informational');
+    expect(r.intentMismatches).toEqual([expect.objectContaining({ query: 'how to choose a plan', queryIntent: 'informational', pageType: 'pricing', pageIntent: 'transactional' })]);
+    expect(r.intentMix.find((m) => m.intent === 'unclassified')!.queries).toBeGreaterThan(0);
+    expect(r.notes.join(' ')).toMatch(/inferred/);
   });
 });
 

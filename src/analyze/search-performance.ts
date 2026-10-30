@@ -1,6 +1,7 @@
 import type { AuditReport } from './audit.js';
 import type { GscRow } from '../integrations/gsc.js';
 import { normalizeUrl } from '../core/url.js';
+import { brandTermsFrom, classifyQueryIntent, intentConflict, type Intent } from './intent.js';
 
 /**
  * Search performance analysis on verified Search Console rows (dimensions: query, page).
@@ -19,7 +20,11 @@ export interface SearchPerformanceReport {
   source: string;
   period: { days: number };
   totals: { clicks: number; impressions: number; ctr: number; queries: number; pages: number };
-  topQueries: Array<{ query: string; clicks: number; impressions: number; ctr: number; position: number; pages: number }>;
+  topQueries: Array<{ query: string; clicks: number; impressions: number; ctr: number; position: number; pages: number; intent?: Intent }>;
+  /** Clicks and impressions per inferred query intent (the numbers are verified; the intent labels are not). */
+  intentMix: Array<{ intent: Intent | 'unclassified'; queries: number; clicks: number; impressions: number; ctr: number }>;
+  /** Queries whose inferred intent conflicts with the type of the page that ranks (needs a joined audit). */
+  intentMismatches: Array<{ query: string; queryIntent: Intent; signals: string[]; page: string; pageType: string; pageIntent: Intent; impressions: number; clicks: number; position: number }>;
   topPages: Array<{ page: string; clicks: number; impressions: number; ctr: number; position: number; queries: number; primaryQuery: string }>;
   /** Queries ranking just off the first page with real impressions. */
   strikingDistance: Array<{ query: string; page: string; position: number; impressions: number; clicks: number }>;
@@ -48,7 +53,7 @@ function median(xs: number[]): number {
 const r4 = (x: number) => Math.round(x * 10000) / 10000;
 const r1 = (x: number) => Math.round(x * 10) / 10;
 
-export function analyzeSearchPerformance(data: QueryPage[], opts: { days: number; source: string; audit?: AuditReport; minImpressions?: number }): SearchPerformanceReport {
+export function analyzeSearchPerformance(data: QueryPage[], opts: { days: number; source: string; audit?: AuditReport; minImpressions?: number; brands?: string[] }): SearchPerformanceReport {
   const minImp = opts.minImpressions ?? 50;
   const notes: string[] = [];
   const byQuery = new Map<string, QueryPage[]>();
@@ -65,7 +70,7 @@ export function analyzeSearchPerformance(data: QueryPage[], opts: { days: number
   const clicks = sum(data, 'clicks');
   const impressions = sum(data, 'impressions');
 
-  const topQueries = [...byQuery.entries()]
+  const topQueries: SearchPerformanceReport['topQueries'] = [...byQuery.entries()]
     .map(([query, xs]) => ({ query, clicks: sum(xs, 'clicks'), impressions: sum(xs, 'impressions'), ctr: r4(sum(xs, 'clicks') / Math.max(1, sum(xs, 'impressions'))), position: r1(wPos(xs)), pages: xs.length }))
     .sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
   const topPages = [...byPage.entries()]
@@ -102,7 +107,22 @@ export function analyzeSearchPerformance(data: QueryPage[], opts: { days: number
     .slice(0, 100)
     .map((q) => ({ query: q.query, impressions: q.impressions, pages: q.sharing.sort((a, b) => b.impressions - a.impressions).map((x) => ({ page: x.page, impressions: x.impressions, clicks: x.clicks, position: r1(x.position) })) }));
 
+  const brands = opts.brands ?? brandTermsFrom(opts.source.split(' ').at(-1) ?? '');
+  const qIntent = new Map([...byQuery.keys()].map((q) => [q, classifyQueryIntent(q, brands)]));
+  for (const q of topQueries) q.intent = qIntent.get(q.query)?.intent;
+  const mix = new Map<Intent | 'unclassified', { queries: number; clicks: number; impressions: number }>();
+  for (const q of topQueries) {
+    const k = q.intent ?? 'unclassified';
+    const m = mix.get(k) ?? { queries: 0, clicks: 0, impressions: 0 };
+    m.queries++;
+    m.clicks += q.clicks;
+    m.impressions += q.impressions;
+    mix.set(k, m);
+  }
+  const intentMix = [...mix].map(([intent, m]) => ({ intent, ...m, ctr: r4(m.clicks / Math.max(1, m.impressions)) })).sort((a, b) => b.impressions - a.impressions);
+
   let noImpressions: string[] = [];
+  const intentMismatches: SearchPerformanceReport['intentMismatches'] = [];
   const findingsOnTrafficPages: SearchPerformanceReport['findingsOnTrafficPages'] = [];
   if (opts.audit) {
     const seen = new Set([...byPage.keys()].map((u) => normalizeUrl(u) ?? u));
@@ -114,9 +134,18 @@ export function analyzeSearchPerformance(data: QueryPage[], opts: { days: number
       if (!hit.length) continue;
       findingsOnTrafficPages.push({ ruleId: f.ruleId, title: f.title, severity: f.severity, pages: hit.length, clicks: hit.reduce((a, p) => a + p.clicks, 0), impressions: hit.reduce((a, p) => a + p.impressions, 0) });
     }
+    const invByUrl = new Map(opts.audit.inventory.pages.map((p) => [normalizeUrl(p.url) ?? p.url, p]));
+    for (const d of data) {
+      const qi = qIntent.get(d.query);
+      const page = invByUrl.get(normalizeUrl(d.page) ?? d.page);
+      if (!qi || !page?.intent || d.impressions < minImp || !intentConflict(qi.intent, page.intent)) continue;
+      intentMismatches.push({ query: d.query, queryIntent: qi.intent, signals: qi.signals, page: d.page, pageType: page.type, pageIntent: page.intent, impressions: d.impressions, clicks: d.clicks, position: r1(d.position) });
+    }
+    intentMismatches.sort((a, b) => b.impressions - a.impressions);
     findingsOnTrafficPages.sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
     notes.push('Findings-on-traffic uses the evidence URLs recorded in the audit (up to 50 per rule).');
   }
+  notes.push('Query and page intents are inferred from wording and page type (heuristic); clicks, impressions and positions are verified data.');
   notes.push('Search Console anonymises rare queries; query-level totals are lower than property totals.');
 
   return {
@@ -128,6 +157,8 @@ export function analyzeSearchPerformance(data: QueryPage[], opts: { days: number
     strikingDistance,
     lowCtr,
     multiPageQueries,
+    intentMix,
+    intentMismatches: intentMismatches.slice(0, 100),
     noImpressions: noImpressions.slice(0, 500),
     findingsOnTrafficPages: findingsOnTrafficPages.slice(0, 50),
     notes,

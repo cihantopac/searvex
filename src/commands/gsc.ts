@@ -26,13 +26,19 @@ export function renderSearchPerformanceMarkdown(r: SearchPerformanceReport): str
   L.push('## Low CTR versus this site\'s own median at the same position', '');
   if (r.lowCtr.length) table(['Query', 'Page', 'Position', 'Impressions', 'CTR', 'Site median'], r.lowCtr.slice(0, 20).map((x) => [md(x.query), md(x.page), String(x.position), String(x.impressions), pct(x.ctr), pct(x.siteMedianCtr)]));
   else L.push('_None found (or not enough data per position)._', '');
+  L.push('## Search intent mix (intent inferred from query wording)', '');
+  table(['Intent', 'Queries', 'Clicks', 'Impressions', 'CTR'], r.intentMix.map((m) => [m.intent, String(m.queries), String(m.clicks), String(m.impressions), pct(m.ctr)]));
+  if (r.intentMismatches.length) {
+    L.push('## Intent mismatches (query intent vs. type of the ranking page; inferred)', '');
+    table(['Query', 'Query intent', 'Page', 'Page type', 'Impressions', 'Position'], r.intentMismatches.slice(0, 20).map((x) => [md(x.query), `${x.queryIntent} (${x.signals.slice(0, 2).map(md).join(', ')})`, md(x.page), x.pageType, String(x.impressions), String(x.position)]));
+  }
   L.push('## Queries shared by several pages (data-verified cannibalisation)', '');
   if (r.multiPageQueries.length) for (const q of r.multiPageQueries.slice(0, 15)) L.push(`- **${md(q.query)}** (${q.impressions} impressions): ${q.pages.map((p) => `${md(p.page)} — ${p.impressions} imp, pos ${p.position}`).join('; ')}`);
   else L.push('_None._');
   L.push('', '## Page → primary query', '');
   table(['Page', 'Clicks', 'Impressions', 'Position', 'Primary query', 'Queries'], r.topPages.slice(0, 25).map((p) => [md(p.page), String(p.clicks), String(p.impressions), String(p.position), md(p.primaryQuery), String(p.queries)]));
   L.push('## Top queries', '');
-  table(['Query', 'Clicks', 'Impressions', 'CTR', 'Position', 'Pages'], r.topQueries.slice(0, 25).map((q) => [md(q.query), String(q.clicks), String(q.impressions), pct(q.ctr), String(q.position), String(q.pages)]));
+  table(['Query', 'Clicks', 'Impressions', 'CTR', 'Position', 'Pages', 'Intent (inferred)'], r.topQueries.slice(0, 25).map((q) => [md(q.query), String(q.clicks), String(q.impressions), pct(q.ctr), String(q.position), String(q.pages), q.intent ?? '—']));
   if (r.noImpressions.length) L.push(`## Indexable pages without impressions (${r.noImpressions.length})`, '', ...r.noImpressions.slice(0, 30).map((u) => `- ${md(u)}`), '');
   L.push('## Notes', '', ...r.notes.map((n) => `- ${md(n)}`), '');
   return L.join('\n');

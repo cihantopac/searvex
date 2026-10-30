@@ -1,5 +1,6 @@
 import { factsOf, isNoindex, type SiteContext } from './context.js';
 import { typedNodes } from './structured-data.js';
+import { pageIntent, type Intent } from './intent.js';
 
 export type PageType =
   | 'home' | 'product' | 'category' | 'blog-post' | 'blog-index' | 'docs' | 'pricing' | 'about' | 'contact'
@@ -17,11 +18,15 @@ export interface InventoryPage {
   depth: number;
   inlinks: number;
   words: number;
+  /** Intent the page type is built for (inferred, never measured). */
+  intent?: Intent;
 }
 
 export interface SiteInventory {
   pages: InventoryPage[];
   byType: Record<string, number>;
+  /** Pages per inferred intent (from page type). */
+  intents?: Record<string, number>;
   languages: Record<string, number>;
   hreflangLanguages: string[];
   statusCodes: Record<string, number>;
@@ -116,13 +121,15 @@ export function buildInventory(ctx: SiteContext): SiteInventory {
     }
     pages.push({
       url: p.url, type, basis, lang: f.lang, title: f.title, status: p.status, indexable: !isNoindex(p), depth: p.depth,
-      inlinks: ctx.inlinks.get(p.url)?.size ?? 0, words: f.wordCount,
+      inlinks: ctx.inlinks.get(p.url)?.size ?? 0, words: f.wordCount, intent: pageIntent({ type, basis })?.intent,
     });
   }
   const byType: Record<string, number> = {};
+  const intents: Record<string, number> = {};
   const languages: Record<string, number> = {};
   for (const p of pages) {
     byType[p.type] = (byType[p.type] ?? 0) + 1;
+    intents[p.intent ?? 'unclassified'] = (intents[p.intent ?? 'unclassified'] ?? 0) + 1;
     const l = (p.lang ?? 'unspecified').toLowerCase();
     languages[l] = (languages[l] ?? 0) + 1;
   }
@@ -154,6 +161,7 @@ export function buildInventory(ctx: SiteContext): SiteInventory {
   return {
     pages,
     byType,
+    intents,
     languages,
     hreflangLanguages,
     statusCodes,

@@ -20779,8 +20779,8 @@ function runContentChecks(ctx, sink) {
   return { topTerms, pageTerms, clusters, cannibalization, nearDuplicates, exactDuplicates, linkOpportunities: linkOpportunities.slice(0, 200) };
 }
 function findLinkOpportunities(ctx, vectors) {
-  const norm2 = /* @__PURE__ */ new Map();
-  for (const [u, v] of vectors) norm2.set(u, Math.sqrt([...v.values()].reduce((a, x) => a + x * x, 0)) || 1);
+  const norm3 = /* @__PURE__ */ new Map();
+  for (const [u, v] of vectors) norm3.set(u, Math.sqrt([...v.values()].reduce((a, x) => a + x * x, 0)) || 1);
   const index2 = /* @__PURE__ */ new Map();
   for (const [u, v] of vectors) for (const t of v.keys()) (index2.get(t) ?? index2.set(t, []).get(t)).push(u);
   const outlinks = /* @__PURE__ */ new Map();
@@ -20807,7 +20807,7 @@ function findLinkOpportunities(ctx, vectors) {
             shared.push(t);
           }
         }
-        const sim = dot / (norm2.get(a) * norm2.get(b));
+        const sim = dot / (norm3.get(a) * norm3.get(b));
         if (shared.length < 2 || sim < 0.3 || sim > 0.9 || links(a, b)) continue;
         const [from, to] = inl(a) >= inl(b) ? [a, b] : [b, a];
         out.push({ from, to, similarity: Math.round(sim * 100) / 100, sharedTerms: shared.slice(0, 6), toInlinks: inl(to) });
@@ -20876,9 +20876,9 @@ function runGeoChecks(ctx, sink, llms) {
   if (llms) sink.emit("geo.llms-txt", { url: llms.url, observed: llms.present ? `present (${llms.bytes} bytes) \u2014 not used by Google; no scoring impact` : `absent (HTTP ${llms.status}) \u2014 no scoring impact` });
   const entityNames = {};
   const roles = { site: /* @__PURE__ */ new Map(), organization: /* @__PURE__ */ new Map() };
-  const norm2 = (n) => n.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const norm3 = (n) => n.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
   const note = (role, name, url) => {
-    const k = norm2(name);
+    const k = norm3(name);
     if (!k) return;
     entityNames[name] = (entityNames[name] ?? 0) + 1;
     const set = roles[role].get(k) ?? /* @__PURE__ */ new Set();
@@ -21033,6 +21033,216 @@ function checkStructuredData(url, f, sink, isHomepage) {
   }
 }
 
+// src/analyze/intent.ts
+var CUES = {
+  transactional: [
+    "buy",
+    "price",
+    "prices",
+    "pricing",
+    "cost",
+    "cheap",
+    "discount",
+    "coupon",
+    "deal",
+    "order",
+    "download",
+    "subscribe",
+    "trial",
+    "signup",
+    "sign up",
+    "quote",
+    "hire",
+    "book",
+    "sat\u0131n al",
+    "sat\u0131n",
+    "fiyat",
+    "fiyat\u0131",
+    "fiyatlar\u0131",
+    "\xFCcret",
+    "\xFCcreti",
+    "\xFCcretsiz",
+    "indir",
+    "sipari\u015F",
+    "kampanya",
+    "indirim",
+    "kupon",
+    "abonelik",
+    "kirala",
+    "kaufen",
+    "preis",
+    "preise",
+    "kosten",
+    "bestellen",
+    "gutschein",
+    "acheter",
+    "prix",
+    "tarif",
+    "tarifs",
+    "commander",
+    "comprar",
+    "precio",
+    "precios",
+    "descargar",
+    "acquistare",
+    "prezzo",
+    "prezzi",
+    "pre\xE7o",
+    "kopen",
+    "prijs",
+    "bestellen"
+  ],
+  commercial: [
+    "best",
+    "top",
+    "vs",
+    "versus",
+    "review",
+    "reviews",
+    "compare",
+    "comparison",
+    "alternative",
+    "alternatives",
+    "alternative to",
+    "recommended",
+    "pros and cons",
+    "en iyi",
+    "kar\u015F\u0131la\u015Ft\u0131rma",
+    "kar\u015F\u0131la\u015Ft\u0131r",
+    "alternatif",
+    "alternatifleri",
+    "yorum",
+    "yorumlar\u0131",
+    "inceleme",
+    "tavsiye",
+    "\xF6nerilen",
+    "hangisi",
+    "beste",
+    "vergleich",
+    "erfahrungen",
+    "meilleur",
+    "meilleurs",
+    "comparatif",
+    "avis",
+    "mejor",
+    "mejores",
+    "comparativa",
+    "opiniones",
+    "migliore",
+    "migliori",
+    "confronto",
+    "recensioni",
+    "melhor",
+    "melhores",
+    "beste",
+    "vergelijken",
+    "ervaringen"
+  ],
+  informational: [
+    "how",
+    "what",
+    "why",
+    "when",
+    "where",
+    "who",
+    "which",
+    "guide",
+    "tutorial",
+    "example",
+    "examples",
+    "meaning",
+    "definition",
+    "tips",
+    "learn",
+    "ideas",
+    "nas\u0131l",
+    "nedir",
+    "ne",
+    "neden",
+    "ni\xE7in",
+    "nerede",
+    "ne zaman",
+    "kimdir",
+    "rehber",
+    "rehberi",
+    "\xF6rnek",
+    "\xF6rnekleri",
+    "anlam\u0131",
+    "ipu\xE7lar\u0131",
+    "yap\u0131l\u0131r",
+    "\xF6\u011Fren",
+    "wie",
+    "warum",
+    "anleitung",
+    "comment",
+    "pourquoi",
+    "qu'est-ce",
+    "guide",
+    "c\xF3mo",
+    "qu\xE9",
+    "por qu\xE9",
+    "gu\xEDa",
+    "cosa",
+    "perch\xE9",
+    "guida",
+    "como",
+    "o que",
+    "hoe",
+    "wat",
+    "waarom"
+  ]
+};
+var NAV_CUES = ["login", "log in", "sign in", "account", "contact", "support", "dashboard", "giri\u015F", "giri\u015F yap", "oturum a\xE7", "hesab\u0131m", "ileti\u015Fim", "destek", "anmelden", "connexion", "iniciar sesi\xF3n", "accedi"];
+var norm = (s) => ` ${s.toLocaleLowerCase("tr").replace(/[^\p{L}\p{N}' ]+/gu, " ").replace(/\s+/g, " ").trim()} `;
+var hits = (q, words2) => [...new Set(words2.filter((w) => q.includes(` ${w} `)))];
+function classifyQueryIntent(query, brands = []) {
+  const q = norm(query);
+  const brandHits = brands.map((b) => b.toLocaleLowerCase("tr")).filter((b) => b.length >= 3 && q.includes(` ${b} `));
+  const t = hits(q, CUES.transactional);
+  const c = hits(q, CUES.commercial);
+  const i = hits(q, CUES.informational);
+  const n = hits(q, NAV_CUES);
+  if (t.length) return { intent: "transactional", signals: t.map((w) => `"${w}"`), basis: "inferred" };
+  if (c.length) return { intent: "commercial", signals: c.map((w) => `"${w}"`), basis: "inferred" };
+  if (i.length) return { intent: "informational", signals: i.map((w) => `"${w}"`), basis: "inferred" };
+  if (brandHits.length || n.length) return { intent: "navigational", signals: [...brandHits.map((b) => `brand "${b}"`), ...n.map((w) => `"${w}"`)], basis: "inferred" };
+  return null;
+}
+var PAGE_INTENT = {
+  "blog-post": "informational",
+  "blog-index": "informational",
+  docs: "informational",
+  "tag-archive": "informational",
+  author: "informational",
+  product: "transactional",
+  pricing: "transactional",
+  category: "commercial",
+  service: "commercial",
+  landing: "commercial",
+  home: "navigational",
+  about: "navigational",
+  contact: "navigational",
+  careers: "navigational",
+  legal: "navigational",
+  search: "navigational"
+};
+function pageIntent(p) {
+  const intent = PAGE_INTENT[p.type];
+  return intent ? { intent, signals: [`page type ${p.type} (${p.basis})`], basis: "inferred" } : null;
+}
+function intentConflict(query, page) {
+  if (query === "informational") return page === "transactional";
+  if (query === "transactional") return page === "informational";
+  return false;
+}
+function brandTermsFrom(site) {
+  const host = site.replace(/^sc-domain:/, "").replace(/^https?:\/\//, "").split("/")[0].replace(/^www\./, "");
+  const labels = host.split(".");
+  const i = labels.length >= 3 && /^(co|com|net|org|gov|ac|edu)$/.test(labels[labels.length - 2]) ? labels.length - 3 : labels.length - 2;
+  const main2 = labels[Math.max(0, i)];
+  return main2.length >= 3 ? [main2] : [];
+}
+
 // src/analyze/inventory.ts
 function pageSchemaTypes(f) {
   const out = /* @__PURE__ */ new Map();
@@ -21113,13 +21323,16 @@ function buildInventory(ctx) {
       indexable: !isNoindex(p),
       depth: p.depth,
       inlinks: ctx.inlinks.get(p.url)?.size ?? 0,
-      words: f.wordCount
+      words: f.wordCount,
+      intent: pageIntent({ type, basis })?.intent
     });
   }
   const byType = {};
+  const intents = {};
   const languages = {};
   for (const p of pages) {
     byType[p.type] = (byType[p.type] ?? 0) + 1;
+    intents[p.intent ?? "unclassified"] = (intents[p.intent ?? "unclassified"] ?? 0) + 1;
     const l = (p.lang ?? "unspecified").toLowerCase();
     languages[l] = (languages[l] ?? 0) + 1;
   }
@@ -21151,6 +21364,7 @@ function buildInventory(ctx) {
   return {
     pages,
     byType,
+    intents,
     languages,
     hreflangLanguages,
     statusCodes,
@@ -21262,8 +21476,8 @@ function detectLanguage(text4, minWords = 30) {
   const counts = {};
   for (const x of w) for (const [lang, set] of Object.entries(SETS)) if (set.has(x)) counts[lang] = (counts[lang] ?? 0) + 1;
   for (const [lang, re] of DISTINCT_LETTERS) {
-    const hits = w.filter((x) => re.test(x)).length;
-    if (hits) counts[lang] = (counts[lang] ?? 0) + hits * 0.5;
+    const hits2 = w.filter((x) => re.test(x)).length;
+    if (hits2) counts[lang] = (counts[lang] ?? 0) + hits2 * 0.5;
   }
   const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   const [best, second] = ranked;
@@ -21971,6 +22185,7 @@ function renderMarkdown(r, opts = {}) {
   if (r.inventory.relations?.length) L.push(`Organisation relations: ${r.inventory.relations.map((x) => `${md(x.from)} \u2192 ${x.relation} \u2192 ${md(x.to)}`).join("; ")}`, "");
   L.push("| Page type | Count |", "|---|---|");
   for (const [t, c] of Object.entries(r.inventory.byType).sort((a, b) => b[1] - a[1])) L.push(`| ${t} | ${c} |`);
+  if (r.inventory.intents) L.push("", `Intent the pages are built for (inferred from page type): ${Object.entries(r.inventory.intents).sort((a, b) => b[1] - a[1]).map(([i, c]) => `${i} (${c})`).join(", ")}`);
   L.push("", `Languages (html lang): ${Object.entries(r.inventory.languages).map(([l, c]) => `${md(l)} (${c})`).join(", ") || "\u2014"}`);
   if (r.inventory.hreflangLanguages.length) L.push(`hreflang languages: ${r.inventory.hreflangLanguages.map(md).join(", ")}`);
   L.push(`HTTP status: ${Object.entries(r.inventory.statusCodes).map(([s, c]) => `${s}: ${c}`).join(", ")}`, "");
@@ -24042,7 +24257,7 @@ Saved: ${out}`);
 import fs11 from "node:fs";
 import path16 from "node:path";
 var hostOf = (u) => new URL(u).hostname.replace(/^www\./, "");
-var norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+var norm2 = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 function snapshot(report, pages) {
   const host = hostOf(report.target);
   const outbound = {};
@@ -24082,7 +24297,7 @@ function snapshot(report, pages) {
     siteNames: [...siteNames],
     orgNames: [...orgNames],
     parents: rel2.filter((r) => r.relation === "parentOrganization" || r.relation === "memberOf").map((r) => ({ name: r.to, url: r.toUrl })),
-    children: rel2.filter((r) => ["subOrganization", "brand", "owns", "department"].includes(r.relation) && norm(r.to) !== norm(r.from)).map((r) => ({ name: r.to, url: r.toUrl, relation: r.relation })),
+    children: rel2.filter((r) => ["subOrganization", "brand", "owns", "department"].includes(r.relation) && norm2(r.to) !== norm2(r.from)).map((r) => ({ name: r.to, url: r.toUrl, relation: r.relation })),
     terms: report.content.topTerms.map((t) => t.term).slice(0, 40)
   };
 }
@@ -24090,28 +24305,28 @@ function analyzeEcosystem(snaps) {
   const hosts = snaps.map((s) => s.host);
   const obs = [];
   const nameToHost = /* @__PURE__ */ new Map();
-  for (const s of snaps) for (const n of [...s.siteNames, ...s.orgNames]) if (!nameToHost.has(norm(n))) nameToHost.set(norm(n), s.host);
+  for (const s of snaps) for (const n of [...s.siteNames, ...s.orgNames]) if (!nameToHost.has(norm2(n))) nameToHost.set(norm2(n), s.host);
   for (const s of snaps) {
     for (const p of s.parents) {
-      const parentHost = p.url ? hostOf(p.url) : nameToHost.get(norm(p.name));
+      const parentHost = p.url ? hostOf(p.url) : nameToHost.get(norm2(p.name));
       const parent2 = snaps.find((x) => x.host === parentHost);
       if (!parent2) continue;
-      if (!parent2.orgNames.some((n) => norm(n) === norm(p.name))) {
+      if (!parent2.orgNames.some((n) => norm2(n) === norm2(p.name))) {
         obs.push({ kind: "entity", confidence: "verified", sites: [s.host, parent2.host], message: `${s.host} names its parent "${p.name}", but ${parent2.host} declares its organisation as ${parent2.orgNames.map((n) => `"${n}"`).join(", ") || "(none)"}.`, recommendation: "Use the same organisation name and URL on both sites." });
       }
-      const declared = parent2.children.some((c) => c.url && hostOf(c.url) === s.host || s.siteNames.concat(s.orgNames).some((n) => norm(n) === norm(c.name)));
+      const declared = parent2.children.some((c) => c.url && hostOf(c.url) === s.host || s.siteNames.concat(s.orgNames).some((n) => norm2(n) === norm2(c.name)));
       if (!declared) {
         obs.push({ kind: "entity", confidence: "verified", sites: [parent2.host, s.host], message: `${s.host} declares parentOrganization "${p.name}", but ${parent2.host} does not reference ${s.siteNames[0] ?? s.host} in its structured data (subOrganization / brand / owns).`, recommendation: `On ${parent2.host}, describe the relationship from the parent side too (schema.org subOrganization or brand on the Organization node), using names and URLs that match the product sites. This makes the family explicit to search engines and AI systems; it is not a rich-result feature.` });
       }
     }
     if (!s.orgNames.length) obs.push({ kind: "entity", confidence: "verified", sites: [s.host], message: `${s.host} has no top-level Organization markup on the crawled pages.`, recommendation: "Add Organization structured data (name, url, logo, parentOrganization where applicable)." });
     else {
-      const own = s.orgNames.filter((n) => s.siteNames.some((sn) => norm(sn) === norm(n)));
+      const own = s.orgNames.filter((n) => s.siteNames.some((sn) => norm2(sn) === norm2(n)));
       const parentNames = new Set(s.parents.flatMap((p) => {
-        const ph = p.url ? hostOf(p.url) : nameToHost.get(norm(p.name));
-        return [norm(p.name), ...(snaps.find((x) => x.host === ph)?.orgNames ?? []).map(norm)];
+        const ph = p.url ? hostOf(p.url) : nameToHost.get(norm2(p.name));
+        return [norm2(p.name), ...(snaps.find((x) => x.host === ph)?.orgNames ?? []).map(norm2)];
       }));
-      const other = s.orgNames.filter((n) => !own.includes(n) && !parentNames.has(norm(n)));
+      const other = s.orgNames.filter((n) => !own.includes(n) && !parentNames.has(norm2(n)));
       if (!own.length && other.length) obs.push({ kind: "entity", confidence: "verified", sites: [s.host], message: `${s.host} (site name ${s.siteNames.map((n) => `"${n}"`).join(", ") || "unknown"}) describes its Organization as ${other.map((n) => `"${n}"`).join(", ")} \u2014 another family member's name.`, recommendation: "Use the product's own Organization (or Brand) node and reference the company via parentOrganization." });
     }
   }
@@ -24120,7 +24335,7 @@ function analyzeEcosystem(snaps) {
     links[s.host] = {};
     for (const h of hosts) if (h !== s.host) links[s.host][h] = s.outbound[h] ?? 0;
   }
-  const parentHosts = new Set(snaps.flatMap((s) => s.parents.map((p) => p.url ? hostOf(p.url) : nameToHost.get(norm(p.name))).filter((x) => !!x)));
+  const parentHosts = new Set(snaps.flatMap((s) => s.parents.map((p) => p.url ? hostOf(p.url) : nameToHost.get(norm2(p.name))).filter((x) => !!x)));
   for (const ph of parentHosts) {
     const parent2 = snaps.find((s) => s.host === ph);
     if (!parent2) continue;
@@ -24310,7 +24525,21 @@ function analyzeSearchPerformance(data2, opts) {
   const lowCtr = data2.filter((d) => d.impressions >= minImp && d.position <= 10).map((d) => ({ d, med: median(ctrByPos.get(Math.round(d.position)) ?? []), n: (ctrByPos.get(Math.round(d.position)) ?? []).length })).filter((x) => x.n >= 5 && x.med > 0 && x.d.ctr < x.med * 0.5).sort((a, b) => b.d.impressions - a.d.impressions).slice(0, 100).map((x) => ({ query: x.d.query, page: x.d.page, position: r1(x.d.position), impressions: x.d.impressions, ctr: r4(x.d.ctr), siteMedianCtr: r4(x.med) }));
   if (![...ctrByPos.values()].some((v) => v.length >= 5)) notes.push("Not enough rows per position to compare CTR against the property's own median.");
   const multiPageQueries = [...byQuery.entries()].map(([query, xs]) => ({ query, impressions: sum(xs, "impressions"), xs })).filter((q) => q.impressions >= minImp).map((q) => ({ ...q, sharing: q.xs.filter((x) => x.impressions >= q.impressions * 0.1) })).filter((q) => q.sharing.length >= 2).sort((a, b) => b.impressions - a.impressions).slice(0, 100).map((q) => ({ query: q.query, impressions: q.impressions, pages: q.sharing.sort((a, b) => b.impressions - a.impressions).map((x) => ({ page: x.page, impressions: x.impressions, clicks: x.clicks, position: r1(x.position) })) }));
+  const brands = opts.brands ?? brandTermsFrom(opts.source.split(" ").at(-1) ?? "");
+  const qIntent = new Map([...byQuery.keys()].map((q) => [q, classifyQueryIntent(q, brands)]));
+  for (const q of topQueries) q.intent = qIntent.get(q.query)?.intent;
+  const mix = /* @__PURE__ */ new Map();
+  for (const q of topQueries) {
+    const k = q.intent ?? "unclassified";
+    const m = mix.get(k) ?? { queries: 0, clicks: 0, impressions: 0 };
+    m.queries++;
+    m.clicks += q.clicks;
+    m.impressions += q.impressions;
+    mix.set(k, m);
+  }
+  const intentMix = [...mix].map(([intent, m]) => ({ intent, ...m, ctr: r4(m.clicks / Math.max(1, m.impressions)) })).sort((a, b) => b.impressions - a.impressions);
   let noImpressions = [];
+  const intentMismatches = [];
   const findingsOnTrafficPages = [];
   if (opts.audit) {
     const seen = new Set([...byPage.keys()].map((u) => normalizeUrl(u) ?? u));
@@ -24322,9 +24551,18 @@ function analyzeSearchPerformance(data2, opts) {
       if (!hit.length) continue;
       findingsOnTrafficPages.push({ ruleId: f.ruleId, title: f.title, severity: f.severity, pages: hit.length, clicks: hit.reduce((a, p) => a + p.clicks, 0), impressions: hit.reduce((a, p) => a + p.impressions, 0) });
     }
+    const invByUrl = new Map(opts.audit.inventory.pages.map((p) => [normalizeUrl(p.url) ?? p.url, p]));
+    for (const d of data2) {
+      const qi = qIntent.get(d.query);
+      const page = invByUrl.get(normalizeUrl(d.page) ?? d.page);
+      if (!qi || !page?.intent || d.impressions < minImp || !intentConflict(qi.intent, page.intent)) continue;
+      intentMismatches.push({ query: d.query, queryIntent: qi.intent, signals: qi.signals, page: d.page, pageType: page.type, pageIntent: page.intent, impressions: d.impressions, clicks: d.clicks, position: r1(d.position) });
+    }
+    intentMismatches.sort((a, b) => b.impressions - a.impressions);
     findingsOnTrafficPages.sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
     notes.push("Findings-on-traffic uses the evidence URLs recorded in the audit (up to 50 per rule).");
   }
+  notes.push("Query and page intents are inferred from wording and page type (heuristic); clicks, impressions and positions are verified data.");
   notes.push("Search Console anonymises rare queries; query-level totals are lower than property totals.");
   return {
     source: opts.source,
@@ -24335,6 +24573,8 @@ function analyzeSearchPerformance(data2, opts) {
     strikingDistance,
     lowCtr,
     multiPageQueries,
+    intentMix,
+    intentMismatches: intentMismatches.slice(0, 100),
     noImpressions: noImpressions.slice(0, 500),
     findingsOnTrafficPages: findingsOnTrafficPages.slice(0, 50),
     notes
@@ -24360,13 +24600,19 @@ function renderSearchPerformanceMarkdown(r) {
   L.push("## Low CTR versus this site's own median at the same position", "");
   if (r.lowCtr.length) table(["Query", "Page", "Position", "Impressions", "CTR", "Site median"], r.lowCtr.slice(0, 20).map((x) => [md(x.query), md(x.page), String(x.position), String(x.impressions), pct(x.ctr), pct(x.siteMedianCtr)]));
   else L.push("_None found (or not enough data per position)._", "");
+  L.push("## Search intent mix (intent inferred from query wording)", "");
+  table(["Intent", "Queries", "Clicks", "Impressions", "CTR"], r.intentMix.map((m) => [m.intent, String(m.queries), String(m.clicks), String(m.impressions), pct(m.ctr)]));
+  if (r.intentMismatches.length) {
+    L.push("## Intent mismatches (query intent vs. type of the ranking page; inferred)", "");
+    table(["Query", "Query intent", "Page", "Page type", "Impressions", "Position"], r.intentMismatches.slice(0, 20).map((x) => [md(x.query), `${x.queryIntent} (${x.signals.slice(0, 2).map(md).join(", ")})`, md(x.page), x.pageType, String(x.impressions), String(x.position)]));
+  }
   L.push("## Queries shared by several pages (data-verified cannibalisation)", "");
   if (r.multiPageQueries.length) for (const q of r.multiPageQueries.slice(0, 15)) L.push(`- **${md(q.query)}** (${q.impressions} impressions): ${q.pages.map((p) => `${md(p.page)} \u2014 ${p.impressions} imp, pos ${p.position}`).join("; ")}`);
   else L.push("_None._");
   L.push("", "## Page \u2192 primary query", "");
   table(["Page", "Clicks", "Impressions", "Position", "Primary query", "Queries"], r.topPages.slice(0, 25).map((p) => [md(p.page), String(p.clicks), String(p.impressions), String(p.position), md(p.primaryQuery), String(p.queries)]));
   L.push("## Top queries", "");
-  table(["Query", "Clicks", "Impressions", "CTR", "Position", "Pages"], r.topQueries.slice(0, 25).map((q) => [md(q.query), String(q.clicks), String(q.impressions), pct(q.ctr), String(q.position), String(q.pages)]));
+  table(["Query", "Clicks", "Impressions", "CTR", "Position", "Pages", "Intent (inferred)"], r.topQueries.slice(0, 25).map((q) => [md(q.query), String(q.clicks), String(q.impressions), pct(q.ctr), String(q.position), String(q.pages), q.intent ?? "\u2014"]));
   if (r.noImpressions.length) L.push(`## Indexable pages without impressions (${r.noImpressions.length})`, "", ...r.noImpressions.slice(0, 30).map((u) => `- ${md(u)}`), "");
   L.push("## Notes", "", ...r.notes.map((n) => `- ${md(n)}`), "");
   return L.join("\n");
