@@ -71,7 +71,7 @@ export function detect(root: string): Detection {
     const base = pattern.replace(/\/\*+$/, '');
     const dir = path.join(root, base);
     if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue;
-    const children = pattern.endsWith('*') ? fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path.join(base, d.name)) : [base];
+    const children = pattern.endsWith('*') ? fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path.posix.join(base, d.name)) : [base]; // repo-relative ids are always POSIX
     for (const c of children) {
       const found = detectApp(path.join(root, c), c);
       if (found.length) workspaces.push(c);

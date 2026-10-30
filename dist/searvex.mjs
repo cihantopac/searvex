@@ -21597,7 +21597,7 @@ function detect(root2) {
     const base = pattern.replace(/\/\*+$/, "");
     const dir = path3.join(root2, base);
     if (!fs3.existsSync(dir) || !fs3.statSync(dir).isDirectory()) continue;
-    const children2 = pattern.endsWith("*") ? fs3.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path3.join(base, d.name)) : [base];
+    const children2 = pattern.endsWith("*") ? fs3.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path3.posix.join(base, d.name)) : [base];
     for (const c of children2) {
       const found = detectApp(path3.join(root2, c), c);
       if (found.length) workspaces.push(c);
