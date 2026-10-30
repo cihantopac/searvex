@@ -26,14 +26,14 @@ tests plus, where noted, real-world validation ([quality.md](quality.md)).
 
 | Module | Status | Notes |
 |---|---|---|
-| Site intelligence: sitemap, robots, links, inventory, page types, languages | ✅ | business model is a labelled heuristic |
-| HTML vs JS-rendered comparison | 🟡 | `--render` via optional Playwright; not exercised in CI |
+| Site intelligence: sitemap, robots, links, inventory, page types, languages, structured-data inventory, offerings, organisation relations | ✅ | business model is a scored heuristic with evidence and alternatives |
+| HTML vs JS-rendered comparison | ✅ | `--render` via optional Playwright; SPA/SSR/hydration/streaming-metadata tests + CI job |
 | Technical SEO (crawl/index/canonical/redirects/hreflang/status/soft 404/duplicates/orphans/metadata/OG/images) | ✅ | |
 | Structured data & rich-result eligibility | ✅ | required properties transcribed from Google docs; retired types flagged |
 | Core Web Vitals | 🟡 | real field data via CrUX API key; no lab (Lighthouse) integration |
 | Mobile, accessibility | 🟡 | viewport, lang, alt, link names; no full a11y audit |
 | Pagination, faceted navigation, crawl budget | 🟡 | session/tracking params, depth; no facet detection yet |
-| Market & competitor intelligence | 🟡 | competitor crawl & gap analysis; discovery via agent web search; no SERP/volume data |
+| Market & competitor intelligence | 🟡 | competitor crawl, topic/page-type/schema gaps; brand-family ecosystem analysis; discovery via agent web search; no SERP/volume data |
 | Keyword & content intelligence | 🟡 | TF-IDF terms, clusters, cannibalisation, near-duplicates; briefs by agent |
 | GEO/AEO | ✅ | crawler purpose matrix, snippet controls, entity consistency, clarity heuristic, honest citation status |
 | Optimization engine | ✅ | deterministic fixes for 9 rule types, tasks for judgement calls, dry-run/verify/rollback |

@@ -52,7 +52,10 @@ export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = 
   L.push('');
 
   L.push('## Site inventory', '');
-  L.push(`Business model (heuristic): **${md(r.inventory.businessModel.label)}**${r.inventory.businessModel.evidence.length ? ' — ' + r.inventory.businessModel.evidence.map(md).join('; ') : ''}`, '');
+  const bm = r.inventory.businessModel;
+  L.push(`Business model (heuristic${bm.confidence ? `, ${bm.confidence} confidence` : ''}): **${md(bm.label)}**${bm.evidence.length ? ' — ' + bm.evidence.map(md).join('; ') : ''}${bm.alternatives?.length ? ` · alternatives: ${bm.alternatives.map((a) => `${md(a.label)} (${a.score})`).join(', ')}` : ''}`, '');
+  if (r.inventory.offerings?.length) L.push(`Offerings declared in structured data: ${r.inventory.offerings.slice(0, 10).map((o) => `${md(o.name)} (${o.kind}${o.price !== undefined ? `, ${md(o.price)} ${md(o.currency ?? '')}`.trimEnd() : ''})`).join(', ')}`, '');
+  if (r.inventory.relations?.length) L.push(`Organisation relations: ${r.inventory.relations.map((x) => `${md(x.from)} → ${x.relation} → ${md(x.to)}`).join('; ')}`, '');
   L.push('| Page type | Count |', '|---|---|');
   for (const [t, c] of Object.entries(r.inventory.byType).sort((a, b) => b[1] - a[1])) L.push(`| ${t} | ${c} |`);
   L.push('', `Languages (html lang): ${Object.entries(r.inventory.languages).map(([l, c]) => `${md(l)} (${c})`).join(', ') || '—'}`);

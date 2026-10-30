@@ -1,6 +1,6 @@
 # Limitations & unsupported scenarios
 
-Searvex reports what it can observe and labels everything else. Known limits (v0.2.0):
+Searvex reports what it can observe and labels everything else. Known limits (v0.3.0):
 
 ## Data Searvex does not have
 
@@ -17,7 +17,8 @@ Searvex reports what it can observe and labels everything else. Known limits (v0
 
 - Public pages only; login-protected areas are out of scope.
 - Response times are single samples from one location.
-- JavaScript is not executed unless `--render` is used (requires Playwright, not tested in CI).
+- JavaScript is not executed unless `--render` is used (requires Playwright; covered by a CI job).
+- Content-language detection supports en, tr, de, fr, es, it, pt, nl and needs ~30 words; other languages are not judged.
 - Site-level findings (orphans, duplicates, hreflang returns) cover the crawled subset when the page limit is hit.
 - Some sites serve different HTML to different user agents (e.g. Next.js streaming metadata, bot
   protection). Searvex sees what `SearvexBot` receives; verify critical cases with Search Console URL Inspection.

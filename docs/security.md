@@ -8,13 +8,13 @@ injection). Defaults are read-only and deny-by-default.
 
 | Threat | Control | Test |
 |---|---|---|
-| SSRF to internal services / cloud metadata | Scheme allowlist (http/https), no credentials in URLs, IP classification for v4, v6, IPv4-mapped, NAT64, 6to4, Teredo; loopback/private/link-local blocked unless `--allow-private`; `.local`, `.internal`, `localhost` names blocked | `test/unit/ssrf.test.ts` |
+| SSRF to internal services / cloud metadata | Scheme allowlist (http/https), no credentials in URLs, IP classification for v4, v6, IPv4-mapped, NAT64, 6to4, Teredo; loopback/private blocked unless `--allow-private`; **link-local (169.254.0.0/16, fe80::/10 — cloud metadata) always blocked**; `.local`, `.internal`, `localhost` names blocked | `test/unit/ssrf.test.ts` |
 | DNS rebinding | Address validated inside the socket `lookup` hook — the exact address connected to; any disallowed address in the answer set rejects the request; sockets are not reused (`agent: false`) | connection-time loopback test |
 | Redirect to internal address | Redirects followed manually; every hop re-validated; loops and >10 hops stopped | redirect tests |
 | Resource exhaustion | Response size cap (5 MB pages, 50 MB sitemaps, 500 KiB robots), timeouts, page/depth limits, sitemap count/URL caps | size/timeout tests |
 | XML attacks (XXE, billion laughs) | `fast-xml-parser` with entity processing disabled | sitemap test |
 | Malicious HTML | Static parsing only (parse5/cheerio); no script execution except in opt-in `--render` | — |
-| JS rendering (`--render`) | Every browser request checked against the policy (URL + DNS resolution); service workers and downloads blocked. **Residual risk:** the browser resolves DNS again, so a rebinding window remains in render mode. Use `--render` only on sites you trust. | — |
+| JS rendering (`--render`) | Every browser request checked against the policy (URL + DNS resolution); service workers and downloads blocked; popups closed; images/media/fonts skipped; max 300 requests per page; bounded waits. **Residual risk:** the browser resolves DNS again, so a rebinding window remains in render mode. Use `--render` only on sites you trust. | `test/integration/render.test.ts` (metadata exfiltration attempt, popups, endless polling) |
 
 ## Crawler etiquette & compliance
 

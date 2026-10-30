@@ -5,7 +5,7 @@ repositories for technical SEO and GEO/AEO (AI search) issues against a **source
 base**, researches competitors, and applies **safe, verified code fixes with one-command rollback**.
 It ships as a standalone CLI and as a Claude Code plugin.
 
-> Status: **v0.2.0 (early)**. The engine, rule base, CLI and plugin are tested (160 automated tests, CI on Linux/macOS/Windows,
+> Status: **v0.3.0 (early)**. The engine, rule base, CLI and plugin are tested (187 automated tests incl. Playwright rendering, CI on Linux/macOS/Windows,
 > real-site and real-repository validation — see [docs/quality.md](docs/quality.md)). Expect rough
 > edges; read [Limitations](#limitations) before relying on it.
 
@@ -71,6 +71,9 @@ searvex rollback <changeId> ./my-site
 # GEO / AI-search readiness
 searvex geo https://example.com
 
+# Brand family / product ecosystem across related sites
+searvex ecosystem https://company.example https://product-a.example https://product-b.example
+
 # Competitor & content-gap research (competitors are passed explicitly)
 searvex research https://example.com --competitor https://rival-a.com --competitor https://rival-b.com
 
@@ -100,12 +103,13 @@ Without them, Searvex reports these metrics as **not measured** — it never est
 
 ## What it checks
 
-84 rules across crawlability, indexability, canonicalisation, international (hreflang), metadata,
+86 rules across crawlability, indexability, canonicalisation, international (hreflang), metadata,
 structured data (Google rich-result requirements), performance, security, links, content and GEO.
 Examples: robots.txt failures and AI crawler access, redirect chains and loops, noindex/sitemap
 conflicts, canonical conflicts (including canonicals pushed into `<body>` by invalid head markup),
 hreflang reciprocity and codes, soft 404s, client-side-only rendering, duplicate and near-duplicate
-content, retired rich-result types (FAQ, HowTo), entity consistency.
+content (template-aware), retired rich-result types (FAQ, HowTo), entity consistency, declared vs actual
+content language, untranslated headings on localized pages.
 
 Each rule records the engines it applies to (Google, Bing, Yandex, AI systems), the official source
 URLs with check dates, how to fix and how to verify — see [docs/knowledge-base.md](docs/knowledge-base.md).

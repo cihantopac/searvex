@@ -11,6 +11,7 @@ Exit codes: `0` success · `1` `--fail-on` threshold met, optimize verification 
 | Command | Description |
 |---|---|
 | `run <url> [path]` | Full workflow in order with one crawl: 1 website audit · 2 GEO · 3 change since previous run · 4 competitor research (`--competitor`) · 5 repository audit · 6 fix plan (dry run, never applied). Writes `summary.md/json` and `plan.patch`. Missing inputs skip their steps. |
+| `ecosystem <url> <url>…` | Brand-family analysis across 2–20 related sites (crawled in parallel, `--max-pages` per site, default 60): entity graph, cross-links, topic overlap, family-wide issues, language coverage. `--reuse` analyses the latest stored run of each site instead of crawling. Writes `ecosystem.md/json`. |
 | `audit <url\|path>` | Website audit (URL) or repository audit (path). Writes reports to `.searvex/runs/<runId>/`. |
 | `geo <url>` | GEO/AI-search readiness summary (default 50 pages). |
 | `research <url> [--competitor <url>…]` | Target profile, competitor profiles (max 10), topic/page-type gaps (default 150 pages per site). |
@@ -45,6 +46,7 @@ Exit codes: `0` success · `1` `--fail-on` threshold met, optimize verification 
 | `--apply`, `--yes` | — | Optimize: write changes / skip confirmation |
 | `--competitor <url>` | — | Research: competitor site (repeatable) |
 | `--import <csv>` | — | Monitor: Search Console Performance export |
+| `--reuse` | — | Ecosystem: use stored runs instead of crawling |
 | `--json` | — | Print JSON to stdout |
 | `-q, --quiet` | — | Less output |
 

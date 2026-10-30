@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Searvex 0.2.0 — Apache-2.0 — https://github.com/cihantopac/searvex
+// Searvex 0.3.0 — Apache-2.0 — https://github.com/cihantopac/searvex
 import { createRequire as __searvexCreateRequire } from 'node:module';
 const require = __searvexCreateRequire(import.meta.url);
 var __create = Object.create;
@@ -930,7 +930,7 @@ var init_fetcher = __esm({
   "src/net/fetcher.ts"() {
     "use strict";
     init_ssrf();
-    SEARVEX_VERSION = "0.2.0";
+    SEARVEX_VERSION = "0.3.0";
     DEFAULT_USER_AGENT = `Mozilla/5.0 (compatible; SearvexBot/${SEARVEX_VERSION}; +https://github.com/cihantopac/searvex)`;
     DEFAULTS = {
       timeoutMs: 15e3,
@@ -20469,18 +20469,25 @@ var STOPWORDS = new Set(
 function tokenize(text4) {
   return text4.toLowerCase().replace(/\u0307/g, "").normalize("NFKC").split(/[^\p{L}\p{M}\p{N}]+/u).filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
 }
+function fnv1a(str, seed = 2166136261) {
+  let h = seed >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
 function shingles(words2, k = 5) {
   const s = /* @__PURE__ */ new Set();
-  for (let i = 0; i + k <= words2.length; i++) s.add(words2.slice(i, i + k).join(" "));
+  for (let i = 0; i + k <= words2.length; i++) s.add(fnv1a(words2.slice(i, i + k).join(" ")));
   return s;
 }
 var MINHASH_N = 64;
 function minhash(sh) {
   const sig = new Uint32Array(MINHASH_N).fill(4294967295);
-  for (const s of sh) {
-    const h = crypto2.createHash("md5").update(s).digest();
-    const a = h.readUInt32LE(0);
-    const b = h.readUInt32LE(4) | 1;
+  for (const x of sh) {
+    const a = x >>> 0;
+    const b = Math.imul(x ^ 2654435769, 2246822507) >>> 0 | 1;
     for (let i = 0; i < MINHASH_N; i++) {
       const v = a + Math.imul(i, b) >>> 0;
       if (v < sig[i]) sig[i] = v;
@@ -21663,7 +21670,10 @@ function renderMarkdown(r, opts = {}) {
   if (Object.keys(r.geo.entityNames).length) L.push(`- Declared brand/entity names: ${Object.entries(r.geo.entityNames).map(([n, c]) => `${md(n)} (${c})`).join(", ")}`);
   L.push("");
   L.push("## Site inventory", "");
-  L.push(`Business model (heuristic): **${md(r.inventory.businessModel.label)}**${r.inventory.businessModel.evidence.length ? " \u2014 " + r.inventory.businessModel.evidence.map(md).join("; ") : ""}`, "");
+  const bm = r.inventory.businessModel;
+  L.push(`Business model (heuristic${bm.confidence ? `, ${bm.confidence} confidence` : ""}): **${md(bm.label)}**${bm.evidence.length ? " \u2014 " + bm.evidence.map(md).join("; ") : ""}${bm.alternatives?.length ? ` \xB7 alternatives: ${bm.alternatives.map((a) => `${md(a.label)} (${a.score})`).join(", ")}` : ""}`, "");
+  if (r.inventory.offerings?.length) L.push(`Offerings declared in structured data: ${r.inventory.offerings.slice(0, 10).map((o) => `${md(o.name)} (${o.kind}${o.price !== void 0 ? `, ${md(o.price)} ${md(o.currency ?? "")}`.trimEnd() : ""})`).join(", ")}`, "");
+  if (r.inventory.relations?.length) L.push(`Organisation relations: ${r.inventory.relations.map((x) => `${md(x.from)} \u2192 ${x.relation} \u2192 ${md(x.to)}`).join("; ")}`, "");
   L.push("| Page type | Count |", "|---|---|");
   for (const [t, c] of Object.entries(r.inventory.byType).sort((a, b) => b[1] - a[1])) L.push(`| ${t} | ${c} |`);
   L.push("", `Languages (html lang): ${Object.entries(r.inventory.languages).map(([l, c]) => `${md(l)} (${c})`).join(", ") || "\u2014"}`);

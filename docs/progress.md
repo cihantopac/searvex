@@ -4,7 +4,10 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Current state — 2026-10-30
 
-- Version 0.2.0 (adds `searvex run` / 7-phase `/searvex` workflow); 160 tests passing; lines coverage 87%.
+- Version 0.3.0: ecosystem analysis, structured-data inventory, content-language checks, template-aware
+  duplicates, Playwright rendering tests + CI job; 187 tests; lines coverage 88%; 86 rules.
+- Continuous real-world validation target: a permitted 7-site SaaS product family (owner-authorised). Raw
+  captures stay outside the repository (scratch space); fixtures are anonymised.
 - Plugin updates require a version bump in `.claude-plugin/plugin.json` (installed copies are pinned to that version).
 - Build: `npm run build` (tsc → `dist/`, esbuild → `dist/searvex.mjs`). The bundle is committed for the plugin.
 - Validate: `npm test`, `node bin/searvex rules validate`, `claude plugin validate .`.
@@ -23,6 +26,13 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Session log
 
+### 2026-10-30 — continuous improvement round (v0.3.0)
+- Audited the permitted product family 4 times + 3 ecosystem runs; fixed 12 verified defects (see
+  quality.md, round 2); added ecosystem command, language checks, structured-data inventory, scored business
+  model, renderer hardening (link-local always blocked, popups, resource caps, bounded waits).
+- Next candidates: Search Console OAuth helper and query/page analysis, Bing Webmaster API, keyword-to-page
+  mapping with GSC data, template clustering in reports, source re-verification tool, HTML dashboard.
+
 ### 2026-10-30 — initial build
 - Research: name availability, competitor landscape, Claude Code plugin format, official search-engine
   sources (docs/research/).
@@ -36,7 +46,7 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 | # | Item | Impact | Plan |
 |---|---|---|---|
-| 2 | `--render` (Playwright) untested in CI | JS-site comparison unverified | add CI job + fixtures |
+| 2 | Render tests rely on local fixtures; no real-site render validation round yet | rendered-DOM accuracy on complex sites | run `--render` rounds on permitted sites |
 | 3 | Bing help pages verified only via excerpts; some sources `url-resolved` | rule-text accuracy | manual re-read; source checker |
 | 4 | Framework source checks use regexes (Next.js metadata, Blade, Astro) | edge-case false positives/negatives | move to AST (TypeScript compiler API) for JS/TS |
 | 5 | In-memory analysis | >50k pages heavy | streaming / disk indexes |
@@ -46,4 +56,7 @@ Use this file to resume work after an interrupted session. Newest entries first.
 | 9 | Plugin icon missing (directory warning) | listing only | add 512 px PNG before directory submission |
 | 10 | GSC token must be obtained externally | setup friction | device-flow helper |
 | 11 | Entity/answerability signals are heuristics | could be over-read | keep `info`, documented |
+| 13 | Language detector covers 8 languages, ~30-word minimum | other locales not judged | extend word lists / n-gram model |
+| 14 | Cannibalisation uses title/H1 terms only | misses body-level intent overlap | combine with GSC query data |
+| 15 | Ecosystem topic overlap is term-based | not demand-based | add GSC query overlap when tokens available |
 | 12 | Trademark clearance not done | legal risk | professional search before registering marks/domains |

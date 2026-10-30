@@ -1,6 +1,6 @@
 # Quality criteria, test results & benchmarks
 
-Last updated: 2026-10-30 (v0.1.0). Environment: macOS (Apple M4), Node 22.23.2.
+Last updated: 2026-10-30 (v0.3.0). Environment: macOS (Apple M4), Node 22.23.2; CI: Linux, macOS, Windows × Node 20/22/24 + Playwright job.
 
 ## Criteria (definition of done)
 
@@ -19,7 +19,7 @@ Last updated: 2026-10-30 (v0.1.0). Environment: macOS (Apple M4), Node 22.23.2.
 
 ## Automated tests
 
-`npm test` — 159 tests in 9 files (unit, integration, E2E on the bundled CLI).
+`npm test` — 187 tests in 13 files (unit, integration, Playwright rendering, E2E on the bundled CLI).
 
 | Area | What is tested |
 |---|---|
@@ -33,8 +33,8 @@ Last updated: 2026-10-30 (v0.1.0). Environment: macOS (Apple M4), Node 22.23.2.
 | Rule base | validation, sources, implementation consistency, autofix consistency, myth guards, stale warnings, scoring |
 | Reports | HTML inert embedding of hostile content, Markdown escaping, SARIF structure |
 
-Coverage (v8, `src/**`): **lines 87.0% · statements 81.6% · functions 85.4% · branches 71.1%**.
-Not covered: Playwright renderer (optional dependency), live Search Console API calls.
+Coverage (v8, `src/**`, without the Playwright job): **lines 88.3% · statements 83.7% · functions 87.8% · branches 72.9%**.
+Not covered: live Search Console / CrUX API calls.
 
 ## Real-world validation (2026-10-30)
 
@@ -64,6 +64,33 @@ Claude Code plugin: loaded with `claude --plugin-dir .` (6 skills, 2 agents, ~58
 exposed missing autofix information → now shown in reports and `rules show`, and KB flags are test-locked
 to optimizer capabilities.
 
+## Real-world validation round 2 — permitted SaaS product family (2026-10-30)
+
+Target: a 7-site product family (company site + 6 products: SaaS apps and a publication), Laravel + Inertia
+SSR, Turkish/English. Public crawling was authorised by the owner; raw captures are kept outside this
+repository. Settings: ≤ 60 pages per site, 1 s per-host delay, robots.txt honoured. Four audit rounds
+(r1 → r4) plus three ecosystem runs; each defect below was verified against the live HTML before fixing
+and is covered by an anonymised regression fixture.
+
+| Defect in Searvex (r1) | Evidence | Fix | Effect |
+|---|---|---|---|
+| hreflang checked on non-canonical `?filter` variants | variants canonicalise to the clean URL | only canonical, indexable pages | 129 false hreflang findings → 0 |
+| `/blog?` treated as a different URL from `/blog` | empty query string | normalisation | duplicate records removed |
+| Cloudflare `/cdn-cgi/l/email-protection` reported broken (linked from 53 pages) | 404 by design for non-JS clients | excluded | 4 sites: false high finding → 0 |
+| Outbound link "broken" (503) | site served 503 to HEAD only | GET confirmation | 4 false findings → 0 |
+| Near-duplicates 94–98% on help pages | shared nav/footer and an in-`<main>` category sidebar | main-content extraction + per-section template removal | 42 → 0 and 16 → 0 on two sites; real duplicates still caught (test) |
+| "Entity inconsistent" for product vs parent company | WebSite = product, Organization = parent | per-role comparison, top-level nodes | 7 false findings → 0 |
+| SaaS apps classified as e-commerce | `Offer` inside `SoftwareApplication` | scored classifier | 3/3 corrected; publication now "publisher" |
+| Topic overlap driven by shared footer headings | footer `<h3>` "Product family", "Legal" | headings in site chrome excluded | overlap now reflects content (e.g. two products sharing DNS/domain topics) |
+| Turkish "İlgili" tokenised as "lgili" | combining dot after lowercasing | tokenizer fix | Turkish terms intact |
+| Schema gaps always empty in research | used retired-type findings | real structured-data inventory | gaps computed from JSON-LD/Microdata/RDFa |
+
+Verified issues Searvex now reports for the owner (examples): duplicate `<title>`/meta description on 257
+pages caused by the Inertia head manager (with the framework-specific fix), English pages declaring
+`lang="tr"`, untranslated Turkish H1/H2 on English pages, the parent site not declaring its products in
+structured data while products declare it as parent, a product site without its own Organization node,
+two sites without hreflang while the rest of the family is bilingual.
+
 ## Benchmarks
 
 `npm run build && node scripts/benchmark.mjs <pages> <concurrency>` — synthetic site on localhost
@@ -73,6 +100,8 @@ to optimizer capabilities.
 |---|---|---|---|---|---|
 | 5,000 | 8 | 3.9 s | 1,272 | 0.7 s | 243 MB |
 | 20,000 | 8 | 17.0 s | 1,179 | 3.5 s | 562 MB |
+| 20,000 (v0.3.0: template-aware duplicates, hashed shingles) | 8 | 18.7 s | 1,069 | 3.8 s | 584 MB |
+| 7-site ecosystem, 40 pages each, real network, 1 s/host delay | parallel | 82 s total | — | — | — |
 
 Real sites are bounded by politeness (per-host delay, Crawl-delay), not by Searvex throughput.
 Memory grows ~25 KB/page (stored text capped at 20,000 chars/page).

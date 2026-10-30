@@ -38,19 +38,29 @@ export interface ContentReport {
   exactDuplicates: string[][];
 }
 
-function shingles(words: string[], k = 5): Set<string> {
-  const s = new Set<string>();
-  for (let i = 0; i + k <= words.length; i++) s.add(words.slice(i, i + k).join(' '));
+/** 32-bit FNV-1a; shingles are stored as numbers to keep memory and hashing cheap on large sites. */
+function fnv1a(str: string, seed = 0x811c9dc5): number {
+  let h = seed >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h >>> 0;
+}
+
+function shingles(words: string[], k = 5): Set<number> {
+  const s = new Set<number>();
+  for (let i = 0; i + k <= words.length; i++) s.add(fnv1a(words.slice(i, i + k).join(' ')));
   return s;
 }
 
 const MINHASH_N = 64;
-function minhash(sh: Set<string>): Uint32Array {
+function minhash(sh: Set<number>): Uint32Array {
   const sig = new Uint32Array(MINHASH_N).fill(0xffffffff);
-  for (const s of sh) {
-    const h = crypto.createHash('md5').update(s).digest();
-    const a = h.readUInt32LE(0);
-    const b = h.readUInt32LE(4) | 1;
+  for (const x of sh) {
+    // Two independent hashes derived from the shingle hash give the permutation family a + i·b.
+    const a = x >>> 0;
+    const b = (Math.imul(x ^ 0x9e3779b9, 0x85ebca6b) >>> 0) | 1;
     for (let i = 0; i < MINHASH_N; i++) {
       const v = (a + Math.imul(i, b)) >>> 0;
       if (v < sig[i]!) sig[i] = v;
@@ -59,7 +69,7 @@ function minhash(sh: Set<string>): Uint32Array {
   return sig;
 }
 
-function jaccard(a: Set<string>, b: Set<string>): number {
+function jaccard(a: Set<number>, b: Set<number>): number {
   let inter = 0;
   for (const x of a) if (b.has(x)) inter++;
   return inter / (a.size + b.size - inter || 1);
@@ -127,7 +137,7 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
   // Near-duplicates: MinHash + LSH banding (16 bands × 4 rows), then exact Jaccard on candidates.
   // Template (boilerplate) removal: shingles that recur on a large share of pages — sidebars, category
   // lists, CTAs inside <main> — are dropped before comparing, so pages are judged on unique content.
-  const allSh = new Map<string, Set<string>>();
+  const allSh = new Map<string, Set<number>>();
   for (const { p, f } of pages) {
     // Compare main content only: shared navigation/footer would make short pages look identical.
     const words = f.mainText.toLowerCase().split(/\s+/).filter(Boolean);
@@ -135,13 +145,13 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
   }
   // Templates live per section and language (e.g. a help-centre sidebar on /help/* and another on /en/help/*),
   // so boilerplate frequency is counted within each locale+section group as well as site-wide.
-  const siteDf = new Map<string, number>();
-  const groupDf = new Map<string, Map<string, number>>();
+  const siteDf = new Map<number, number>();
+  const groupDf = new Map<string, Map<number, number>>();
   const groupSize = new Map<string, number>();
   for (const [url, s] of allSh) {
     const g = groupOf(url);
     groupSize.set(g, (groupSize.get(g) ?? 0) + 1);
-    const gm = groupDf.get(g) ?? new Map<string, number>();
+    const gm = groupDf.get(g) ?? new Map<number, number>();
     groupDf.set(g, gm);
     for (const x of s) {
       siteDf.set(x, (siteDf.get(x) ?? 0) + 1);
@@ -149,14 +159,14 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
     }
   }
   const siteMin = Math.max(3, Math.ceil(allSh.size * 0.3));
-  const sh = new Map<string, Set<string>>();
+  const sh = new Map<string, Set<number>>();
   const sigs = new Map<string, Uint32Array>();
   for (const [url, s] of allSh) {
     const g = groupOf(url);
     const gSize = groupSize.get(g) ?? 0;
     const gMin = Math.max(3, Math.ceil(gSize * 0.3));
     const gm = groupDf.get(g)!;
-    const isBoilerplate = (x: string) => (allSh.size >= 5 && (siteDf.get(x) ?? 0) >= siteMin) || (gSize >= 5 && (gm.get(x) ?? 0) >= gMin);
+    const isBoilerplate = (x: number) => (allSh.size >= 5 && (siteDf.get(x) ?? 0) >= siteMin) || (gSize >= 5 && (gm.get(x) ?? 0) >= gMin);
     const unique = new Set([...s].filter((x) => !isBoilerplate(x)));
     // Too little unique text left to compare meaningfully (thin pages are covered by content.low-text).
     if (unique.size < 20) continue;

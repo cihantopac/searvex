@@ -64,6 +64,12 @@ Explain that running `searvex run <url>` again after deployment shows improvemen
 (step 3). For CI, suggest `searvex audit <url> --fail-on high --format sarif`. Search Console data is
 optional and read-only (`SEARVEX_GSC_TOKEN`, or `monitor --import`).
 
+## Related sites (brand family / product ecosystem)
+When the user owns several related sites (a company site plus product sites), also run
+`node "${CLAUDE_PLUGIN_ROOT}/dist/searvex.mjs" ecosystem <url1> <url2> … [--reuse]` and report the entity graph
+(parent/child declarations on both sides), cross-links, topic overlap between same-language sites and
+issues shared across the family. Shared issues usually come from a common template: suggest fixing them once.
+
 ## Running a single step
 Each step can also be run on its own: `/searvex:audit`, `/searvex:geo`, `/searvex:research`,
 `/searvex:optimize`, `/searvex:monitor`.
