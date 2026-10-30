@@ -87,6 +87,11 @@ export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = 
     for (const c of r.content.clusters.slice(0, 15)) L.push(`| /${md(c.key)} | ${c.pages.length} | ${c.terms.map(md).join(', ')} |`);
     L.push('');
   }
+  if (r.content.linkOpportunities?.length) {
+    L.push('Internal-link opportunities (related pages without links between them; heuristic):', '', '| Add a link from | To | Similarity | Shared topics |', '|---|---|---|---|');
+    for (const o of r.content.linkOpportunities.slice(0, 15)) L.push(`| ${md(o.from)} | ${md(o.to)} (${o.toInlinks} inlinks) | ${Math.round(o.similarity * 100)}% | ${o.sharedTerms.slice(0, 5).map(md).join(', ')} |`);
+    L.push('');
+  }
   L.push(`Cannibalisation candidates: ${r.content.cannibalization.length} · near-duplicate pairs: ${r.content.nearDuplicates.length} · exact duplicate groups: ${r.content.exactDuplicates.length}`, '');
 
   const info = r.findings.filter((f) => f.severity === 'info');

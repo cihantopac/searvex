@@ -36,6 +36,8 @@ export interface ContentReport {
   cannibalization: Array<{ terms: string[]; pages: string[] }>;
   nearDuplicates: Array<{ a: string; b: string; similarity: number }>;
   exactDuplicates: string[][];
+  /** Topically related indexable pages that do not link to each other (suggested direction from → to). */
+  linkOpportunities?: Array<{ from: string; to: string; similarity: number; sharedTerms: string[]; toInlinks: number }>;
 }
 
 /** 32-bit FNV-1a; shingles are stored as numbers to keep memory and hashing cheap on large sites. */
@@ -102,9 +104,16 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
   }
   const N = Math.max(1, pages.length);
   const pageTerms: ContentReport['pageTerms'] = [];
+  const vectors = new Map<string, Map<string, number>>();
   for (const [url, tf] of docTerms) {
     const scored = [...tf.entries()].map(([t, c]) => [t, c * Math.log(1 + N / (df.get(t) ?? 1))] as const).sort((a, b) => b[1] - a[1]);
     pageTerms.push({ url, terms: scored.slice(0, 8).map(([t]) => t) });
+    // Topic vector: top 20 TF-IDF terms, excluding terms present on more than 30% of pages (site vocabulary).
+    vectors.set(url, new Map(scored.filter(([t]) => (df.get(t) ?? 0) <= Math.max(3, N * 0.3)).slice(0, 20)));
+  }
+  const linkOpportunities = findLinkOpportunities(ctx, vectors);
+  if (linkOpportunities.length) {
+    sink.emit('links.internal-opportunity', linkOpportunities.slice(0, 50).map((o) => ({ url: o.to, observed: `link from ${o.from} (topic similarity ${Math.round(o.similarity * 100)}%: ${o.sharedTerms.slice(0, 4).join(', ')}); target has ${o.toInlinks} internal inlink(s)` })));
   }
   const topTerms = [...df.entries()]
     .filter(([, c]) => c >= Math.min(2, N) && c <= Math.max(2, N * 0.8))
@@ -280,5 +289,55 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
     })
     .sort((a, b) => b.pages.length - a.pages.length);
 
-  return { topTerms, pageTerms, clusters, cannibalization, nearDuplicates, exactDuplicates };
+  return { topTerms, pageTerms, clusters, cannibalization, nearDuplicates, exactDuplicates, linkOpportunities: linkOpportunities.slice(0, 200) };
+}
+
+/**
+ * Internal-linking opportunities: pairs of indexable pages with similar topic vectors (cosine ≥ 0.3, ≥ 2
+ * shared terms) and no link in either direction. Direction: from the better-linked page to the weaker one.
+ * Each target gets at most 3 suggestions; near-identical pairs (similarity > 0.9) are left to duplicate checks.
+ */
+export function findLinkOpportunities(ctx: SiteContext, vectors: Map<string, Map<string, number>>): NonNullable<ContentReport['linkOpportunities']> {
+  const norm = new Map<string, number>();
+  for (const [u, v] of vectors) norm.set(u, Math.sqrt([...v.values()].reduce((a, x) => a + x * x, 0)) || 1);
+  const index = new Map<string, string[]>();
+  for (const [u, v] of vectors) for (const t of v.keys()) (index.get(t) ?? index.set(t, []).get(t)!).push(u);
+  const outlinks = new Map<string, Set<string>>();
+  for (const [target, sources] of ctx.inlinks) for (const s of sources) (outlinks.get(s) ?? outlinks.set(s, new Set()).get(s)!).add(target);
+  const links = (a: string, b: string) => outlinks.get(a)?.has(b) || outlinks.get(b)?.has(a);
+  const inl = (u: string) => ctx.inlinks.get(u)?.size ?? 0;
+  const seen = new Set<string>();
+  const out: NonNullable<ContentReport['linkOpportunities']> = [];
+  for (const urls of index.values()) {
+    if (urls.length > 200) continue;
+    for (let i = 0; i < urls.length; i++)
+      for (let j = i + 1; j < urls.length; j++) {
+        const a = urls[i]!, b = urls[j]!;
+        const key = a < b ? a + '|' + b : b + '|' + a;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const va = vectors.get(a)!, vb = vectors.get(b)!;
+        let dot = 0;
+        const shared: string[] = [];
+        for (const [t, w] of va) {
+          const w2 = vb.get(t);
+          if (w2 !== undefined) {
+            dot += w * w2;
+            shared.push(t);
+          }
+        }
+        const sim = dot / (norm.get(a)! * norm.get(b)!);
+        if (shared.length < 2 || sim < 0.3 || sim > 0.9 || links(a, b)) continue;
+        const [from, to] = inl(a) >= inl(b) ? [a, b] : [b, a];
+        out.push({ from, to, similarity: Math.round(sim * 100) / 100, sharedTerms: shared.slice(0, 6), toInlinks: inl(to) });
+      }
+  }
+  out.sort((x, y) => x.toInlinks - y.toInlinks || y.similarity - x.similarity);
+  const perTarget = new Map<string, number>();
+  return out.filter((o) => {
+    const n = perTarget.get(o.to) ?? 0;
+    if (n >= 3) return false;
+    perTarget.set(o.to, n + 1);
+    return true;
+  });
 }

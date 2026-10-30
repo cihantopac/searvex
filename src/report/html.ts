@@ -97,6 +97,7 @@ inv.appendChild(table(['URL','Type','Basis','Lang','Indexable','Depth','Inlinks'
 var ct=document.getElementById('p-content');
 ct.appendChild(el('p',{text:'Site-wide terms: '+R.content.topTerms.slice(0,30).map(function(t){return t.term}).join(', ')}));
 ct.appendChild(el('h2',{text:'Sections'}));ct.appendChild(table(['Section','Pages','Dominant terms'],R.content.clusters.slice(0,30).map(function(c){return['/'+c.key,c.pages.length,c.terms.join(', ')]})));
+if((R.content.linkOpportunities||[]).length){ct.appendChild(el('h2',{text:'Internal-link opportunities (heuristic)'}));ct.appendChild(table(['Add a link from','To','Similarity','Shared topics'],R.content.linkOpportunities.slice(0,50).map(function(o){return[o.from,o.to+' ('+o.toInlinks+' inlinks)',Math.round(o.similarity*100)+'%',o.sharedTerms.slice(0,5).join(', ')]})));}
 ct.appendChild(el('h2',{text:'Cannibalisation candidates (verify with Search Console)'}));ct.appendChild(table(['Shared terms','Pages'],R.content.cannibalization.slice(0,50).map(function(c){return[c.terms.join(' '),c.pages.join('\\n')]})));
 ct.appendChild(el('h2',{text:'Near-duplicates'}));ct.appendChild(table(['Page A','Page B','Similarity'],R.content.nearDuplicates.slice(0,50).map(function(d){return[d.a,d.b,Math.round(d.similarity*100)+'%']})));
 var lim=document.getElementById('p-limits');

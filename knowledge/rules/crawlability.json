@@ -538,6 +538,29 @@
         }
       ],
       "status": "active"
+    },
+    {
+      "id": "links.internal-opportunity",
+      "title": "Related pages that do not link to each other",
+      "category": "links",
+      "severity": "low",
+      "confidence": "heuristic",
+      "engines": [
+        "all"
+      ],
+      "description": "Pages with strongly overlapping topics (TF-IDF similarity of their main content) have no internal link in either direction. Internal links help search engines discover pages and understand how they relate; the less-linked page benefits most.",
+      "fix": "Add a contextual link with descriptive anchor text from the suggested source page to the target where it helps readers.",
+      "verify": "Re-crawl; the pair should be linked.",
+      "exceptions": "Translations, legal pages and intentionally separate audiences can be similar without needing links.",
+      "sources": [
+        {
+          "title": "Google: Link best practices",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
     }
   ]
 }

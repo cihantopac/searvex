@@ -184,6 +184,32 @@ describe('real-world regression fixtures (anonymised)', () => {
   });
 });
 
+describe('internal-link opportunities', () => {
+  it('suggests links between related pages that do not link to each other, from the stronger page', async () => {
+    const espresso = (extra: string) => `<main><p>${('Espresso extraction depends on grind size, dose, water temperature and tamping pressure; ' + extra + ' ').repeat(6)}</p></main>`;
+    const routes: Record<string, Route> = {
+      '/': { body: page({ title: 'Home', body: '<a href="/grind">Grind</a><a href="/dose">Dose</a><a href="/tamping">Tamping</a><a href="/shipping">Shipping</a>' }) },
+      '/grind': { body: page({ title: 'Grind size guide', body: `<a href="/dose">dose</a>${espresso('burr grinders matter for espresso grind consistency')}` }) },
+      '/dose': { body: page({ title: 'Espresso dose', body: `<a href="/grind">grind</a>${espresso('a basket dose between eighteen and twenty grams')}` }) },
+      '/tamping': { body: page({ title: 'Tamping pressure', body: espresso('tamping evenly prevents channeling during extraction') }) },
+      '/shipping': { body: page({ title: 'Shipping', body: `<main><p>${'Orders ship within two business days by courier with tracking and insurance included. '.repeat(6)}</p></main>` }) },
+    };
+    const s = await startServer(routes);
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-links-'));
+    try {
+      const { report } = await auditWebsite(s.url + '/', { workspace: ws, crawl: { policy, delayMs: 0, useSitemaps: false }, probes: false });
+      const ops = (report.content.linkOpportunities ?? []).map((o) => `${new URL(o.from).pathname}->${new URL(o.to).pathname}`);
+      expect(ops).toEqual(expect.arrayContaining(['/grind->/tamping', '/dose->/tamping']));
+      expect(ops.some((o) => o.includes('/shipping'))).toBe(false);
+      expect(ops).not.toContain('/grind->/dose'); // already linked
+      expect(report.findings.find((f) => f.ruleId === 'links.internal-opportunity')?.confidence).toBe('heuristic');
+    } finally {
+      await s.close();
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('faceted navigation and pagination', () => {
   it('detects filter-parameter explosions and page-2 canonicals to page 1, but not plain pagination', async () => {
     const colors = ['red', 'blue', 'green', 'black', 'white'];

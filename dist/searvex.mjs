@@ -20622,9 +20622,15 @@ function runContentChecks(ctx, sink) {
   }
   const N = Math.max(1, pages.length);
   const pageTerms = [];
+  const vectors = /* @__PURE__ */ new Map();
   for (const [url, tf] of docTerms) {
     const scored = [...tf.entries()].map(([t, c]) => [t, c * Math.log(1 + N / (df.get(t) ?? 1))]).sort((a, b) => b[1] - a[1]);
     pageTerms.push({ url, terms: scored.slice(0, 8).map(([t]) => t) });
+    vectors.set(url, new Map(scored.filter(([t]) => (df.get(t) ?? 0) <= Math.max(3, N * 0.3)).slice(0, 20)));
+  }
+  const linkOpportunities = findLinkOpportunities(ctx, vectors);
+  if (linkOpportunities.length) {
+    sink.emit("links.internal-opportunity", linkOpportunities.slice(0, 50).map((o) => ({ url: o.to, observed: `link from ${o.from} (topic similarity ${Math.round(o.similarity * 100)}%: ${o.sharedTerms.slice(0, 4).join(", ")}); target has ${o.toInlinks} internal inlink(s)` })));
   }
   const topTerms = [...df.entries()].filter(([, c]) => c >= Math.min(2, N) && c <= Math.max(2, N * 0.8)).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([term, n]) => ({ term, pages: n }));
   const utility = /\/(contact|login|signin|sign-in|register|signup|cart|checkout|account|search|404|privacy|terms|legal|cookie|impressum|iletisim|giris)(\/|$|\?)/i;
@@ -20770,7 +20776,51 @@ function runContentChecks(ctx, sink) {
     for (const u of urls) for (const t of pageTerms.find((x) => x.url === u)?.terms ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
     return { key, pages: urls, terms: [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([t]) => t) };
   }).sort((a, b) => b.pages.length - a.pages.length);
-  return { topTerms, pageTerms, clusters, cannibalization, nearDuplicates, exactDuplicates };
+  return { topTerms, pageTerms, clusters, cannibalization, nearDuplicates, exactDuplicates, linkOpportunities: linkOpportunities.slice(0, 200) };
+}
+function findLinkOpportunities(ctx, vectors) {
+  const norm2 = /* @__PURE__ */ new Map();
+  for (const [u, v] of vectors) norm2.set(u, Math.sqrt([...v.values()].reduce((a, x) => a + x * x, 0)) || 1);
+  const index2 = /* @__PURE__ */ new Map();
+  for (const [u, v] of vectors) for (const t of v.keys()) (index2.get(t) ?? index2.set(t, []).get(t)).push(u);
+  const outlinks = /* @__PURE__ */ new Map();
+  for (const [target, sources] of ctx.inlinks) for (const s of sources) (outlinks.get(s) ?? outlinks.set(s, /* @__PURE__ */ new Set()).get(s)).add(target);
+  const links = (a, b) => outlinks.get(a)?.has(b) || outlinks.get(b)?.has(a);
+  const inl = (u) => ctx.inlinks.get(u)?.size ?? 0;
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const urls of index2.values()) {
+    if (urls.length > 200) continue;
+    for (let i = 0; i < urls.length; i++)
+      for (let j = i + 1; j < urls.length; j++) {
+        const a = urls[i], b = urls[j];
+        const key = a < b ? a + "|" + b : b + "|" + a;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const va = vectors.get(a), vb = vectors.get(b);
+        let dot = 0;
+        const shared = [];
+        for (const [t, w] of va) {
+          const w2 = vb.get(t);
+          if (w2 !== void 0) {
+            dot += w * w2;
+            shared.push(t);
+          }
+        }
+        const sim = dot / (norm2.get(a) * norm2.get(b));
+        if (shared.length < 2 || sim < 0.3 || sim > 0.9 || links(a, b)) continue;
+        const [from, to] = inl(a) >= inl(b) ? [a, b] : [b, a];
+        out.push({ from, to, similarity: Math.round(sim * 100) / 100, sharedTerms: shared.slice(0, 6), toInlinks: inl(to) });
+      }
+  }
+  out.sort((x, y) => x.toInlinks - y.toInlinks || y.similarity - x.similarity);
+  const perTarget = /* @__PURE__ */ new Map();
+  return out.filter((o) => {
+    const n = perTarget.get(o.to) ?? 0;
+    if (n >= 3) return false;
+    perTarget.set(o.to, n + 1);
+    return true;
+  });
 }
 
 // src/analyze/geo.ts
@@ -21386,6 +21436,7 @@ function runTechnicalChecks(ctx, sink) {
       sink.emit("links.broken-internal", { url: target, observed: `HTTP ${rec.status}, linked from ${sources.size} page(s): ${[...sources].slice(0, 3).join(", ")}` });
     }
   }
+  checkFacetsAndPagination(ctx, sink);
   for (const u of ctx.sitemapUrls) {
     const rec = ctx.byUrl.get(u);
     if (!rec || rec.status !== 200 || u === crawl2.startUrl) continue;
@@ -21438,6 +21489,49 @@ function checkHreflang(ctx, url, f, sink) {
   if (!hasDefault) sink.emit("hreflang.no-x-default", { url });
   const relative = f.hreflangRaw.find((h) => !/^https?:\/\//i.test(h));
   if (relative) sink.emit("hreflang.relative", { url, observed: relative });
+}
+var PAGE_PARAM = /^(page|p|pg|paged|sayfa|seite|pagina)$/i;
+function pageNumber(url) {
+  const u = new URL(url);
+  for (const [k, v] of u.searchParams) if (PAGE_PARAM.test(k) && /^\d+$/.test(v)) return Number(v);
+  const m = /\/(?:page|sayfa|seite)\/(\d+)\/?$/i.exec(u.pathname);
+  return m ? Number(m[1]) : null;
+}
+function checkFacetsAndPagination(ctx, sink) {
+  const variants = /* @__PURE__ */ new Map();
+  for (const target of /* @__PURE__ */ new Set([...ctx.inlinks.keys(), ...ctx.pages.map((p) => p.url)])) {
+    const u = new URL(target);
+    if (!u.search) continue;
+    const params = [...u.searchParams.keys()].filter((k) => !PAGE_PARAM.test(k));
+    if (!params.length) continue;
+    const key = u.origin + u.pathname;
+    (variants.get(key) ?? variants.set(key, /* @__PURE__ */ new Set()).get(key)).add(u.search);
+  }
+  for (const [path19, set] of variants) {
+    if (set.size < 10) continue;
+    const paramCount = /* @__PURE__ */ new Map();
+    for (const q of set) for (const k of new URLSearchParams(q).keys()) if (!PAGE_PARAM.test(k)) paramCount.set(k, (paramCount.get(k) ?? 0) + 1);
+    const crawled = ctx.pages.filter((p) => p.url.startsWith(path19 + "?"));
+    const blocked = crawled.filter((p) => p.blockedByRobots).length;
+    const canonicalised = crawled.filter((p) => {
+      const f = factsOf(p);
+      return f?.canonical && normalizeUrl(f.canonical) !== normalizeUrl(p.finalUrl);
+    }).length;
+    const params = [...paramCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => `${k} (${n})`).join(", ");
+    sink.emit("crawl.facet-explosion", {
+      url: path19,
+      observed: `${set.size} parameter variants linked internally; parameters: ${params}; of ${crawled.length} crawled variants, ${blocked} robots-blocked, ${canonicalised} canonicalised elsewhere`
+    });
+  }
+  for (const p of ctx.htmlPages) {
+    const n = pageNumber(p.finalUrl);
+    if (!n || n < 2) continue;
+    const canon = factsOf(p)?.canonical;
+    if (!canon) continue;
+    const cn = pageNumber(canon);
+    const sameSeries = new URL(canon).pathname.replace(/\/(?:page|sayfa|seite)\/\d+\/?$/i, "/").replace(/\/$/, "") === new URL(p.finalUrl).pathname.replace(/\/(?:page|sayfa|seite)\/\d+\/?$/i, "/").replace(/\/$/, "");
+    if (sameSeries && (cn === null || cn === 1)) sink.emit("pagination.canonical-to-first", { url: p.url, observed: `page ${n} \u2192 canonical ${canon}` });
+  }
 }
 
 // src/analyze/priority.ts
@@ -21807,6 +21901,7 @@ inv.appendChild(table(['URL','Type','Basis','Lang','Indexable','Depth','Inlinks'
 var ct=document.getElementById('p-content');
 ct.appendChild(el('p',{text:'Site-wide terms: '+R.content.topTerms.slice(0,30).map(function(t){return t.term}).join(', ')}));
 ct.appendChild(el('h2',{text:'Sections'}));ct.appendChild(table(['Section','Pages','Dominant terms'],R.content.clusters.slice(0,30).map(function(c){return['/'+c.key,c.pages.length,c.terms.join(', ')]})));
+if((R.content.linkOpportunities||[]).length){ct.appendChild(el('h2',{text:'Internal-link opportunities (heuristic)'}));ct.appendChild(table(['Add a link from','To','Similarity','Shared topics'],R.content.linkOpportunities.slice(0,50).map(function(o){return[o.from,o.to+' ('+o.toInlinks+' inlinks)',Math.round(o.similarity*100)+'%',o.sharedTerms.slice(0,5).join(', ')]})));}
 ct.appendChild(el('h2',{text:'Cannibalisation candidates (verify with Search Console)'}));ct.appendChild(table(['Shared terms','Pages'],R.content.cannibalization.slice(0,50).map(function(c){return[c.terms.join(' '),c.pages.join('\\n')]})));
 ct.appendChild(el('h2',{text:'Near-duplicates'}));ct.appendChild(table(['Page A','Page B','Similarity'],R.content.nearDuplicates.slice(0,50).map(function(d){return[d.a,d.b,Math.round(d.similarity*100)+'%']})));
 var lim=document.getElementById('p-limits');
@@ -21893,6 +21988,11 @@ function renderMarkdown(r, opts = {}) {
   if (r.content.clusters.length) {
     L.push("| Section | Pages | Dominant terms |", "|---|---|---|");
     for (const c of r.content.clusters.slice(0, 15)) L.push(`| /${md(c.key)} | ${c.pages.length} | ${c.terms.map(md).join(", ")} |`);
+    L.push("");
+  }
+  if (r.content.linkOpportunities?.length) {
+    L.push("Internal-link opportunities (related pages without links between them; heuristic):", "", "| Add a link from | To | Similarity | Shared topics |", "|---|---|---|---|");
+    for (const o of r.content.linkOpportunities.slice(0, 15)) L.push(`| ${md(o.from)} | ${md(o.to)} (${o.toInlinks} inlinks) | ${Math.round(o.similarity * 100)}% | ${o.sharedTerms.slice(0, 5).map(md).join(", ")} |`);
     L.push("");
   }
   L.push(`Cannibalisation candidates: ${r.content.cannibalization.length} \xB7 near-duplicate pairs: ${r.content.nearDuplicates.length} \xB7 exact duplicate groups: ${r.content.exactDuplicates.length}`, "");
@@ -22050,12 +22150,15 @@ var IMPLEMENTED_RULES = /* @__PURE__ */ new Set([
   "links.broken-external",
   "links.uncrawlable",
   "links.empty-anchor",
+  "links.internal-opportunity",
   "redirect.chain",
   "redirect.loop",
   "redirect.temporary-internal",
   "redirect.meta-refresh",
   "crawl.deep-pages",
   "crawl.sitemap-orphan",
+  "crawl.facet-explosion",
+  "pagination.canonical-to-first",
   // indexability
   "index.noindex-in-sitemap",
   "index.noindex",
