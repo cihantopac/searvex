@@ -1,0 +1,306 @@
+{
+  "version": "2026.10.30",
+  "updated": "2026-10-30",
+  "rules": [
+    {
+      "id": "canonical.missing",
+      "title": "No rel=canonical on indexable page",
+      "category": "canonicalization",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "bing"
+      ],
+      "description": "The page has no rel=canonical. Search engines pick a canonical themselves; explicit canonicals help consolidate duplicates (parameters, tracking, http/https, www).",
+      "fix": "Add <link rel=\"canonical\" href=\"https://absolute-url\"> pointing to the preferred URL (self-referential on unique pages).",
+      "verify": "Inspect page head.",
+      "sources": [
+        {
+          "title": "Google: How to specify a canonical URL",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Bing: Does duplicate content hurt SEO and AI search visibility (2025)",
+          "url": "https://blogs.bing.com/webmaster/December-2025/Does-Duplicate-Content-Hurt-SEO-and-AI-Search-Visibility",
+          "checked": "2026-10-30",
+          "level": "excerpt"
+        }
+      ],
+      "status": "active",
+      "autofix": true
+    },
+    {
+      "id": "canonical.multiple",
+      "title": "Multiple rel=canonical declarations",
+      "category": "canonicalization",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "More than one rel=canonical is declared. Google may ignore all of them when they conflict.",
+      "fix": "Keep exactly one rel=canonical (check templates, SEO plugins and JS that inject a second one).",
+      "verify": "Inspect raw and rendered head.",
+      "sources": [
+        {
+          "title": "Google: How to specify a canonical URL",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active",
+      "autofix": true
+    },
+    {
+      "id": "canonical.relative",
+      "title": "Relative canonical URL",
+      "category": "canonicalization",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "rel=canonical uses a relative URL. Google supports it but recommends absolute URLs to avoid errors.",
+      "fix": "Use a fully-qualified absolute URL (https://example.com/page).",
+      "verify": "Inspect page head.",
+      "sources": [
+        {
+          "title": "Google: How to specify a canonical URL",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active",
+      "autofix": true
+    },
+    {
+      "id": "canonical.target-error",
+      "title": "Canonical points to a non-200 URL",
+      "category": "canonicalization",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "bing"
+      ],
+      "description": "The canonical target redirects or returns an error. Canonicals should point to a live, indexable 200 URL.",
+      "fix": "Point the canonical to the final 200 URL.",
+      "verify": "Fetch the canonical target and confirm 200.",
+      "sources": [
+        {
+          "title": "Google: How to specify a canonical URL",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: What is URL canonicalization",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "canonical.target-noindex",
+      "title": "Canonical points to a noindex page",
+      "category": "canonicalization",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "The canonical target carries noindex — conflicting signals (consolidate here, but do not index).",
+      "fix": "Point the canonical to an indexable page or remove noindex from the target.",
+      "verify": "Inspect canonical target directives.",
+      "sources": [
+        {
+          "title": "Google: How to specify a canonical URL",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Block Search indexing with noindex",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "canonical.cross-domain",
+      "title": "Canonical points to another domain",
+      "category": "canonicalization",
+      "severity": "info",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Cross-domain canonicals are supported (e.g. syndicated content) but transfer consolidation away from this site. Listed for review.",
+      "fix": "Confirm the cross-domain canonical is intentional.",
+      "verify": "Review canonical targets.",
+      "sources": [
+        {
+          "title": "Google: How to specify a canonical URL",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "canonical.noindex-conflict",
+      "title": "noindex used together with a canonical to another URL",
+      "category": "canonicalization",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "The page has noindex and a canonical pointing elsewhere. Google does not recommend noindex for canonicalisation.",
+      "fix": "Use rel=canonical (or a redirect) alone for duplicates.",
+      "verify": "Inspect page head.",
+      "sources": [
+        {
+          "title": "Google: How to specify a canonical URL",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "duplicate.title",
+      "title": "Duplicate titles across pages",
+      "category": "metadata",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Several indexable pages share the same <title>. Google recommends unique, descriptive titles per page.",
+      "fix": "Write a distinct title for each page that reflects its specific content.",
+      "verify": "Re-crawl and confirm titles are unique.",
+      "sources": [
+        {
+          "title": "Google: Influencing title links",
+          "url": "https://developers.google.com/search/docs/appearance/title-link",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "duplicate.description",
+      "title": "Duplicate meta descriptions across pages",
+      "category": "metadata",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Several indexable pages share the same meta description. Google recommends unique descriptions per page.",
+      "fix": "Write distinct descriptions summarising each page, or omit it where it cannot be unique.",
+      "verify": "Re-crawl and compare descriptions.",
+      "sources": [
+        {
+          "title": "Google: Control your snippets",
+          "url": "https://developers.google.com/search/docs/appearance/snippet",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "duplicate.content",
+      "title": "Duplicate page content without canonical consolidation",
+      "category": "canonicalization",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "bing"
+      ],
+      "description": "Multiple URLs serve identical main text and do not canonicalise to a single URL. Search engines must choose a canonical themselves, splitting signals.",
+      "fix": "Redirect duplicates or add rel=canonical to the preferred URL.",
+      "verify": "Re-crawl; duplicates should canonicalise to one URL.",
+      "sources": [
+        {
+          "title": "Google: How to specify a canonical URL",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Bing: Does duplicate content hurt SEO and AI search visibility (2025)",
+          "url": "https://blogs.bing.com/webmaster/December-2025/Does-Duplicate-Content-Hurt-SEO-and-AI-Search-Visibility",
+          "checked": "2026-10-30",
+          "level": "excerpt"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "canonical.http-https",
+      "title": "HTTP version does not redirect to HTTPS",
+      "category": "security",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "The http:// version of the site responds without redirecting to https://, creating duplicate versions. Google prefers HTTPS URLs as canonical.",
+      "fix": "Redirect all http:// URLs to https:// with 301/308.",
+      "verify": "Fetch http:// homepage and confirm a permanent redirect to https://.",
+      "sources": [
+        {
+          "title": "Google: What is URL canonicalization",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        },
+        {
+          "title": "Google: Understanding page experience",
+          "url": "https://developers.google.com/search/docs/appearance/page-experience",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "canonical.www-duplicate",
+      "title": "www and non-www both serve content",
+      "category": "canonicalization",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Both the www and non-www host return 200 without redirecting to one preferred host.",
+      "fix": "Pick one host and 301-redirect the other.",
+      "verify": "Fetch both hosts and confirm one redirects.",
+      "sources": [
+        {
+          "title": "Google: What is URL canonicalization",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active"
+    }
+  ]
+}

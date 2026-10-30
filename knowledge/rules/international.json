@@ -1,0 +1,190 @@
+{
+  "version": "2026.10.30",
+  "updated": "2026-10-30",
+  "rules": [
+    {
+      "id": "hreflang.invalid-code",
+      "title": "Invalid hreflang value",
+      "category": "international",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "yandex"
+      ],
+      "description": "hreflang values must be ISO 639-1 language codes, optionally followed by an ISO 3166-1 alpha-2 region (e.g. en, en-GB), or x-default. Invalid values are ignored.",
+      "fix": "Correct the code (e.g. \"en-UK\" → \"en-GB\", \"jp\" → \"ja\").",
+      "verify": "Re-crawl and validate hreflang values.",
+      "sources": [
+        {
+          "title": "Google: Localized versions of your pages",
+          "url": "https://developers.google.com/search/docs/specialty/international/localized-versions",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Yandex: Locale (hreflang) pages",
+          "url": "https://yandex.com/support/webmaster/en/yandex-indexing/locale-pages",
+          "checked": "2026-10-30",
+          "level": "excerpt"
+        }
+      ],
+      "status": "active",
+      "autofix": true
+    },
+    {
+      "id": "hreflang.missing-return",
+      "title": "hreflang without return link",
+      "category": "international",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Page A lists page B as an alternate, but B does not link back to A. Google ignores non-reciprocal hreflang annotations.",
+      "fix": "Add the reciprocal hreflang link on every alternate page.",
+      "verify": "Re-crawl and check reciprocity.",
+      "sources": [
+        {
+          "title": "Google: Localized versions of your pages",
+          "url": "https://developers.google.com/search/docs/specialty/international/localized-versions",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "hreflang.missing-self",
+      "title": "hreflang set without self-reference",
+      "category": "international",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "The page declares hreflang alternates but does not include itself. Each language version should list itself and all alternates.",
+      "fix": "Add a self-referencing hreflang entry.",
+      "verify": "Inspect hreflang set.",
+      "sources": [
+        {
+          "title": "Google: Localized versions of your pages",
+          "url": "https://developers.google.com/search/docs/specialty/international/localized-versions",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active",
+      "autofix": true
+    },
+    {
+      "id": "hreflang.target-error",
+      "title": "hreflang points to a non-200 or non-canonical URL",
+      "category": "international",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "hreflang alternates should be canonical, indexable 200 URLs; redirects and errors break the cluster.",
+      "fix": "Point alternates at the final canonical URLs.",
+      "verify": "Fetch alternates and confirm 200 + self-canonical.",
+      "sources": [
+        {
+          "title": "Google: Localized versions of your pages",
+          "url": "https://developers.google.com/search/docs/specialty/international/localized-versions",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: How to specify a canonical URL",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "hreflang.relative",
+      "title": "hreflang uses relative URLs",
+      "category": "international",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Google requires fully-qualified URLs (including scheme) in hreflang annotations.",
+      "fix": "Use absolute URLs in hreflang links.",
+      "verify": "Inspect raw head.",
+      "sources": [
+        {
+          "title": "Google: Localized versions of your pages",
+          "url": "https://developers.google.com/search/docs/specialty/international/localized-versions",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active",
+      "autofix": true
+    },
+    {
+      "id": "hreflang.no-x-default",
+      "title": "hreflang cluster without x-default",
+      "category": "international",
+      "severity": "info",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "yandex"
+      ],
+      "description": "x-default designates the fallback page for unmatched languages. Optional but recommended for language selectors / global pages.",
+      "fix": "Add hreflang=\"x-default\" pointing to the fallback page.",
+      "verify": "Inspect hreflang set.",
+      "sources": [
+        {
+          "title": "Google: Localized versions of your pages",
+          "url": "https://developers.google.com/search/docs/specialty/international/localized-versions",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Yandex: Locale (hreflang) pages",
+          "url": "https://yandex.com/support/webmaster/en/yandex-indexing/locale-pages",
+          "checked": "2026-10-30",
+          "level": "excerpt"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "html.lang-missing",
+      "title": "Missing html lang attribute",
+      "category": "accessibility",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": [
+        "bing"
+      ],
+      "description": "The <html> element has no lang attribute. W3C recommends declaring the language for accessibility (screen readers, translation). Google does not use it for language detection; Bing uses language signals.",
+      "fix": "Add lang=\"xx\" to the <html> element.",
+      "verify": "Inspect the html element.",
+      "sources": [
+        {
+          "title": "W3C: Declaring language in HTML",
+          "url": "https://www.w3.org/International/questions/qa-html-language-declarations",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        },
+        {
+          "title": "Google: Localized versions of your pages",
+          "url": "https://developers.google.com/search/docs/specialty/international/localized-versions",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active",
+      "autofix": true
+    }
+  ]
+}

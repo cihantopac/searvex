@@ -1,0 +1,81 @@
+import type { AuditReport } from '../analyze/audit.js';
+import type { Severity } from '../core/types.js';
+
+const ICON: Record<Severity, string> = { critical: '🔴', high: '🟠', medium: '🟡', low: '🔵', info: '⚪' };
+
+/** Escape text for Markdown tables/inline use (crawled content is untrusted). */
+export function md(s: unknown): string {
+  return String(s ?? '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/[|\\`*_[\]<>]/g, (c) => `\\${c}`)
+    .slice(0, 300);
+}
+
+export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = {}): string {
+  const max = opts.maxEvidence ?? 5;
+  const L: string[] = [];
+  L.push(`# Searvex audit — ${md(r.target)}`, '');
+  L.push(`Generated ${r.generatedAt} · Searvex ${r.tool.version} · rules ${r.tool.rulesVersion} · run \`${r.runId}\``, '');
+  L.push('## Summary', '');
+  L.push(`| Metric | Value |`, `|---|---|`);
+  L.push(`| Searvex health score¹ | **${r.scores.overall}/100** |`);
+  L.push(`| Pages crawled | ${r.crawl.crawled}${r.crawl.truncated ? ` (limit reached, ${r.crawl.queuedRemaining} queued)` : ''} |`);
+  L.push(`| Indexable HTML pages | ${r.inventory.pages.filter((p) => p.indexable).length} |`);
+  L.push(`| Likely site type (heuristic) | ${md(r.inventory.businessModel.label)} |`);
+  L.push(`| Findings | ${r.findings.filter((f) => f.severity !== 'info').length} issues + ${r.findings.filter((f) => f.severity === 'info').length} informational |`);
+  L.push(`| Evidence quality | ${r.measurement.verified} verified · ${r.measurement.heuristic} heuristic · ${r.measurement.unmeasurable} unmeasurable |`);
+  L.push('', `¹ ${r.scores.method}`, '');
+
+  const issues = r.findings.filter((f) => f.severity !== 'info');
+  L.push('## Prioritised issues', '');
+  if (!issues.length) L.push('_No issues found by the active rules._', '');
+  for (const f of issues) {
+    L.push(`### ${ICON[f.severity]} ${md(f.title)} — ${f.severity}${f.confidence !== 'verified' ? ` (${f.confidence})` : ''}`, '');
+    L.push(`\`${f.ruleId}\` · ${f.category} · engines: ${f.engines.join(', ')} · affected: ${f.count}`, '');
+    L.push(md(f.message).replace(/\\([*_])/g, '$1'), '');
+    if (f.fix) L.push(`**Fix:** ${md(f.fix)}`, '');
+    for (const e of f.evidence.slice(0, max)) L.push(`- ${e.url ? md(e.url) : e.file ? `${md(e.file)}${e.line ? ':' + e.line : ''}` : ''}${e.observed ? ` — ${md(e.observed)}` : ''}`);
+    if (f.count > max) L.push(`- … and ${f.count - max} more`);
+    L.push('');
+  }
+
+  L.push('## GEO / AI search readiness', '');
+  if (r.geo.bots.length) {
+    L.push('| Crawler | Operator | Purpose | Homepage |', '|---|---|---|---|');
+    for (const b of r.geo.bots) L.push(`| ${b.token} | ${b.operator} | ${b.purpose} | ${b.allowed ? 'allowed' : '**blocked**'}${b.explicit ? '' : ' (via *)'} |`);
+    L.push('');
+  }
+  L.push(`- llms.txt: ${r.geo.llmsTxt ? (r.geo.llmsTxt.present ? 'present' : 'absent') : 'not checked'} — informational only; Google documents it does not use it.`);
+  L.push(`- Content clarity (heuristic, not a citation predictor): average ${r.geo.answerability.average}/100 across indexable pages.`);
+  L.push(`- AI citations: ${r.geo.citations.measured ? 'measured' : `**not measured** — ${md(r.geo.citations.reason)}`}`);
+  if (Object.keys(r.geo.entityNames).length) L.push(`- Declared brand/entity names: ${Object.entries(r.geo.entityNames).map(([n, c]) => `${md(n)} (${c})`).join(', ')}`);
+  L.push('');
+
+  L.push('## Site inventory', '');
+  L.push(`Business model (heuristic): **${md(r.inventory.businessModel.label)}**${r.inventory.businessModel.evidence.length ? ' — ' + r.inventory.businessModel.evidence.map(md).join('; ') : ''}`, '');
+  L.push('| Page type | Count |', '|---|---|');
+  for (const [t, c] of Object.entries(r.inventory.byType).sort((a, b) => b[1] - a[1])) L.push(`| ${t} | ${c} |`);
+  L.push('', `Languages (html lang): ${Object.entries(r.inventory.languages).map(([l, c]) => `${md(l)} (${c})`).join(', ') || '—'}`);
+  if (r.inventory.hreflangLanguages.length) L.push(`hreflang languages: ${r.inventory.hreflangLanguages.map(md).join(', ')}`);
+  L.push(`HTTP status: ${Object.entries(r.inventory.statusCodes).map(([s, c]) => `${s}: ${c}`).join(', ')}`, '');
+
+  L.push('## Content intelligence', '');
+  if (r.content.topTerms.length) L.push(`Site-wide terms: ${r.content.topTerms.slice(0, 20).map((t) => md(t.term)).join(', ')}`, '');
+  if (r.content.clusters.length) {
+    L.push('| Section | Pages | Dominant terms |', '|---|---|---|');
+    for (const c of r.content.clusters.slice(0, 15)) L.push(`| /${md(c.key)} | ${c.pages.length} | ${c.terms.map(md).join(', ')} |`);
+    L.push('');
+  }
+  L.push(`Cannibalisation candidates: ${r.content.cannibalization.length} · near-duplicate pairs: ${r.content.nearDuplicates.length} · exact duplicate groups: ${r.content.exactDuplicates.length}`, '');
+
+  const info = r.findings.filter((f) => f.severity === 'info');
+  if (info.length) {
+    L.push('## Informational', '');
+    for (const f of info) L.push(`- **${md(f.title)}** (\`${f.ruleId}\`, ${f.count}) — ${md(f.evidence[0]?.observed ?? f.message)}`);
+    L.push('');
+  }
+  L.push('## Limitations', '');
+  for (const l of [...r.limitations, ...r.geo.notes]) L.push(`- ${md(l)}`);
+  L.push('', '_Every finding links to an official source in `searvex rules show <ruleId>`. Searvex never guarantees rankings, indexing or AI citations._', '');
+  return L.join('\n');
+}

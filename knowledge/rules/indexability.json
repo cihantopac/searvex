@@ -1,0 +1,244 @@
+{
+  "version": "2026.10.30",
+  "updated": "2026-10-30",
+  "rules": [
+    {
+      "id": "index.noindex-in-sitemap",
+      "title": "Noindexed pages listed in the sitemap",
+      "category": "indexability",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "bing"
+      ],
+      "description": "Pages carrying noindex (meta robots or X-Robots-Tag) are listed in the sitemap. Sitemaps should contain canonical URLs you want indexed.",
+      "fix": "Remove noindex pages from the sitemap, or remove noindex if they should be indexed.",
+      "verify": "Re-crawl; no sitemap URL should carry noindex.",
+      "sources": [
+        {
+          "title": "Google: Build and submit a sitemap",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Block Search indexing with noindex",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Bing: Keeping content discoverable with sitemaps (2025)",
+          "url": "https://blogs.bing.com/webmaster/2025/7/Keeping-Content-Discoverable-with-Sitemaps-in-AI-Powered-Search/",
+          "checked": "2026-10-30",
+          "level": "excerpt"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "index.noindex",
+      "title": "Pages excluded with noindex",
+      "category": "indexability",
+      "severity": "info",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "These pages carry noindex and will be dropped from search results once recrawled. Listed for review; often intentional.",
+      "fix": "Confirm each noindex is intentional. Remove it from pages that should rank.",
+      "verify": "Inspect meta robots / X-Robots-Tag.",
+      "sources": [
+        {
+          "title": "Google: Block Search indexing with noindex",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Yandex: Robots meta tag and X-Robots-Tag",
+          "url": "https://yandex.com/support/webmaster/controlling-robot/html.html",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "index.noindex-blocked",
+      "title": "noindex on a page that robots.txt blocks",
+      "category": "indexability",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "A page intended to be noindexed is blocked by robots.txt, so crawlers never see the noindex; the URL can still be indexed from links.",
+      "fix": "Allow crawling of the URL so the noindex can be read, or remove the URL from the index via other means.",
+      "verify": "Test the URL against robots.txt and fetch it to confirm noindex is visible.",
+      "sources": [
+        {
+          "title": "Google: Block Search indexing with noindex",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "index.sitemap-non200",
+      "title": "Sitemap lists redirecting or erroring URLs",
+      "category": "indexability",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "bing"
+      ],
+      "description": "Sitemap URLs return redirects or 4xx/5xx. Sitemaps should list final, canonical, 200 URLs.",
+      "fix": "Replace each sitemap URL with its final 200 destination, or remove it.",
+      "verify": "Fetch all sitemap URLs; confirm 200 without redirects.",
+      "sources": [
+        {
+          "title": "Google: Build and submit a sitemap",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Bing: Keeping content discoverable with sitemaps (2025)",
+          "url": "https://blogs.bing.com/webmaster/2025/7/Keeping-Content-Discoverable-with-Sitemaps-in-AI-Powered-Search/",
+          "checked": "2026-10-30",
+          "level": "excerpt"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "index.sitemap-non-canonical",
+      "title": "Sitemap lists non-canonical URLs",
+      "category": "canonicalization",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "bing"
+      ],
+      "description": "Sitemap URLs declare a rel=canonical pointing to another URL. Sitemaps should only list canonical URLs.",
+      "fix": "List the canonical target in the sitemap instead.",
+      "verify": "Re-crawl and compare sitemap URLs with declared canonicals.",
+      "sources": [
+        {
+          "title": "Google: Build and submit a sitemap",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: How to specify a canonical URL",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Bing: Does duplicate content hurt SEO and AI search visibility (2025)",
+          "url": "https://blogs.bing.com/webmaster/December-2025/Does-Duplicate-Content-Hurt-SEO-and-AI-Search-Visibility",
+          "checked": "2026-10-30",
+          "level": "excerpt"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "index.soft-404",
+      "title": "Possible soft 404",
+      "category": "indexability",
+      "severity": "medium",
+      "confidence": "heuristic",
+      "engines": [
+        "google"
+      ],
+      "description": "The page returns 200 but its title/heading looks like an error page (\"not found\", \"404\"). Google reports such pages as soft 404 and does not index them.",
+      "fix": "Return a real 404/410 status for missing content, or add real content.",
+      "verify": "Fetch the URL and check status vs. content.",
+      "sources": [
+        {
+          "title": "Google: HTTP status codes, network and DNS errors",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/http-network-errors",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "index.client-rendered",
+      "title": "Content depends on client-side JavaScript",
+      "category": "indexability",
+      "severity": "medium",
+      "confidence": "heuristic",
+      "engines": [
+        "all"
+      ],
+      "description": "The raw HTML has almost no text but has a JS mount point and scripts. Google renders JavaScript, but rendering is deferred and other crawlers (including many AI crawlers) may not execute JS at all.",
+      "fix": "Use server-side rendering, static generation or pre-rendering for primary content and links.",
+      "verify": "Compare raw HTML vs. rendered DOM (searvex crawl --render).",
+      "sources": [
+        {
+          "title": "Google: JavaScript SEO basics",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "index.render-mismatch",
+      "title": "Rendered page differs from raw HTML on key signals",
+      "category": "indexability",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Title, canonical, meta robots or links differ between the raw HTML and the JavaScript-rendered DOM. Google may skip rendering when raw HTML has noindex, and conflicting signals are unreliable.",
+      "fix": "Emit the final title, canonical and robots directives in the server HTML; do not change them with JavaScript.",
+      "verify": "Re-run with --render and confirm raw and rendered values match.",
+      "sources": [
+        {
+          "title": "Google: JavaScript SEO basics",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active",
+      "appliesWhen": "Only when JS rendering is enabled (--render)."
+    },
+    {
+      "id": "index.oversized-html",
+      "title": "HTML document exceeds 15 MB",
+      "category": "performance",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Google crawlers fetch the first 15 MB of a file; content beyond that is not considered for indexing.",
+      "fix": "Reduce inline data (JSON state, base64 images) and paginate very long pages.",
+      "verify": "Check response size.",
+      "sources": [
+        {
+          "title": "Google: Overview of Google crawlers and fetchers",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/overview-google-crawlers",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    }
+  ]
+}

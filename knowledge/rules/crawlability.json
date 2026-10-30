@@ -1,0 +1,492 @@
+{
+  "version": "2026.10.30",
+  "updated": "2026-10-30",
+  "rules": [
+    {
+      "id": "robots.unreachable",
+      "title": "robots.txt returns a server error or is unreachable",
+      "category": "crawlability",
+      "severity": "critical",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "robots.txt responded with 5xx/429 or could not be fetched. RFC 9309 requires crawlers to assume complete disallow; Google pauses crawling and later falls back to the last cached copy (up to 30 days).",
+      "fix": "Make /robots.txt return 200 (with rules) or 404 (no rules). Never 5xx.",
+      "verify": "Fetch /robots.txt and confirm status 200 or 404.",
+      "sources": [
+        {
+          "title": "RFC 9309 Robots Exclusion Protocol",
+          "url": "https://www.rfc-editor.org/rfc/rfc9309.html",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: How Google interprets robots.txt",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "robots.too-large",
+      "title": "robots.txt exceeds 500 KiB",
+      "category": "crawlability",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "yandex"
+      ],
+      "description": "Google processes only the first 500 KiB of robots.txt; rules after that limit are ignored. Yandex documents a similar 500 KB limit.",
+      "fix": "Consolidate rules (wildcards, directory prefixes) to bring the file under 500 KiB.",
+      "verify": "Check file size of /robots.txt.",
+      "sources": [
+        {
+          "title": "Google: How Google interprets robots.txt",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Yandex: Using robots.txt",
+          "url": "https://yandex.com/support/webmaster/controlling-robot/robots-txt.html",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "RFC 9309 Robots Exclusion Protocol",
+          "url": "https://www.rfc-editor.org/rfc/rfc9309.html",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "robots.disallow-all",
+      "title": "robots.txt blocks the whole site for search crawlers",
+      "category": "crawlability",
+      "severity": "critical",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "The homepage is disallowed for a major search crawler (Googlebot, Bingbot or YandexBot). Blocked URLs cannot be crawled; they may still be indexed without content if linked.",
+      "fix": "Remove the blanket \"Disallow: /\" for search crawlers. Use noindex (on crawlable pages) to keep specific pages out of the index.",
+      "verify": "Re-test robots.txt for Googlebot/Bingbot/YandexBot against the homepage.",
+      "sources": [
+        {
+          "title": "Google: How Google interprets robots.txt",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Block Search indexing with noindex",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active",
+      "exceptions": "Intentional for staging/private sites. Do not apply to sites that must stay out of search."
+    },
+    {
+      "id": "robots.crawl-delay-ignored",
+      "title": "crawl-delay is not honoured by Google or Yandex",
+      "category": "crawlability",
+      "severity": "info",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "yandex"
+      ],
+      "description": "robots.txt sets Crawl-delay. Google does not support it; Yandex has ignored it since 2018 (use the Crawl rate setting in Yandex Webmaster). Bing does honour it.",
+      "fix": "Keep crawl-delay only if you target Bing (or other crawlers that honour it); manage Google/Yandex crawl rate in their webmaster tools.",
+      "verify": "No verification needed; informational.",
+      "sources": [
+        {
+          "title": "Google: How Google interprets robots.txt",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Yandex: Using robots.txt",
+          "url": "https://yandex.com/support/webmaster/controlling-robot/robots-txt.html",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Bing: Crawl control",
+          "url": "https://www.bing.com/webmasters/help/crawl-control-55a30303",
+          "checked": "2026-10-30",
+          "level": "excerpt"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "robots.no-sitemap",
+      "title": "No sitemap is discoverable",
+      "category": "crawlability",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "robots.txt has no Sitemap: directive and /sitemap.xml is not available. Sitemaps help search engines discover URLs, especially on large or new sites.",
+      "fix": "Publish an XML sitemap of canonical, indexable URLs and reference it with \"Sitemap: https://…\" in robots.txt.",
+      "verify": "Fetch the sitemap URL from robots.txt and confirm a valid <urlset>.",
+      "sources": [
+        {
+          "title": "Google: Build and submit a sitemap",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "sitemaps.org protocol",
+          "url": "https://www.sitemaps.org/protocol.html",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active",
+      "exceptions": "Small sites with complete internal linking can be discovered without a sitemap.",
+      "autofix": true
+    },
+    {
+      "id": "robots.blocked-sitemap-url",
+      "title": "Sitemap lists URLs blocked by robots.txt",
+      "category": "crawlability",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "URLs listed in the sitemap are disallowed in robots.txt. Sitemaps should list URLs you want crawled and indexed; the conflict wastes crawl signals.",
+      "fix": "Remove blocked URLs from the sitemap, or unblock them if they should be indexed.",
+      "verify": "Re-run the crawl and confirm no sitemap URL is robots-blocked.",
+      "sources": [
+        {
+          "title": "Google: Build and submit a sitemap",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: How Google interprets robots.txt",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "http.server-error",
+      "title": "Pages return 5xx server errors",
+      "category": "crawlability",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "5xx (and 429) responses make Google slow down crawling; persistent errors lead to URLs being dropped from the index.",
+      "fix": "Fix the server-side error; for maintenance return 503 with Retry-After briefly.",
+      "verify": "Re-fetch affected URLs and confirm 2xx.",
+      "sources": [
+        {
+          "title": "Google: HTTP status codes, network and DNS errors",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/http-network-errors",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "http.fetch-error",
+      "title": "Pages could not be fetched (timeout, DNS, TLS or connection error)",
+      "category": "crawlability",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "The crawler could not get any HTTP response. Search engines treat network and DNS errors like server errors.",
+      "fix": "Check DNS, TLS certificates, firewall/WAF rules for crawler user agents, and server timeouts.",
+      "verify": "Re-fetch affected URLs.",
+      "sources": [
+        {
+          "title": "Google: HTTP status codes, network and DNS errors",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/http-network-errors",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "links.broken-internal",
+      "title": "Internal links point to 4xx pages",
+      "category": "links",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "Internal links lead to pages returning 4xx. Users hit dead ends and crawlers waste requests; 4xx pages are not indexed.",
+      "fix": "Update links to the correct live URL or add a 301 redirect for moved content.",
+      "verify": "Re-crawl and confirm no internal link targets return 4xx.",
+      "sources": [
+        {
+          "title": "Google: HTTP status codes, network and DNS errors",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/http-network-errors",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Link best practices",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "links.broken-external",
+      "title": "External links point to unreachable or 4xx/5xx pages",
+      "category": "links",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "Outbound links return errors. This degrades user experience and source quality.",
+      "fix": "Update or remove the broken outbound links.",
+      "verify": "Re-check outbound link status.",
+      "sources": [
+        {
+          "title": "Google: Link best practices",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active",
+      "appliesWhen": "Only when external link checking is enabled (--check-external)."
+    },
+    {
+      "id": "links.uncrawlable",
+      "title": "Links that crawlers cannot follow",
+      "category": "links",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Anchor elements without an href (or with javascript:/# hrefs) are not followed by Google. Navigation must use <a href=\"…\"> with resolvable URLs.",
+      "fix": "Render navigation as <a href=\"/path\">…</a>; keep JS click handlers as progressive enhancement.",
+      "verify": "Inspect raw HTML for <a> elements with real href values.",
+      "sources": [
+        {
+          "title": "Google: Link best practices",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: JavaScript SEO basics",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "links.empty-anchor",
+      "title": "Internal links without anchor text",
+      "category": "links",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Links have no text (no inner text, aria-label or image alt). Google uses anchor text to understand the linked page.",
+      "fix": "Add descriptive anchor text, or an alt attribute on linked images.",
+      "verify": "Inspect link markup.",
+      "sources": [
+        {
+          "title": "Google: Link best practices",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "redirect.chain",
+      "title": "Redirect chains (more than one hop)",
+      "category": "crawlability",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "URLs redirect through multiple hops. Google follows up to 10 hops but recommends redirecting directly to the final URL; chains slow crawling and users.",
+      "fix": "Point the first URL (and internal links) directly at the final destination.",
+      "verify": "Re-fetch and confirm a single hop.",
+      "sources": [
+        {
+          "title": "Google: Redirects and Google Search",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/301-redirects",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: HTTP status codes, network and DNS errors",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/http-network-errors",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "redirect.loop",
+      "title": "Redirect loop or too many redirects",
+      "category": "crawlability",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "The redirect sequence loops or exceeds the hop limit; the page cannot be reached.",
+      "fix": "Fix the redirect rules so the chain terminates in a 200 page.",
+      "verify": "Re-fetch and confirm a final 200.",
+      "sources": [
+        {
+          "title": "Google: Redirects and Google Search",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/301-redirects",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: HTTP status codes, network and DNS errors",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/http-network-errors",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "redirect.temporary-internal",
+      "title": "Internal links go through temporary redirects",
+      "category": "crawlability",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Internally linked URLs respond with 302/303/307. Temporary redirects are a weaker canonicalisation signal than permanent ones (301/308).",
+      "fix": "Use 301/308 for permanent moves and update internal links to the final URL.",
+      "verify": "Re-fetch and check redirect status codes.",
+      "sources": [
+        {
+          "title": "Google: Redirects and Google Search",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/301-redirects",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "redirect.meta-refresh",
+      "title": "Meta refresh redirect",
+      "category": "crawlability",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "The page uses <meta http-equiv=\"refresh\">. Google treats instant meta refresh as permanent and delayed refresh as temporary; server-side redirects are preferred.",
+      "fix": "Replace with a server-side 301/308 redirect.",
+      "verify": "Re-fetch and confirm an HTTP redirect.",
+      "sources": [
+        {
+          "title": "Google: Redirects and Google Search",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/301-redirects",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "crawl.deep-pages",
+      "title": "Pages are far from the start page (click depth > 4)",
+      "category": "architecture",
+      "severity": "low",
+      "confidence": "heuristic",
+      "engines": [
+        "all"
+      ],
+      "description": "Pages are only reachable after many link hops from the start URL. Deep pages tend to be discovered and recrawled less often. Depth is measured from the crawl start and may differ from real navigation.",
+      "fix": "Improve internal linking (hubs, categories, related links, breadcrumbs) so important pages are within a few clicks.",
+      "verify": "Re-crawl and compare click depth.",
+      "sources": [
+        {
+          "title": "Google: Link best practices",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Large site owner's guide to managing crawl budget",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/large-site-managing-crawl-budget",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "crawl.sitemap-orphan",
+      "title": "Sitemap URLs with no internal links",
+      "category": "architecture",
+      "severity": "medium",
+      "confidence": "heuristic",
+      "engines": [
+        "all"
+      ],
+      "description": "URLs listed in the sitemap received no internal links from crawled pages. Orphan pages rely on the sitemap alone for discovery and get no internal link signals. Result is limited to the crawled portion of the site.",
+      "fix": "Link to these pages from relevant hub/category pages, or remove them from the sitemap if obsolete.",
+      "verify": "Re-crawl and confirm inlinks > 0.",
+      "sources": [
+        {
+          "title": "Google: Link best practices",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Build and submit a sitemap",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    }
+  ]
+}

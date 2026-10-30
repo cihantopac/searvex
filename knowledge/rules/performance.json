@@ -1,0 +1,106 @@
+{
+  "version": "2026.10.30",
+  "updated": "2026-10-30",
+  "rules": [
+    {
+      "id": "perf.slow-ttfb",
+      "title": "Slow server response (TTFB)",
+      "category": "performance",
+      "severity": "medium",
+      "confidence": "heuristic",
+      "engines": [
+        "all"
+      ],
+      "description": "Server response time exceeded 800 ms (web.dev \"good\" TTFB threshold) from the crawler's location. Lab measurement from one location; not field data.",
+      "fix": "Add caching (CDN, page cache), reduce server work, check database queries.",
+      "verify": "Measure TTFB from multiple regions or via CrUX.",
+      "sources": [
+        {
+          "title": "web.dev: Time to First Byte (TTFB)",
+          "url": "https://web.dev/articles/ttfb",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "perf.no-compression",
+      "title": "HTML served without compression",
+      "category": "performance",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "HTML responses larger than 10 KB were served without gzip/br compression, increasing transfer time.",
+      "fix": "Enable gzip or Brotli compression on the server/CDN for text responses.",
+      "verify": "Fetch with Accept-Encoding and check Content-Encoding.",
+      "sources": [
+        {
+          "title": "MDN: Compression in HTTP",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Compression",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "perf.cwv-unmeasured",
+      "title": "Core Web Vitals not measured",
+      "category": "performance",
+      "severity": "info",
+      "confidence": "unmeasurable",
+      "engines": [
+        "google"
+      ],
+      "description": "Core Web Vitals (LCP ≤2.5 s, INP ≤200 ms, CLS ≤0.1 at p75) are field metrics. Searvex does not have field data unless a CrUX API key is configured; no CWV values are estimated.",
+      "fix": "Configure SEARVEX_CRUX_API_KEY or review the Core Web Vitals report in Search Console.",
+      "verify": "Re-run with CrUX enabled.",
+      "sources": [
+        {
+          "title": "web.dev: Web Vitals",
+          "url": "https://web.dev/articles/vitals",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Core Web Vitals and Google Search results",
+          "url": "https://developers.google.com/search/docs/appearance/core-web-vitals",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "perf.cwv-poor",
+      "title": "Core Web Vitals not in \"good\" range (field data)",
+      "category": "performance",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "CrUX field data at the 75th percentile is outside the \"good\" threshold for at least one Core Web Vital.",
+      "fix": "Optimise the failing metric (LCP: server/resource load; INP: main-thread work; CLS: reserved space).",
+      "verify": "Re-check CrUX after the 28-day window.",
+      "sources": [
+        {
+          "title": "web.dev: Web Vitals",
+          "url": "https://web.dev/articles/vitals",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Core Web Vitals and Google Search results",
+          "url": "https://developers.google.com/search/docs/appearance/core-web-vitals",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active"
+    }
+  ]
+}

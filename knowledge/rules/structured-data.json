@@ -1,0 +1,179 @@
+{
+  "version": "2026.10.30",
+  "updated": "2026-10-30",
+  "rules": [
+    {
+      "id": "sd.invalid-json",
+      "title": "Invalid JSON-LD",
+      "category": "structured-data",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "bing"
+      ],
+      "description": "A JSON-LD block failed to parse. Search engines ignore invalid structured data.",
+      "fix": "Fix the JSON syntax (trailing commas, unescaped quotes, HTML entities).",
+      "verify": "Validate with the Rich Results Test or Schema Markup Validator.",
+      "sources": [
+        {
+          "title": "Google: General structured data guidelines",
+          "url": "https://developers.google.com/search/docs/appearance/structured-data/sd-policies",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Introduction to structured data",
+          "url": "https://developers.google.com/search/docs/appearance/structured-data/intro-structured-data",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "sd.missing-context",
+      "title": "JSON-LD without @context",
+      "category": "structured-data",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "bing"
+      ],
+      "description": "A JSON-LD block has no @context (e.g. \"https://schema.org\"), so types cannot be resolved.",
+      "fix": "Add \"@context\": \"https://schema.org\".",
+      "verify": "Validate structured data.",
+      "sources": [
+        {
+          "title": "Google: Introduction to structured data",
+          "url": "https://developers.google.com/search/docs/appearance/structured-data/intro-structured-data",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active",
+      "autofix": true
+    },
+    {
+      "id": "sd.missing-required",
+      "title": "Structured data missing properties required for rich results",
+      "category": "structured-data",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Markup for a rich-result type lacks properties that Google lists as required, making the item ineligible for that rich result.",
+      "fix": "Add the required properties with values that match visible page content.",
+      "verify": "Validate with the Rich Results Test.",
+      "sources": [
+        {
+          "title": "Google: Structured data search gallery",
+          "url": "https://developers.google.com/search/docs/appearance/structured-data/search-gallery",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: General structured data guidelines",
+          "url": "https://developers.google.com/search/docs/appearance/structured-data/sd-policies",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "sd.retired-type",
+      "title": "Markup for a retired rich result type",
+      "category": "structured-data",
+      "severity": "info",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "The page uses a type whose Google rich result has been retired (e.g. HowTo, FAQPage since 2026-05, ClaimReview, CourseInfo, SpecialAnnouncement, VehicleListing). The markup is harmless but produces no rich result in Google Search.",
+      "fix": "No action required. Keep the markup only if other consumers use it.",
+      "verify": "None.",
+      "sources": [
+        {
+          "title": "Google: Changes to HowTo and FAQ rich results (2023)",
+          "url": "https://developers.google.com/search/blog/2023/08/howto-faq-changes",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Simplifying the search results page (2025)",
+          "url": "https://developers.google.com/search/blog/2025/06/simplifying-search-results",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google Search Central: documentation updates",
+          "url": "https://developers.google.com/search/updates",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "sd.none",
+      "title": "No structured data",
+      "category": "structured-data",
+      "severity": "info",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "bing"
+      ],
+      "description": "No JSON-LD, Microdata or RDFa detected. Structured data is optional but enables rich results and helps engines understand entities.",
+      "fix": "Add JSON-LD for types that describe the page (Organization, Product, Article, BreadcrumbList, …) using only visible facts.",
+      "verify": "Validate with the Rich Results Test.",
+      "sources": [
+        {
+          "title": "Google: Introduction to structured data",
+          "url": "https://developers.google.com/search/docs/appearance/structured-data/intro-structured-data",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        },
+        {
+          "title": "Google: Structured data search gallery",
+          "url": "https://developers.google.com/search/docs/appearance/structured-data/search-gallery",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "geo.organization-missing",
+      "title": "No Organization structured data on the homepage",
+      "category": "geo",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "The homepage has no Organization markup. Google uses Organization structured data for logo and organisation details; consistent entity data helps search and AI systems identify the brand.",
+      "fix": "Add Organization JSON-LD (name, url, logo, sameAs) on the homepage.",
+      "verify": "Validate with the Rich Results Test.",
+      "sources": [
+        {
+          "title": "Google: Organization structured data",
+          "url": "https://developers.google.com/search/docs/appearance/structured-data/organization",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Site names in Google Search",
+          "url": "https://developers.google.com/search/docs/appearance/site-names",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active",
+      "autofix": true
+    }
+  ]
+}

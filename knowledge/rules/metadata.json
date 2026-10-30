@@ -1,0 +1,267 @@
+{
+  "version": "2026.10.30",
+  "updated": "2026-10-30",
+  "rules": [
+    {
+      "id": "title.missing",
+      "title": "Missing or empty title",
+      "category": "metadata",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "The page has no <title> or it is empty. Titles are a primary source for title links in search results.",
+      "fix": "Add a unique, descriptive <title>.",
+      "verify": "Inspect page head.",
+      "sources": [
+        {
+          "title": "Google: Influencing title links",
+          "url": "https://developers.google.com/search/docs/appearance/title-link",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active",
+      "autofix": true
+    },
+    {
+      "id": "title.multiple",
+      "title": "Multiple title elements",
+      "category": "metadata",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "More than one <title> element exists; Google recommends exactly one per page.",
+      "fix": "Remove the extra <title> (often from duplicate head management).",
+      "verify": "Inspect page head.",
+      "sources": [
+        {
+          "title": "Google: Influencing title links",
+          "url": "https://developers.google.com/search/docs/appearance/title-link",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active",
+      "autofix": true
+    },
+    {
+      "id": "title.truncation-risk",
+      "title": "Title may be truncated in search results",
+      "category": "metadata",
+      "severity": "info",
+      "confidence": "heuristic",
+      "engines": [
+        "google"
+      ],
+      "description": "The title is long. There is no official length limit; Google truncates title links to fit device width. Listed only so you can check the important words come first.",
+      "fix": "Put the most important, distinguishing words first.",
+      "verify": "Preview in search results.",
+      "sources": [
+        {
+          "title": "Google: Influencing title links",
+          "url": "https://developers.google.com/search/docs/appearance/title-link",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "description.missing",
+      "title": "Missing meta description",
+      "category": "metadata",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "bing"
+      ],
+      "description": "No meta description. Google may use it for the snippet when it describes the page better than on-page text; it is not a ranking factor.",
+      "fix": "Add a unique meta description summarising the page.",
+      "verify": "Inspect page head.",
+      "sources": [
+        {
+          "title": "Google: Control your snippets",
+          "url": "https://developers.google.com/search/docs/appearance/snippet",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active",
+      "autofix": true
+    },
+    {
+      "id": "description.multiple",
+      "title": "Multiple meta descriptions",
+      "category": "metadata",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "More than one meta description is declared; only one should be present.",
+      "fix": "Keep a single meta description.",
+      "verify": "Inspect page head.",
+      "sources": [
+        {
+          "title": "Google: Control your snippets",
+          "url": "https://developers.google.com/search/docs/appearance/snippet",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active",
+      "autofix": true
+    },
+    {
+      "id": "h1.missing",
+      "title": "No H1 heading",
+      "category": "content",
+      "severity": "low",
+      "confidence": "heuristic",
+      "engines": [
+        "all"
+      ],
+      "description": "The page has no <h1>. Headings help users and search engines understand page structure; there is no requirement for exactly one H1.",
+      "fix": "Add a descriptive main heading.",
+      "verify": "Inspect headings.",
+      "sources": [
+        {
+          "title": "Google: Influencing title links",
+          "url": "https://developers.google.com/search/docs/appearance/title-link",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "meta.keywords-present",
+      "title": "meta keywords tag present",
+      "category": "metadata",
+      "severity": "info",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Google does not use the meta keywords tag for indexing or ranking. It has no effect; listed so it is not mistaken for an optimisation.",
+      "fix": "Optional: remove it to reduce noise (and avoid revealing keyword strategy).",
+      "verify": "None.",
+      "sources": [
+        {
+          "title": "Google: Meta tags and attributes that Google supports",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/special-tags",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "mobile.viewport-missing",
+      "title": "Missing viewport meta tag",
+      "category": "mobile",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "No <meta name=\"viewport\">. Pages without it render as desktop width on mobile; Google uses the mobile version for indexing.",
+      "fix": "Add <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">.",
+      "verify": "Inspect page head.",
+      "sources": [
+        {
+          "title": "Google: Mobile site and mobile-first indexing best practices",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/mobile/mobile-sites-mobile-first-indexing",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        },
+        {
+          "title": "MDN: Viewport meta element",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Guides/Viewport_meta_element",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active",
+      "autofix": true
+    },
+    {
+      "id": "social.og-missing",
+      "title": "Missing Open Graph tags",
+      "category": "metadata",
+      "severity": "info",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "og:title / og:description / og:image are missing. Open Graph controls link previews on social and messaging platforms; it is not a search ranking signal.",
+      "fix": "Add Open Graph tags (og:title, og:description, og:image, og:url).",
+      "verify": "Inspect page head.",
+      "sources": [
+        {
+          "title": "The Open Graph protocol",
+          "url": "https://ogp.me/",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active",
+      "autofix": true
+    },
+    {
+      "id": "img.alt-missing",
+      "title": "Images without alt attribute",
+      "category": "accessibility",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Images lack an alt attribute. Google uses alt text to understand images; it is also an accessibility requirement. Decorative images should use alt=\"\".",
+      "fix": "Add descriptive alt text (or empty alt for decorative images).",
+      "verify": "Inspect img elements.",
+      "sources": [
+        {
+          "title": "Google: Google Images SEO best practices",
+          "url": "https://developers.google.com/search/docs/appearance/google-images",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        },
+        {
+          "title": "W3C WAI: Images tutorial",
+          "url": "https://www.w3.org/WAI/tutorials/images/",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "img.dimensions-missing",
+      "title": "Images without width/height",
+      "category": "performance",
+      "severity": "low",
+      "confidence": "heuristic",
+      "engines": [
+        "google"
+      ],
+      "description": "Images without explicit dimensions can cause layout shifts (CLS) unless sized via CSS aspect-ratio.",
+      "fix": "Set width and height attributes (or CSS aspect-ratio).",
+      "verify": "Measure CLS in the field (CrUX) or lab (Lighthouse).",
+      "sources": [
+        {
+          "title": "web.dev: Optimize Cumulative Layout Shift",
+          "url": "https://web.dev/articles/optimize-cls",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active"
+    }
+  ]
+}

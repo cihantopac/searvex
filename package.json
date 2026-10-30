@@ -1,0 +1,62 @@
+{
+  "name": "searvex",
+  "version": "0.1.0",
+  "description": "Open-source AI search intelligence & optimization engine: technical SEO, GEO/AEO, sourced rule base, safe code fixes with rollback.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "searvex": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "knowledge",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=20.10"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "rules:validate": "node dist/cli.js rules validate",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "keywords": [
+    "seo",
+    "geo",
+    "aeo",
+    "technical-seo",
+    "crawler",
+    "claude-code",
+    "plugin",
+    "structured-data",
+    "ai-search"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cihantopac/searvex.git"
+  },
+  "homepage": "https://github.com/cihantopac/searvex#readme",
+  "bugs": {
+    "url": "https://github.com/cihantopac/searvex/issues"
+  },
+  "dependencies": {
+    "cheerio": "1.2.0",
+    "fast-xml-parser": "5.11.2",
+    "robots-parser": "3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "6.0.3",
+    "vitest": "5.0.4",
+    "vite": "8.3.4",
+    "@vitest/coverage-v8": "5.0.4"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "version": "2026.10.30",
+  "updated": "2026-10-30",
+  "rules": [
+    {
+      "id": "https.not-used",
+      "title": "Page served over HTTP",
+      "category": "security",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "The page is served over plain HTTP. HTTPS is part of Google's page experience guidance and protects users.",
+      "fix": "Serve all pages over HTTPS and redirect HTTP to HTTPS.",
+      "verify": "Fetch the URL and confirm https.",
+      "sources": [
+        {
+          "title": "Google: Understanding page experience",
+          "url": "https://developers.google.com/search/docs/appearance/page-experience",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "https.mixed-content",
+      "title": "Mixed content on HTTPS page",
+      "category": "security",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "The HTTPS page references http:// subresources (images, scripts, styles, iframes). Browsers block or warn about mixed content.",
+      "fix": "Load all subresources over HTTPS.",
+      "verify": "Inspect page resources.",
+      "sources": [
+        {
+          "title": "MDN: Mixed content",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/Security/Mixed_content",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active"
+    }
+  ]
+}

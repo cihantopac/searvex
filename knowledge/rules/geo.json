@@ -1,0 +1,276 @@
+{
+  "version": "2026.10.30",
+  "updated": "2026-10-30",
+  "rules": [
+    {
+      "id": "geo.search-bot-blocked",
+      "title": "Search crawler that powers AI answers is blocked",
+      "category": "geo",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "bing"
+      ],
+      "description": "Googlebot or Bingbot is blocked. Google AI Overviews/AI Mode use pages from the Google Search index, and Bing Copilot grounds answers on Bing-indexed pages; blocking these crawlers removes the site from both classic and AI search.",
+      "fix": "Allow Googlebot/Bingbot for public content. Use nosnippet/max-snippet or the Search Console generative AI setting to limit AI use instead.",
+      "verify": "Re-test robots.txt for Googlebot and Bingbot.",
+      "sources": [
+        {
+          "title": "Google: AI features and your website",
+          "url": "https://developers.google.com/search/docs/appearance/ai-features",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Google common crawlers",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Bing Webmaster Guidelines",
+          "url": "https://www.bing.com/webmasters/help/webmaster-guidelines-30fba23a",
+          "checked": "2026-10-30",
+          "level": "excerpt"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "geo.ai-search-bot-blocked",
+      "title": "AI search crawler blocked",
+      "category": "geo",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "ai"
+      ],
+      "description": "A crawler that builds an AI search index (OAI-SearchBot, Claude-SearchBot, PerplexityBot) is disallowed. Per the operators' documentation, blocked sites may not appear (or appear only as links) in that product's search answers.",
+      "fix": "If you want visibility in that AI search product, allow its search crawler. Training crawlers can be blocked independently.",
+      "verify": "Re-test robots.txt for the bot token.",
+      "sources": [
+        {
+          "title": "OpenAI: Overview of OpenAI crawlers",
+          "url": "https://developers.openai.com/api/docs/bots",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Anthropic: Does Anthropic crawl data from the web",
+          "url": "https://support.claude.com/en/articles/8896518",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Perplexity: Perplexity crawlers",
+          "url": "https://docs.perplexity.ai/guides/bots",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active",
+      "exceptions": "Intentional blocking is a business decision; Searvex reports, it does not judge."
+    },
+    {
+      "id": "geo.training-bots",
+      "title": "AI training crawler access summary",
+      "category": "geo",
+      "severity": "info",
+      "confidence": "verified",
+      "engines": [
+        "ai"
+      ],
+      "description": "Status of crawlers/tokens used for model training (GPTBot, ClaudeBot, Google-Extended, Applebot-Extended, CCBot, Meta-ExternalAgent). Blocking them does not affect classic search or (for Google-Extended) AI Overviews inclusion.",
+      "fix": "Decide per operator; blocking training does not require blocking search crawlers.",
+      "verify": "Review robots.txt groups.",
+      "sources": [
+        {
+          "title": "Google: Google common crawlers",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "OpenAI: Overview of OpenAI crawlers",
+          "url": "https://developers.openai.com/api/docs/bots",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Anthropic: Does Anthropic crawl data from the web",
+          "url": "https://support.claude.com/en/articles/8896518",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Apple: About Applebot",
+          "url": "https://support.apple.com/en-us/119829",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Common Crawl: CCBot",
+          "url": "https://commoncrawl.org/ccbot",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Meta: Web crawlers",
+          "url": "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "geo.snippet-restricted",
+      "title": "Snippet controls limit AI feature usage",
+      "category": "geo",
+      "severity": "info",
+      "confidence": "verified",
+      "engines": [
+        "google",
+        "bing"
+      ],
+      "description": "nosnippet / max-snippet:0 (Google) or noarchive / nocache (Bing) restrict how content can be shown in AI Overviews/AI Mode and Copilot answers. Listed for review; may be intentional.",
+      "fix": "Remove the restriction on pages you want quoted in AI answers; keep it where you need control.",
+      "verify": "Inspect robots meta/X-Robots-Tag.",
+      "sources": [
+        {
+          "title": "Google: AI features and your website",
+          "url": "https://developers.google.com/search/docs/appearance/ai-features",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Robots meta tag and X-Robots-Tag",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Bing: Options to control content usage in Bing Chat (NOARCHIVE/NOCACHE)",
+          "url": "https://blogs.bing.com/webmaster/september-2023/Announcing-new-options-for-webmasters-to-control-usage-of-their-content-in-Bing-Chat",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "geo.llms-txt",
+      "title": "llms.txt status (informational)",
+      "category": "geo",
+      "severity": "info",
+      "confidence": "verified",
+      "engines": [
+        "ai"
+      ],
+      "description": "Reports whether /llms.txt exists. It is a 2024 proposal, not a standard; Google documents that it does not use it for Search or AI features, and no major search engine documents consuming it. Its presence or absence is not scored.",
+      "fix": "No action required for search visibility.",
+      "verify": "None.",
+      "sources": [
+        {
+          "title": "llms.txt proposal",
+          "url": "https://llmstxt.org/",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: AI optimization guide (mythbusting)",
+          "url": "https://developers.google.com/search/docs/fundamentals/ai-optimization-guide#mythbusting",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "geo.entity-inconsistent",
+      "title": "Inconsistent organisation name across pages",
+      "category": "geo",
+      "severity": "low",
+      "confidence": "heuristic",
+      "engines": [
+        "google",
+        "ai"
+      ],
+      "description": "Organization/WebSite names in structured data or og:site_name differ across pages. Consistent naming helps search engines and AI systems resolve the brand as one entity (Google uses WebSite name and Organization data for site names).",
+      "fix": "Use one canonical brand name in Organization/WebSite markup and og:site_name.",
+      "verify": "Re-crawl and compare entity names.",
+      "sources": [
+        {
+          "title": "Google: Site names in Google Search",
+          "url": "https://developers.google.com/search/docs/appearance/site-names",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        },
+        {
+          "title": "Google: Organization structured data",
+          "url": "https://developers.google.com/search/docs/appearance/structured-data/organization",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "geo.answerability",
+      "title": "Content structure review for answerability",
+      "category": "geo",
+      "severity": "info",
+      "confidence": "heuristic",
+      "engines": [
+        "ai"
+      ],
+      "description": "Heuristic signals of how easily a page's answers can be extracted: descriptive headings, concise paragraphs following question-style headings, lists/tables, and visible dates/authors. Google states no special optimisation is required for AI features; these are general clarity signals, not ranking or citation predictors.",
+      "fix": "Write clear, people-first content: descriptive headings, direct answers near the top of sections, cited sources.",
+      "verify": "Manual editorial review.",
+      "sources": [
+        {
+          "title": "Google: Creating helpful, reliable, people-first content",
+          "url": "https://developers.google.com/search/docs/fundamentals/creating-helpful-content",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: AI optimization guide (mythbusting)",
+          "url": "https://developers.google.com/search/docs/fundamentals/ai-optimization-guide#mythbusting",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "geo.citations-unmeasured",
+      "title": "AI citations not measured",
+      "category": "geo",
+      "severity": "info",
+      "confidence": "unmeasurable",
+      "engines": [
+        "ai"
+      ],
+      "description": "Searvex cannot observe whether AI systems cite this site without a platform integration. Bing Webmaster Tools AI Performance (preview) and the Search Console generative AI performance data are the official sources.",
+      "fix": "Export Bing AI Performance data or Search Console data and import it (searvex monitor --import).",
+      "verify": "None.",
+      "sources": [
+        {
+          "title": "Bing: AI Performance in Bing Webmaster Tools (public preview)",
+          "url": "https://blogs.bing.com/webmaster/2026/2/Introducing-AI-Performance-in-Bing-Webmaster-Tools-Public-Preview/",
+          "checked": "2026-10-30",
+          "level": "excerpt"
+        },
+        {
+          "title": "Google: Control what you share with Google",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/control-what-you-share",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    }
+  ]
+}

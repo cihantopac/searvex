@@ -1,0 +1,309 @@
+import path from 'node:path';
+import type { AuditReport } from '../analyze/audit.js';
+import { readText } from '../repo/fs-safe.js';
+import type { RepoScan } from '../repo/scan.js';
+
+/**
+ * Deterministic, framework-aware fix planners.
+ *
+ * A planner only proposes a change when the correct value is unambiguous (e.g. adding a viewport
+ * meta tag, using the framework's own locale idiom, making a canonical absolute with a known site
+ * URL). Anything requiring judgement — titles, descriptions, alt text, content — becomes an
+ * AgentTask with file/line evidence for a human or an AI agent to draft and get approved.
+ */
+export interface FileChange {
+  path: string;
+  action: 'modify' | 'create';
+  before: string | null;
+  after: string;
+}
+
+export interface Fix {
+  id: string;
+  ruleId: string;
+  title: string;
+  rationale: string;
+  changes: FileChange[];
+}
+
+export interface AgentTask {
+  ruleId: string;
+  title: string;
+  instruction: string;
+  locations: Array<{ file?: string; line?: number; url?: string; observed?: string }>;
+}
+
+export interface FixPlan {
+  fixes: Fix[];
+  tasks: AgentTask[];
+  skipped: Array<{ ruleId: string; reason: string }>;
+}
+
+export interface PlanOptions {
+  siteUrl?: string;
+  lang?: string;
+  only?: string[];
+}
+
+const VIEWPORT = '<meta name="viewport" content="width=device-width, initial-scale=1">';
+
+function indentOf(src: string, index: number): string {
+  const lineStart = src.lastIndexOf('\n', index - 1) + 1;
+  return /^[\t ]*/.exec(src.slice(lineStart))![0];
+}
+
+/** Insert a line right after the opening <head> tag (or after <meta charset>), matching indentation. */
+export function insertInHead(src: string, line: string): string | null {
+  const charset = /<meta\s+charset=[^>]*>/i.exec(src);
+  const head = /<head\b[^>]*>/i.exec(src);
+  const anchor = charset ?? head;
+  if (!anchor) return null;
+  const at = anchor.index + anchor[0].length;
+  const childIndent = charset ? indentOf(src, charset.index) : indentOf(src, head!.index) + '  ';
+  return src.slice(0, at) + '\n' + childIndent + line + src.slice(at);
+}
+
+const HREFLANG_FIXES: Record<string, string> = { 'en-uk': 'en-GB', uk: 'uk', jp: 'ja', 'ja-jp': 'ja-JP', cn: 'zh', 'zh-cn': 'zh-CN', gr: 'el', cz: 'cs', dk: 'da', se: 'sv', kr: 'ko', 'pt-br': 'pt-BR' };
+
+export function planFixes(report: AuditReport, scan: RepoScan, opts: PlanOptions = {}): FixPlan {
+  const root = scan.root;
+  const plan: FixPlan = { fixes: [], tasks: [], skipped: [] };
+  const wanted = (ruleId: string) => !opts.only?.length || opts.only.includes(ruleId);
+  const pending = new Map<string, FileChange>();
+  const read = (f: string) => pending.get(f)?.after ?? readText(root, f);
+  const original = (f: string) => {
+    try {
+      return readText(root, f);
+    } catch {
+      return null;
+    }
+  };
+  const stage = (ruleId: string, title: string, rationale: string, file: string, after: string, action: 'modify' | 'create' = 'modify') => {
+    const before = pending.get(file)?.before ?? (action === 'create' ? null : original(file));
+    if (before === after) return;
+    const change: FileChange = { path: file, action: before === null ? 'create' : action, before, after };
+    pending.set(file, change);
+    plan.fixes.push({ id: `fix-${plan.fixes.length + 1}`, ruleId, title, rationale, changes: [{ ...change }] });
+  };
+  const byRule = new Map(report.findings.map((f) => [f.ruleId, f]));
+  const fw = scan.detection.framework;
+
+  // ---- html lang ----
+  const lang = byRule.get('html.lang-missing');
+  if (lang && wanted('html.lang-missing')) {
+    for (const e of lang.evidence) {
+      if (!e.file || !/\.(php|html?|tsx|jsx|astro|vue)$/.test(e.file)) continue;
+      const src = read(e.file);
+      let idiom: string | null = null;
+      if (fw === 'laravel' && e.file.endsWith('.blade.php')) idiom = `lang="{{ str_replace('_', '-', app()->getLocale()) }}"`;
+      else if (fw === 'wordpress-theme' && e.file.endsWith('.php')) idiom = '<?php language_attributes(); ?>';
+      else if (opts.lang) idiom = `lang="${opts.lang}"`;
+      if (!idiom) {
+        plan.skipped.push({ ruleId: 'html.lang-missing', reason: `${e.file}: language unknown — pass --lang <code>` });
+        continue;
+      }
+      const tag = fw === 'nextjs-pages' ? /<Html\b(?![^>]*\blang=)/ : /<html\b(?![^>]*\b(lang=|language_attributes))/i;
+      const m = tag.exec(src);
+      if (!m) continue;
+      const after = src.slice(0, m.index + m[0].length) + ' ' + idiom + src.slice(m.index + m[0].length);
+      stage('html.lang-missing', 'Declare the document language', fw === 'laravel' ? 'Uses the Laravel app locale (Laravel starter-kit idiom).' : fw === 'wordpress-theme' ? 'Uses language_attributes(), the WordPress core idiom.' : `Sets lang="${opts.lang}" as provided.`, e.file, after);
+    }
+  }
+
+  // ---- viewport ----
+  const vp = byRule.get('mobile.viewport-missing');
+  if (vp && wanted('mobile.viewport-missing')) {
+    for (const e of vp.evidence) {
+      if (!e.file || !/\.(php|html?|astro|hbs|njk|liquid|twig)$/.test(e.file)) continue;
+      const after = insertInHead(read(e.file), VIEWPORT);
+      if (after) stage('mobile.viewport-missing', 'Add responsive viewport meta tag', 'Standard responsive viewport; required for mobile-friendly rendering.', e.file, after);
+      else plan.skipped.push({ ruleId: 'mobile.viewport-missing', reason: `${e.file}: no <head> found` });
+    }
+  }
+
+  // ---- canonical (static HTML only: framework canonicals are code-level decisions) ----
+  for (const ruleId of ['canonical.relative', 'canonical.missing', 'canonical.multiple'] as const) {
+    const f = byRule.get(ruleId);
+    if (!f || !wanted(ruleId)) continue;
+    for (const e of f.evidence) {
+      if (!e.file || !/\.html?$/.test(e.file)) {
+        if (ruleId === 'canonical.missing' && e.file) plan.tasks.push({ ruleId, title: 'Add canonical URL', instruction: frameworkCanonicalHint(fw), locations: [{ file: e.file, observed: e.observed }] });
+        continue;
+      }
+      const src = read(e.file);
+      if (ruleId === 'canonical.multiple') {
+        const all = [...src.matchAll(/[ \t]*<link\b[^>]*rel=["']?canonical["']?[^>]*>\s*\n?/gi)];
+        const hrefs = new Set(all.map((m) => /href=["']([^"']+)/i.exec(m[0])?.[1]));
+        if (hrefs.size !== 1) {
+          plan.tasks.push({ ruleId, title: 'Resolve conflicting canonicals', instruction: 'Multiple canonical links point to different URLs; keep the one for the preferred URL and remove the others (check templates/plugins injecting a second one).', locations: [{ file: e.file, observed: [...hrefs].join(' vs ') }] });
+          continue;
+        }
+        let after = src;
+        for (const m of all.slice(1).reverse()) after = after.slice(0, m.index!) + after.slice(m.index! + m[0].length);
+        stage(ruleId, 'Remove duplicate identical canonical links', 'Duplicates had the same href; keeping exactly one.', e.file, after);
+        continue;
+      }
+      if (!opts.siteUrl) {
+        plan.skipped.push({ ruleId, reason: `${e.file}: site URL unknown — pass --site-url https://example.com` });
+        continue;
+      }
+      const url = urlForFile(e.file, scan, opts.siteUrl);
+      if (!url) continue;
+      if (ruleId === 'canonical.relative') {
+        const after = src.replace(/(<link\b[^>]*rel=["']?canonical["']?[^>]*href=["'])([^"']+)(["'])/i, (_, a: string, href: string, c: string) => a + new URL(href, url).toString() + c);
+        stage(ruleId, 'Make canonical URL absolute', `Resolved against ${url}.`, e.file, after);
+      } else {
+        const after = insertInHead(src, `<link rel="canonical" href="${url}">`);
+        if (after) stage(ruleId, 'Add self-referencing canonical', `Canonical for ${url} derived from file path and --site-url.`, e.file, after);
+      }
+    }
+  }
+
+  // ---- JSON-LD @context ----
+  const ctx = byRule.get('sd.missing-context');
+  if (ctx && wanted('sd.missing-context')) {
+    for (const e of ctx.evidence) {
+      if (!e.file || !/\.html?$/.test(e.file)) continue;
+      const src = read(e.file);
+      const after = src.replace(/(<script[^>]*application\/ld\+json[^>]*>\s*\{)(?![\s\S]*?"@context")/i, '$1"@context":"https://schema.org",');
+      if (after !== src) stage('sd.missing-context', 'Add schema.org @context to JSON-LD', 'JSON-LD needs @context to resolve types.', e.file, after);
+    }
+  }
+
+  // ---- hreflang codes ----
+  const hl = byRule.get('hreflang.invalid-code');
+  if (hl && wanted('hreflang.invalid-code')) {
+    for (const e of hl.evidence) {
+      if (!e.file || !e.observed) continue;
+      const fixd = HREFLANG_FIXES[e.observed.toLowerCase()];
+      if (!fixd) {
+        plan.skipped.push({ ruleId: 'hreflang.invalid-code', reason: `${e.file}: no safe mapping for "${e.observed}"` });
+        continue;
+      }
+      const src = read(e.file);
+      const after = src.replace(new RegExp(`hreflang=(["'])${e.observed.replace(/[-]/g, '\\-')}\\1`, 'gi'), `hreflang="${fixd}"`);
+      stage('hreflang.invalid-code', `Correct hreflang "${e.observed}" → "${fixd}"`, 'ISO 639-1 language / ISO 3166-1 region codes.', e.file, after);
+    }
+  }
+
+  // ---- WordPress title-tag ----
+  const wpTitle = byRule.get('title.missing')?.evidence.find((e) => e.file?.endsWith('functions.php'));
+  if (fw === 'wordpress-theme' && wpTitle?.file && wanted('title.missing')) {
+    const src = read(wpTitle.file);
+    const snippet = "\n\n// Let WordPress manage the document title (added by Searvex).\nadd_action( 'after_setup_theme', function () {\n\tadd_theme_support( 'title-tag' );\n} );\n";
+    stage('title.missing', "Enable add_theme_support('title-tag')", 'WordPress core generates <title> via wp_head() when title-tag support is declared.', wpTitle.file, src.replace(/\s*(\?>\s*)?$/, '') + snippet);
+  }
+
+  // ---- robots.txt Sitemap directive / sitemap generation ----
+  const noSitemap = byRule.get('robots.no-sitemap');
+  if (noSitemap && wanted('robots.no-sitemap')) planSitemap(scan, opts, plan, stage, read, report);
+
+  // ---- tasks needing judgement ----
+  const TASKS: Record<string, string> = {
+    'title.missing': 'Write a unique, descriptive title that reflects the page\'s actual content (no keyword stuffing).',
+    'description.missing': 'Write a concise, accurate summary of the page. Use only facts present on the page.',
+    'duplicate.title': 'Give each page its own title (in frameworks: set per-route metadata; a layout title.template plus page titles avoids duplicates).',
+    'img.alt-missing': 'Describe what each informative image shows; use alt="" for decorative images.',
+    'links.uncrawlable': 'Use <a href="/path"> for navigation (framework Link components render real hrefs).',
+    'h1.missing': 'Add a visible main heading that matches the page purpose.',
+    'geo.organization-missing': 'Add Organization JSON-LD (name, url, logo, sameAs) on the homepage using only verifiable facts.',
+    'index.client-rendered': 'Render primary content on the server (SSR/SSG/prerender) so crawlers that do not execute JavaScript can read it.',
+    'sd.missing-required': 'Add the required properties listed in the evidence, using values visible on the page.',
+    'content.low-text': 'Review whether the page serves its purpose; expand with useful, original content, consolidate, or noindex placeholders.',
+  };
+  for (const [ruleId, instruction] of Object.entries(TASKS)) {
+    const f = byRule.get(ruleId);
+    if (!f || !wanted(ruleId)) continue;
+    const locs = f.evidence.filter((e) => !(ruleId === 'title.missing' && e.file?.endsWith('functions.php') && fw === 'wordpress-theme'));
+    if (locs.length) plan.tasks.push({ ruleId, title: f.title, instruction, locations: locs.map((e) => ({ file: e.file, line: e.line, url: e.url, observed: e.observed })) });
+  }
+  return plan;
+}
+
+function frameworkCanonicalHint(fw: string): string {
+  switch (fw) {
+    case 'nextjs-app':
+      return 'Set metadataBase in the root layout and `alternates: { canonical: "/path" }` in each route\'s metadata/generateMetadata.';
+    case 'nextjs-pages':
+      return 'Add <link rel="canonical" href={absoluteUrl}> inside next/head for each page.';
+    case 'astro':
+      return 'In the base layout: <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} /> (requires `site` in astro.config).';
+    case 'nuxt':
+      return 'Use useHead({ link: [{ rel: "canonical", href: absoluteUrl }] }) or the @nuxtjs/seo module.';
+    case 'laravel':
+      return 'In the layout <head>: <link rel="canonical" href="{{ url()->current() }}"> (adjust if query strings must be kept).';
+    case 'wordpress-theme':
+      return 'WordPress core outputs rel=canonical for singular content via wp_head(); ensure header.php calls wp_head().';
+    default:
+      return 'Add <link rel="canonical" href="https://absolute-url"> to the page head.';
+  }
+}
+
+export function urlForFile(file: string, scan: RepoScan, siteUrl: string): string | null {
+  for (const [url, f] of scan.urlToFile) {
+    if (f === file) {
+      const u = new URL(url);
+      return new URL(u.pathname + u.search, siteUrl).toString();
+    }
+  }
+  return null;
+}
+
+function planSitemap(
+  scan: RepoScan,
+  opts: PlanOptions,
+  plan: FixPlan,
+  stage: (ruleId: string, title: string, rationale: string, file: string, after: string, action?: 'modify' | 'create') => void,
+  read: (f: string) => string,
+  report: AuditReport,
+): void {
+  const fw = scan.detection.framework;
+  if (!opts.siteUrl) {
+    plan.skipped.push({ ruleId: 'robots.no-sitemap', reason: 'site URL unknown — pass --site-url to generate sitemap/robots files' });
+    return;
+  }
+  const origin = new URL(opts.siteUrl).origin;
+  const staticRoutes = [...new Set(scan.routes.filter((r) => !r.dynamic && !r.noindex).map((r) => r.route.replace(/\/+$/, '') || '/'))].sort();
+  let sitemapPath: string | null = null;
+  if (scan.staticSite) {
+    // Static HTML: only indexable, self-canonical pages.
+    const noindex = new Set(report.findings.filter((f) => f.ruleId === 'index.noindex' || f.ruleId === 'index.sitemap-non-canonical').flatMap((f) => f.evidence.map((e) => e.file)));
+    const urls = [...scan.urlToFile.entries()].filter(([, file]) => !noindex.has(file)).map(([u]) => new URL(new URL(u).pathname, origin).toString()).sort();
+    const base = scan.routes.find((r) => r.framework === 'static-html')?.file.split('/').slice(0, -1).join('/') ?? '';
+    const dir = scan.urlToFile.size ? path.posix.dirname([...scan.urlToFile.values()].sort((a, b) => a.length - b.length)[0]!) : base;
+    sitemapPath = (dir === '.' ? '' : dir + '/') + 'sitemap.xml';
+    stage('robots.no-sitemap', 'Generate sitemap.xml', `Lists ${urls.length} indexable static pages (noindex/non-canonical pages excluded).`, sitemapPath, sitemapXml(urls), 'create');
+  } else if (fw === 'nextjs-app') {
+    const appBase = scan.locations.rootLayout ? path.posix.dirname(scan.locations.rootLayout) : 'app';
+    const file = `${appBase}/sitemap.ts`;
+    const body = `import type { MetadataRoute } from 'next';\n\n// Generated by Searvex from static routes. Add dynamic routes (e.g. from your CMS) below.\nconst BASE_URL = '${origin}';\n\nexport default function sitemap(): MetadataRoute.Sitemap {\n  const routes = ${JSON.stringify(staticRoutes)};\n  return routes.map((route) => ({ url: \`\${BASE_URL}\${route === '/' ? '' : route}\` }));\n}\n`;
+    stage('robots.no-sitemap', 'Add app/sitemap.ts (Next.js metadata route)', `Uses the Next.js MetadataRoute.Sitemap convention with ${staticRoutes.length} static routes; dynamic routes need data sources.`, file, body, 'create');
+    if (!scan.locations.hasRobotsGenerator && !scan.locations.robotsFile) {
+      stage('robots.no-sitemap', 'Add app/robots.ts referencing the sitemap', 'Next.js MetadataRoute.Robots convention; allows all crawlers.', `${appBase}/robots.ts`, `import type { MetadataRoute } from 'next';\n\nexport default function robots(): MetadataRoute.Robots {\n  return {\n    rules: { userAgent: '*', allow: '/' },\n    sitemap: '${origin}/sitemap.xml',\n  };\n}\n`, 'create');
+    }
+    return;
+  } else if (scan.locations.publicDir && ['laravel', 'nextjs-pages', 'vite-spa', 'cra-spa', 'nuxt', 'astro'].includes(fw) && staticRoutes.length) {
+    if (fw === 'astro' || fw === 'nuxt') {
+      plan.tasks.push({ ruleId: 'robots.no-sitemap', title: 'Add a sitemap integration', instruction: fw === 'astro' ? 'Install @astrojs/sitemap and add it to integrations in astro.config (requires `site`).' : 'Install @nuxtjs/sitemap (or @nuxtjs/seo) and configure site.url.', locations: [{ file: scan.locations.publicDir }] });
+      return;
+    }
+    sitemapPath = `${scan.locations.publicDir}/sitemap.xml`;
+    stage('robots.no-sitemap', 'Generate static sitemap.xml', `Static routes from ${fw === 'laravel' ? 'routes/web.php' : 'the router'} (${staticRoutes.length}); regenerate when routes change or adopt a generator package.`, sitemapPath, sitemapXml(staticRoutes.map((r) => new URL(r, origin).toString())), 'create');
+  }
+  if (!sitemapPath) return;
+  const robotsPath = scan.locations.robotsFile ?? (scan.locations.publicDir ? `${scan.locations.publicDir}/robots.txt` : path.posix.join(path.posix.dirname(sitemapPath), 'robots.txt'));
+  const sitemapUrl = new URL('/' + path.posix.basename(sitemapPath), origin).toString();
+  let robots: string | null = null;
+  try {
+    robots = read(robotsPath);
+  } catch {
+    robots = null;
+  }
+  if (robots === null) stage('robots.no-sitemap', 'Create robots.txt with Sitemap directive', 'Allows all crawlers and declares the sitemap location.', robotsPath, `User-agent: *\nAllow: /\n\nSitemap: ${sitemapUrl}\n`, 'create');
+  else if (!/^\s*sitemap\s*:/im.test(robots)) stage('robots.no-sitemap', 'Add Sitemap directive to robots.txt', 'Declares the sitemap location; existing rules are unchanged.', robotsPath, robots.replace(/\s*$/, '') + `\n\nSitemap: ${sitemapUrl}\n`);
+}
+
+export function sitemapXml(urls: string[]): string {
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${esc(u)}</loc></url>`).join('\n')}\n</urlset>\n`;
+}

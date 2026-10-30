@@ -1,0 +1,136 @@
+{
+  "version": "2026.10.30",
+  "updated": "2026-10-30",
+  "rules": [
+    {
+      "id": "content.low-text",
+      "title": "Low text content on indexable page",
+      "category": "content",
+      "severity": "low",
+      "confidence": "heuristic",
+      "engines": [
+        "all"
+      ],
+      "description": "The page has very little visible text. Google has no preferred word count; this only flags pages to review whether they satisfy their purpose (e.g. empty category pages, placeholder pages).",
+      "fix": "Add content that serves the page's purpose, consolidate, or noindex placeholder pages.",
+      "verify": "Editorial review.",
+      "sources": [
+        {
+          "title": "Google: Creating helpful, reliable, people-first content",
+          "url": "https://developers.google.com/search/docs/fundamentals/creating-helpful-content",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active",
+      "exceptions": "Contact, login, app and media pages are naturally short."
+    },
+    {
+      "id": "content.near-duplicate",
+      "title": "Near-duplicate pages",
+      "category": "content",
+      "severity": "low",
+      "confidence": "heuristic",
+      "engines": [
+        "all"
+      ],
+      "description": "Pages share most of their text (shingle similarity ≥ 0.9). Near-duplicates compete with each other and dilute signals.",
+      "fix": "Merge, differentiate, or canonicalise near-duplicate pages.",
+      "verify": "Re-crawl and compare similarity.",
+      "sources": [
+        {
+          "title": "Google: How to specify a canonical URL",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Creating helpful, reliable, people-first content",
+          "url": "https://developers.google.com/search/docs/fundamentals/creating-helpful-content",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "content.cannibalization",
+      "title": "Pages targeting the same topic",
+      "category": "content",
+      "severity": "low",
+      "confidence": "heuristic",
+      "engines": [
+        "all"
+      ],
+      "description": "Several indexable pages share the same primary terms in title and H1. They may compete for the same queries. Confirm with Search Console query data before acting.",
+      "fix": "Differentiate intent per page or consolidate into one stronger page.",
+      "verify": "Check Search Console queries per page.",
+      "sources": [
+        {
+          "title": "Google: Creating helpful, reliable, people-first content",
+          "url": "https://developers.google.com/search/docs/fundamentals/creating-helpful-content",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Influencing title links",
+          "url": "https://developers.google.com/search/docs/appearance/title-link",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "url.underscores",
+      "title": "URLs use underscores",
+      "category": "architecture",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Google recommends hyphens instead of underscores to separate words in URLs.",
+      "fix": "Use hyphens for new URLs. Do not rename existing URLs without 301 redirects.",
+      "verify": "Inspect URLs.",
+      "sources": [
+        {
+          "title": "Google: URL structure best practices",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/url-structure",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active",
+      "exceptions": "Changing established URLs has costs; only apply to new content or with redirects."
+    },
+    {
+      "id": "url.session-params",
+      "title": "Session or tracking parameters in internal links",
+      "category": "architecture",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Internal links contain session IDs or tracking parameters, creating many URLs for the same content and wasting crawl budget.",
+      "fix": "Remove tracking/session parameters from internal links; use cookies or analytics config instead.",
+      "verify": "Re-crawl and check internal link URLs.",
+      "sources": [
+        {
+          "title": "Google: URL structure best practices",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/url-structure",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        },
+        {
+          "title": "Google: Large site owner's guide to managing crawl budget",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/large-site-managing-crawl-budget",
+          "checked": "2026-10-30",
+          "level": "url-resolved"
+        }
+      ],
+      "status": "active"
+    }
+  ]
+}
