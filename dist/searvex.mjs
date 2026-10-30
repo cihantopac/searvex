@@ -1300,7 +1300,7 @@ async function createRenderer(policy, timeoutMs = 3e4) {
     throw new Error('--render requires Playwright: run "npm i -D playwright && npx playwright install chromium" in your project (or globally).');
   }
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ userAgent: DEFAULT_USER_AGENT, serviceWorkers: "block", acceptDownloads: false, javaScriptEnabled: true });
+  const context = await browser.newContext({ userAgent: DEFAULT_USER_AGENT, serviceWorkers: "block", acceptDownloads: false, javaScriptEnabled: true, locale: "en-US", timezoneId: "America/Los_Angeles" });
   const stats = { pages: 0, blockedRequests: 0, skippedResources: 0 };
   return {
     stats,
@@ -21315,6 +21315,10 @@ function runTechnicalChecks(ctx, sink) {
       }
     }
     if (!f.title) sink.emit("title.missing", ev);
+    const rawOnly = p.rendered && p.data ? " \u2014 raw HTML only (corrected after JavaScript rendering; seen by non-rendering crawlers)" : "";
+    if (rawOnly && p.data.titleCount > 1 && f.titleCount <= 1) sink.emit("title.multiple", { url: p.url, observed: `${p.data.titleCount} <title> elements${rawOnly}` });
+    if (rawOnly && p.data.metaDescriptionCount > 1 && f.metaDescriptionCount <= 1) sink.emit("description.multiple", { url: p.url, observed: `${p.data.metaDescriptionCount} meta descriptions${rawOnly}` });
+    if (rawOnly && p.data.canonicalCount > 1 && f.canonicalCount <= 1) sink.emit("canonical.multiple", { url: p.url, observed: `${p.data.canonicalCount} canonical links${rawOnly}` });
     if (f.titleCount > 1) {
       const inertia = p.data?.generator === "inertia";
       sink.emit("title.multiple", {
@@ -21395,6 +21399,11 @@ function push(m, k, v) {
 }
 function compareRender(url, raw, rendered, sink) {
   const diffs = [];
+  const rawLang = primaryTag(raw.lang);
+  const renderedLang = primaryTag(rendered.lang);
+  if (rawLang && renderedLang && rawLang !== renderedLang) {
+    sink.emit("lang.locale-adaptive", { url, observed: `client-side switch during rendering (browser locale en-US): lang ${raw.lang} \u2192 ${rendered.lang}${raw.canonical !== rendered.canonical ? `, canonical ${raw.canonical ?? "none"} \u2192 ${rendered.canonical ?? "none"}` : ""}${raw.title !== rendered.title ? `, title "${raw.title ?? ""}" \u2192 "${rendered.title ?? ""}"` : ""}` });
+  }
   if ((raw.title ?? "") !== (rendered.title ?? "")) diffs.push(`title "${raw.title ?? ""}" \u2192 "${rendered.title ?? ""}"`);
   if ((raw.canonical ?? "") !== (rendered.canonical ?? "")) diffs.push(`canonical ${raw.canonical ?? "none"} \u2192 ${rendered.canonical ?? "none"}`);
   if (raw.metaRobots.join(",") !== rendered.metaRobots.join(",")) diffs.push(`robots "${raw.metaRobots.join(",")}" \u2192 "${rendered.metaRobots.join(",")}"`);
@@ -21604,6 +21613,17 @@ async function probeLlmsTxt(origin, opts) {
   const present = res.status === 200 && !/html/i.test(res.contentType) && res.body.trim().length > 0;
   return { url, present, status: res.status, bytes: res.bodyBytes };
 }
+async function probeLocaleAdaptive(startUrl, opts, sink) {
+  const variants = [["none", {}], ["en-US", { "accept-language": "en-US,en;q=0.9" }], ["de-DE", { "accept-language": "de-DE,de;q=0.9" }]];
+  const seen = [];
+  for (const [label, headers] of variants) {
+    const res = await safeFetch(startUrl, { ...opts, headers, maxBytes: 2 * 1024 * 1024 });
+    if (res.error || res.status !== 200) return;
+    const f = extractPage(res.body, res.finalUrl);
+    seen.push({ label, sig: [res.finalUrl, f.lang ?? "", f.canonical ?? "", f.title ?? ""].join("|"), detail: `${label}: ${res.finalUrl !== startUrl ? `\u2192 ${res.finalUrl}, ` : ""}lang=${f.lang ?? "none"}, title="${(f.title ?? "").slice(0, 50)}"` });
+  }
+  if (new Set(seen.map((s) => s.sig)).size > 1) sink.emit("lang.locale-adaptive", { url: startUrl, observed: `server responds differently by Accept-Language \u2014 ${seen.map((s) => s.detail).join("; ")}` });
+}
 async function probeHostVariants(startUrl, opts, sink) {
   const u = new URL(startUrl);
   if (u.protocol === "https:") {
@@ -21633,6 +21653,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
   let llms;
   if (opts.probes !== false) {
     await probeHostVariants(result.startUrl, netOpts, sink);
+    await probeLocaleAdaptive(result.startUrl, netOpts, sink);
     llms = await probeLlmsTxt(result.origin, netOpts);
   }
   runTechnicalChecks(ctx, sink);
@@ -22069,6 +22090,7 @@ var IMPLEMENTED_RULES = /* @__PURE__ */ new Set([
   "html.lang-missing",
   "lang.content-mismatch",
   "lang.mixed-navigation",
+  "lang.locale-adaptive",
   // metadata / media
   "title.missing",
   "title.multiple",

@@ -184,6 +184,32 @@ describe('real-world regression fixtures (anonymised)', () => {
   });
 });
 
+describe('server-side locale adaptation', () => {
+  it('flags a start URL whose content changes with Accept-Language (Googlebot sends none)', async () => {
+    const s = await startServer({
+      '/': (req) => {
+        const al = String(req.headers['accept-language'] ?? '');
+        const de = al.startsWith('de');
+        return { body: page({ lang: de ? 'de' : 'en', title: de ? 'Startseite' : 'Home', body: `<h1>${de ? 'Willkommen' : 'Welcome'}</h1>${text(80)}` }) };
+      },
+    });
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-locale-'));
+    try {
+      const { report } = await auditWebsite(s.url + '/', { workspace: ws, crawl: { policy, delayMs: 0, useSitemaps: false } });
+      const f = report.findings.find((x) => x.ruleId === 'lang.locale-adaptive');
+      expect(f?.evidence[0]!.observed).toMatch(/de-DE: lang=de/);
+      // A non-adaptive site must not be flagged.
+      const s2 = await startServer({ '/': { body: page({ title: 'Home', body: text(80) }) } });
+      const { report: r2 } = await auditWebsite(s2.url + '/', { workspace: ws, crawl: { policy, delayMs: 0, useSitemaps: false } });
+      expect(r2.findings.map((x) => x.ruleId)).not.toContain('lang.locale-adaptive');
+      await s2.close();
+    } finally {
+      await s.close();
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('start URL errors', () => {
   it('reports a critical finding when the start URL returns 404 (real-world: a removed demo site)', async () => {
     const s = await startServer({});

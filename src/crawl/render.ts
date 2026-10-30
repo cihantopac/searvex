@@ -64,7 +64,7 @@ export async function createRenderer(policy: NetPolicy, timeoutMs = 30000): Prom
     throw new Error('--render requires Playwright: run "npm i -D playwright && npx playwright install chromium" in your project (or globally).');
   }
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ userAgent: DEFAULT_USER_AGENT, serviceWorkers: 'block', acceptDownloads: false, javaScriptEnabled: true });
+  const context = await browser.newContext({ userAgent: DEFAULT_USER_AGENT, serviceWorkers: 'block', acceptDownloads: false, javaScriptEnabled: true, locale: 'en-US', timezoneId: 'America/Los_Angeles' });
   const stats: RenderStats = { pages: 0, blockedRequests: 0, skippedResources: 0 };
   return {
     stats,

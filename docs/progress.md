@@ -26,6 +26,14 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Session log
 
+### 2026-10-30 — backlog round (after v0.3.0)
+- A: `rules check-sources` + weekly workflow; first run caught 14 moved sources (Google crawling docs moved to
+  developers.google.com/crawling/); facts re-verified, URLs updated.
+- B: impact-based prioritisation (Fix first table) and URL-template grouping.
+- C: Search Console OAuth (loopback + PKCE) and `gsc report` (mock-tested; live run needs owner credentials).
+- D: `bing report` via Bing Webmaster API (mock-tested; live run needs an API key).
+- E: real `--render` round → `lang.locale-adaptive`, raw-only duplicates in render mode.
+
 ### 2026-10-30 — continuous improvement round (v0.3.0)
 - Audited the permitted product family 4 times + 3 ecosystem runs; fixed 12 verified defects (see
   quality.md, round 2); added ecosystem command, language checks, structured-data inventory, scored business

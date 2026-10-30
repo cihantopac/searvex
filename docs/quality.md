@@ -91,6 +91,18 @@ pages caused by the Inertia head manager (with the framework-specific fix), Engl
 structured data while products declare it as parent, a product site without its own Organization node,
 two sites without hreflang while the rest of the family is bilingual.
 
+### Round 3 — rendering and locale probes (2026-10-30)
+
+`--render` on two family sites (15 pages each) and an Accept-Language probe on all seven:
+- 6 of 7 sites serve English content on the same URL for `Accept-Language: en-US` (Turkish without the header);
+  2 sites also switch language **client-side** for an English browser locale, changing the canonical to the
+  `/en/` URL (verified with Playwright using en-US, tr-TR and de-DE). Google documents that locale-adaptive
+  pages may not have all locales crawled/indexed → new rule `lang.locale-adaptive` (server and client detection).
+- Defect found in Searvex: in render mode the raw-HTML duplicate `<title>` disappeared from the report (the head
+  manager removes it after hydration) although non-rendering crawlers still see it → now reported as
+  "raw HTML only".
+- Raw vs rendered title/canonical differences confirmed on 25 pages (`index.render-mismatch`).
+
 ## Benchmarks
 
 `npm run build && node scripts/benchmark.mjs <pages> <concurrency>` — synthetic site on localhost

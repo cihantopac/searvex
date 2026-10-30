@@ -21,7 +21,7 @@ Each item lists how it will be verified; nothing is marked done without that ver
 |---|---|---|
 | 1 | Source revalidation tool with snapshots (status, final URL, title, "last updated" date, content hash) | ✅ first run found 14 moved sources (Google crawling docs moved to /crawling/); facts re-verified, URLs updated; weekly workflow |
 | 2 | Re-read `excerpt`/`url-resolved` sources and upgrade their verification level | ⬜ (after A) |
-| 3 | Real-site `--render` validation round | ⬜ (E) |
+| 3 | Real-site `--render` validation round | ✅ found client-side locale switching (canonical → /en/) on 2 sites; new rule lang.locale-adaptive (+ server-side Accept-Language probe); raw-only duplicates kept in render mode |
 | 4 | Framework source checks via AST instead of regex (Next.js metadata, Astro props) | ⬜ |
 | 5 | Facet / pagination / parameter-explosion detection for large e-commerce | ⬜ |
 

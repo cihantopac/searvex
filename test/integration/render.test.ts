@@ -57,8 +57,12 @@ describe.runIf(available)('JavaScript rendering (Playwright)', () => {
         ),
       },
       // Never-ending network activity must not hang the renderer.
-      '/e': { body: shell('<title>E</title>', "setInterval(function(){fetch('/poll').catch(function(){})},200);document.getElementById('root').innerHTML='<h1>E</h1><p>polling</p>';") },
+      '/e': { body: shell('<title>E</title>', "setInterval(function(){fetch('/poll').catch(function(){})},200);document.getElementById('root').innerHTML='<h1>E</h1><p>polling</p><a href=\"/f\">F</a><a href=\"/g\">G</a>';") },
       '/poll': { body: 'ok', delayMs: 150 },
+      // Locale-adaptive page: switches language and canonical to /en/ when the browser language is English.
+      '/f': { body: `<!doctype html><html lang="tr"><head><title>Fiyatlar</title><link rel="canonical" href="__B__/f"></head><body><h1>Fiyatlar</h1>${text(80)}<script>if(navigator.language.indexOf('en')===0){document.documentElement.lang='en';document.title='Pricing';document.querySelector('link[rel=canonical]').href='__B__/en/f';}</script></body></html>` },
+      // Inertia-like duplicate title in raw HTML that the head manager removes after hydration.
+      '/g': { body: `<!doctype html><html lang="en"><head><title>ACME</title><title data-inertia>G page</title></head><body><h1>G</h1>${text(80)}<script>document.querySelector('title:not([data-inertia])').remove()</script></body></html>` },
     });
     for (const k of Object.keys(routes)) {
       const r = routes[k]!;
@@ -110,6 +114,18 @@ describe.runIf(available)('JavaScript rendering (Playwright)', () => {
   it('blocks cloud-metadata requests from page scripts and closes popups', () => {
     const d = report.inventory.pages.find((p) => p.url.endsWith('/d'));
     expect(d?.title).toBe('blocked');
+  });
+
+  it('detects client-side locale switching (browser locale en-US) — real-world case', () => {
+    const f = finding('lang.locale-adaptive')!;
+    const e = f.evidence.find((x) => x.url!.endsWith('/f'))!;
+    expect(e.observed).toMatch(/lang tr → en/);
+    expect(e.observed).toMatch(/canonical .*\/f → .*\/en\/f/);
+  });
+
+  it('still reports duplicate titles that exist only in the raw HTML', () => {
+    const f = finding('title.multiple')!;
+    expect(f.evidence.find((x) => x.url!.endsWith('/g'))!.observed).toMatch(/raw HTML only/);
   });
 
   it('renders pages with endless network activity within the time budget', () => {

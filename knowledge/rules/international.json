@@ -236,6 +236,29 @@
         }
       ],
       "status": "active"
+    },
+    {
+      "id": "lang.locale-adaptive",
+      "title": "Content changes with the visitor's language or locale",
+      "category": "international",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "The same URL returns different language content, lang attribute, title or canonical depending on the Accept-Language header or the browser locale. Googlebot crawls from US IP addresses without an Accept-Language header, so Google might not crawl, index or rank all locale versions; with client-side switching, a rendered page can even canonicalise to another locale.",
+      "fix": "Serve each language on its own URL (e.g. /en/…) regardless of the visitor's language settings, connect versions with reciprocal hreflang, and offer a language switcher instead of automatic switching.",
+      "verify": "Fetch the URL with different Accept-Language headers (and render it with different browser locales); the content, lang and canonical must not change.",
+      "exceptions": "Automatic suggestions (banners) that do not change the page content are fine.",
+      "sources": [
+        {
+          "title": "Google: How Google crawls locale-adaptive pages",
+          "url": "https://developers.google.com/search/docs/specialty/international/locale-adaptive-pages",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
     }
   ]
 }

@@ -3,6 +3,7 @@ import { crawl, type CrawlOptions, type CrawlResult } from '../crawl/crawler.js'
 import { RunStore } from '../crawl/store.js';
 import { DEFAULT_USER_AGENT, safeFetch, SEARVEX_VERSION } from '../net/fetcher.js';
 import { DEFAULT_POLICY } from '../net/ssrf.js';
+import { extractPage } from '../extract/html.js';
 import { FindingSink, loadKnowledge, type KnowledgeBase } from '../rules/engine.js';
 import { buildContext } from './context.js';
 import { runContentChecks, type ContentReport } from './content.js';
@@ -71,6 +72,22 @@ async function probeLlmsTxt(origin: string, opts: Pick<CrawlOptions, 'policy' | 
   return { url, present, status: res.status, bytes: res.bodyBytes };
 }
 
+/**
+ * Server-side locale adaptation: fetch the start URL without Accept-Language (like Googlebot), with
+ * en-US and with de-DE, and compare lang, title, canonical and redirects.
+ */
+export async function probeLocaleAdaptive(startUrl: string, opts: Pick<CrawlOptions, 'policy' | 'timeoutMs' | 'userAgent'>, sink: FindingSink): Promise<void> {
+  const variants: Array<[string, Record<string, string>]> = [['none', {}], ['en-US', { 'accept-language': 'en-US,en;q=0.9' }], ['de-DE', { 'accept-language': 'de-DE,de;q=0.9' }]];
+  const seen: Array<{ label: string; sig: string; detail: string }> = [];
+  for (const [label, headers] of variants) {
+    const res = await safeFetch(startUrl, { ...opts, headers, maxBytes: 2 * 1024 * 1024 });
+    if (res.error || res.status !== 200) return; // only compare successful responses
+    const f = extractPage(res.body, res.finalUrl);
+    seen.push({ label, sig: [res.finalUrl, f.lang ?? '', f.canonical ?? '', f.title ?? ''].join('|'), detail: `${label}: ${res.finalUrl !== startUrl ? `→ ${res.finalUrl}, ` : ''}lang=${f.lang ?? 'none'}, title="${(f.title ?? '').slice(0, 50)}"` });
+  }
+  if (new Set(seen.map((s) => s.sig)).size > 1) sink.emit('lang.locale-adaptive', { url: startUrl, observed: `server responds differently by Accept-Language — ${seen.map((s) => s.detail).join('; ')}` });
+}
+
 /** Check http→https and www/non-www consolidation of the homepage. */
 async function probeHostVariants(startUrl: string, opts: Pick<CrawlOptions, 'policy' | 'timeoutMs' | 'userAgent'>, sink: FindingSink): Promise<void> {
   const u = new URL(startUrl);
@@ -114,6 +131,7 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
   let llms: LlmsTxtStatus | undefined;
   if (opts.probes !== false) {
     await probeHostVariants(result.startUrl, netOpts, sink);
+    await probeLocaleAdaptive(result.startUrl, netOpts, sink);
     llms = await probeLlmsTxt(result.origin, netOpts);
   }
   runTechnicalChecks(ctx, sink);

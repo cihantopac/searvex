@@ -18,7 +18,7 @@ export const IMPLEMENTED_RULES = new Set<string>([
   'duplicate.title', 'duplicate.description', 'duplicate.content',
   // international
   'hreflang.invalid-code', 'hreflang.missing-return', 'hreflang.missing-self', 'hreflang.target-error', 'hreflang.relative',
-  'hreflang.no-x-default', 'html.lang-missing', 'lang.content-mismatch', 'lang.mixed-navigation',
+  'hreflang.no-x-default', 'html.lang-missing', 'lang.content-mismatch', 'lang.mixed-navigation', 'lang.locale-adaptive',
   // metadata / media
   'title.missing', 'title.multiple', 'title.truncation-risk', 'description.missing', 'description.multiple', 'h1.missing',
   'meta.keywords-present', 'mobile.viewport-missing', 'social.og-missing', 'img.alt-missing', 'img.dimensions-missing',

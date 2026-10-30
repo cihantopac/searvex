@@ -103,6 +103,12 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
 
     // Metadata (only for indexable pages: duplicates on noindex pages do not matter)
     if (!f.title) sink.emit('title.missing', ev);
+    // With --render, `f` is the rendered DOM; duplicates that only exist in the raw HTML still reach
+    // crawlers that do not execute JavaScript, so they are reported with that context.
+    const rawOnly = p.rendered && p.data ? ' — raw HTML only (corrected after JavaScript rendering; seen by non-rendering crawlers)' : '';
+    if (rawOnly && p.data!.titleCount > 1 && f.titleCount <= 1) sink.emit('title.multiple', { url: p.url, observed: `${p.data!.titleCount} <title> elements${rawOnly}` });
+    if (rawOnly && p.data!.metaDescriptionCount > 1 && f.metaDescriptionCount <= 1) sink.emit('description.multiple', { url: p.url, observed: `${p.data!.metaDescriptionCount} meta descriptions${rawOnly}` });
+    if (rawOnly && p.data!.canonicalCount > 1 && f.canonicalCount <= 1) sink.emit('canonical.multiple', { url: p.url, observed: `${p.data!.canonicalCount} canonical links${rawOnly}` });
     if (f.titleCount > 1) {
       // Inertia SSR renders its own <title data-inertia> next to the Blade/root template title; browsers and
       // crawlers read the first one, so every page can end up with the generic template title.
@@ -213,6 +219,11 @@ function push(m: Map<string, string[]>, k: string, v: string) {
 
 function compareRender(url: string, raw: NonNullable<ReturnType<typeof factsOf>>, rendered: NonNullable<ReturnType<typeof factsOf>>, sink: FindingSink) {
   const diffs: string[] = [];
+  const rawLang = primaryTag(raw.lang);
+  const renderedLang = primaryTag(rendered.lang);
+  if (rawLang && renderedLang && rawLang !== renderedLang) {
+    sink.emit('lang.locale-adaptive', { url, observed: `client-side switch during rendering (browser locale en-US): lang ${raw.lang} → ${rendered.lang}${raw.canonical !== rendered.canonical ? `, canonical ${raw.canonical ?? 'none'} → ${rendered.canonical ?? 'none'}` : ''}${raw.title !== rendered.title ? `, title "${raw.title ?? ''}" → "${rendered.title ?? ''}"` : ''}` });
+  }
   if ((raw.title ?? '') !== (rendered.title ?? '')) diffs.push(`title "${raw.title ?? ''}" → "${rendered.title ?? ''}"`);
   if ((raw.canonical ?? '') !== (rendered.canonical ?? '')) diffs.push(`canonical ${raw.canonical ?? 'none'} → ${rendered.canonical ?? 'none'}`);
   if (raw.metaRobots.join(',') !== rendered.metaRobots.join(',')) diffs.push(`robots "${raw.metaRobots.join(',')}" → "${rendered.metaRobots.join(',')}"`);
