@@ -1,0 +1,28 @@
+name: Release (manual)
+
+# Creates a DRAFT GitHub release from a version tag. Publishing to npm and making the release public
+# are deliberate manual steps.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  draft-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.tag }}" }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci && npm run build && npm test
+      - run: node bin/searvex rules validate --strict
+      - run: npm pack
+      - name: Create draft release
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: gh release create "${{ inputs.tag }}" searvex-*.tgz --draft --title "Searvex ${{ inputs.tag }}" --notes-file CHANGELOG.md

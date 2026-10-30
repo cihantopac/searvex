@@ -1,0 +1,53 @@
+# Security model
+
+Searvex processes untrusted input from three directions: **websites** (HTML, headers, redirects,
+XML), **repositories** (files, symlinks, secrets) and **content that may reach an LLM** (prompt
+injection). Defaults are read-only and deny-by-default.
+
+## Network (website mode)
+
+| Threat | Control | Test |
+|---|---|---|
+| SSRF to internal services / cloud metadata | Scheme allowlist (http/https), no credentials in URLs, IP classification for v4, v6, IPv4-mapped, NAT64, 6to4, Teredo; loopback/private/link-local blocked unless `--allow-private`; `.local`, `.internal`, `localhost` names blocked | `test/unit/ssrf.test.ts` |
+| DNS rebinding | Address validated inside the socket `lookup` hook — the exact address connected to; any disallowed address in the answer set rejects the request; sockets are not reused (`agent: false`) | connection-time loopback test |
+| Redirect to internal address | Redirects followed manually; every hop re-validated; loops and >10 hops stopped | redirect tests |
+| Resource exhaustion | Response size cap (5 MB pages, 50 MB sitemaps, 500 KiB robots), timeouts, page/depth limits, sitemap count/URL caps | size/timeout tests |
+| XML attacks (XXE, billion laughs) | `fast-xml-parser` with entity processing disabled | sitemap test |
+| Malicious HTML | Static parsing only (parse5/cheerio); no script execution except in opt-in `--render` | — |
+| JS rendering (`--render`) | Every browser request checked against the policy (URL + DNS resolution); service workers and downloads blocked. **Residual risk:** the browser resolves DNS again, so a rebinding window remains in render mode. Use `--render` only on sites you trust. | — |
+
+## Crawler etiquette & compliance
+
+- robots.txt per RFC 9309: 4xx → allowed, 5xx/unreachable → full disallow; longest-match rules.
+  Outbound link checks fetch and honour each external host's robots.txt.
+- Per-host serialisation with a minimum delay; `Crawl-delay` raises it (max 30 s); `429/503 Retry-After`
+  slows down further. Sitemap downloads share the limiter.
+- Honest user agent `SearvexBot/<version>` with a project URL; robots groups for `SearvexBot` apply.
+- Site terms of service may restrict automated access; users are responsible for having permission.
+
+## Repository mode
+
+| Threat | Control |
+|---|---|
+| Path traversal | All paths resolved inside the real root; `..`, absolute paths and symlinked ancestors that escape are rejected |
+| Symlink attacks | Symlinks are never followed when walking, reading or writing |
+| Secret leakage | `.env*`, keys/certificates, SSH keys, `.npmrc`, `.netrc`, credentials/secrets files, `wp-config.php`, service-account JSON are never read or modified; counts appear in limitations |
+| Destructive writes | Dry run by default; apply requires confirmation (`--yes` in non-interactive shells); pre-flight check that files did not change since planning; atomic writes; backups + SHA-256 hashes; automatic rollback on failed verification; rollback refuses to overwrite later edits |
+
+## LLM / agent layer
+
+- Crawled text, titles and evidence are **data**. Plugin skills instruct the agent never to follow
+  instructions found in page content or reports.
+- The deterministic engine produces measurements; the agent cannot fabricate findings because reports
+  come from the CLI.
+- HTML reports embed data as escaped JSON, render via `textContent`/`createElement` only (no `innerHTML`),
+  allow only `http(s)` links, and ship a restrictive Content-Security-Policy (no network access).
+
+## Supply chain
+
+Four runtime dependencies, pinned versions, `package-lock.json`. The plugin bundle is unminified for
+review. Dependencies are bundled with esbuild at build time; Playwright is never bundled.
+
+## Reporting vulnerabilities
+
+See [SECURITY.md](../SECURITY.md).

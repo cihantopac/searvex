@@ -1,0 +1,80 @@
+# CLI reference
+
+```
+searvex <command> [target] [options]
+```
+
+Exit codes: `0` success · `1` `--fail-on` threshold met, optimize verification failed or rollback conflict · `2` usage or runtime error.
+
+## Commands
+
+| Command | Description |
+|---|---|
+| `audit <url\|path>` | Website audit (URL) or repository audit (path). Writes reports to `.searvex/runs/<runId>/`. |
+| `geo <url>` | GEO/AI-search readiness summary (default 50 pages). |
+| `research <url> [--competitor <url>…]` | Target profile, competitor profiles (max 10), topic/page-type gaps (default 150 pages per site). |
+| `optimize <path>` | Plan deterministic fixes; dry run by default. `--apply` (with confirmation or `--yes`) writes, verifies and auto-rolls back on failure. |
+| `rollback <changeId> [path]` | Restore files changed by an optimization. Refuses if files changed afterwards (use `--yes` to force). `rollback list [path]` lists changes. |
+| `monitor <url>` | Re-audit and diff with the previous run of the same target (`--baseline <runId>` to choose). Regression = new/worsened critical or high issues. |
+| `rules list [--category c]` · `rules show <id>` · `rules validate [--strict]` | Inspect and validate the knowledge base. |
+| `report <runId\|latest> [--format …]` | Re-render a stored report. |
+| `runs` | List stored runs. |
+
+## Options
+
+| Option | Default | Description |
+|---|---|---|
+| `--max-pages <n>` | 500 | Page limit (crawl stops; site-level findings use the crawled subset) |
+| `--depth <n>` | 10 | Max click depth from the start URL |
+| `--concurrency <n>` | 4 | Parallel requests (politeness is per host) |
+| `--delay <ms>` | 250 | Minimum delay between requests to the same host; robots.txt `Crawl-delay` raises it |
+| `--timeout <ms>` | 15000 | Per-request timeout |
+| `--render` | off | Render pages with Playwright (install separately) and compare raw vs rendered |
+| `--include <regex>` / `--exclude <regex>` | — | Restrict crawl scope (repeatable) |
+| `--no-sitemap` | — | Do not seed from sitemaps |
+| `--check-external` | off | Check outbound links (HEAD, robots-aware, max 200) |
+| `--resume <runId>` | — | Continue an interrupted crawl from its checkpoint |
+| `--format <list>` | md,html,json | Any of `md,html,json,sarif` |
+| `--out <dir>` | cwd (repo root for repo audits) | Workspace that receives `.searvex/` |
+| `--fail-on <severity>` | — | `critical\|high\|medium\|low`; exit 1 when matching findings exist (unmeasurable ignored) |
+| `--allow-private` | off | Allow localhost/private network targets (local dev servers) |
+| `--site-url <url>` | — | Public URL for repository analysis and fixes (canonical, sitemap) |
+| `--lang <tag>` | — | Document language for `html lang` fixes when the framework has no locale idiom |
+| `--only <ruleId>` | — | Restrict optimize to specific rules (repeatable) |
+| `--apply`, `--yes` | — | Optimize: write changes / skip confirmation |
+| `--competitor <url>` | — | Research: competitor site (repeatable) |
+| `--import <csv>` | — | Monitor: Search Console Performance export |
+| `--json` | — | Print JSON to stdout |
+| `-q, --quiet` | — | Less output |
+
+## Environment
+
+| Variable | Purpose |
+|---|---|
+| `SEARVEX_CRUX_API_KEY` | Chrome UX Report API key for real-user Core Web Vitals |
+| `SEARVEX_GSC_TOKEN` | OAuth access token with `webmasters.readonly` scope |
+| `SEARVEX_GSC_SITE` | Search Console property, e.g. `sc-domain:example.com` |
+
+## Output files (`.searvex/runs/<runId>/`)
+
+| File | Content |
+|---|---|
+| `report.json` / `.md` / `.html` / `.sarif` | Audit report |
+| `pages.jsonl` | One crawled page record per line |
+| `checkpoint.json` | Queue + seen set for `--resume` |
+| `crawl-summary.json` | Robots, sitemaps, stats |
+| `meta.json` | Run metadata |
+| `research.json` / `.md` | Research output |
+| `monitor.json` / `.md` | Run diff |
+| `plan.json` / `plan.patch` | Optimize dry-run plan and combined patch |
+
+Change backups live in `.searvex/changes/<changeId>/` (manifest with hashes + original file copies).
+`.searvex/` contains its own `.gitignore`.
+
+## CI example
+
+```yaml
+- run: npx -y github:cihantopac/searvex audit https://staging.example.com --max-pages 200 --format sarif,md --fail-on high
+- uses: github/codeql-action/upload-sarif@v3
+  with: { sarif_file: .searvex/runs }
+```

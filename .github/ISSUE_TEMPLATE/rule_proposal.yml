@@ -1,0 +1,20 @@
+name: Rule proposal / correction
+description: Propose a new rule or correct an existing one
+labels: [rules]
+body:
+  - type: input
+    id: rule
+    attributes: { label: Rule id (existing or proposed), placeholder: "e.g. canonical.in-body" }
+    validations: { required: true }
+  - type: dropdown
+    id: engines
+    attributes: { label: Engines, multiple: true, options: [google, bing, yandex, ai, all] }
+    validations: { required: true }
+  - type: textarea
+    id: source
+    attributes: { label: Official source(s), description: "Official documentation URLs and the exact statement. Blogs/studies are not accepted." }
+    validations: { required: true }
+  - type: textarea
+    id: check
+    attributes: { label: How can it be detected and verified?, description: "Include exceptions and false-positive risks." }
+    validations: { required: true }
