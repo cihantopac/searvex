@@ -7,7 +7,7 @@ Use this file to resume work after an interrupted session. Newest entries first.
 - Version 0.7.0 (branch `feat/v0.7-data-integrity`, PR pending owner merge): property-aware search-data
   joins, Search Console CSV/ZIP import, `connect` onboarding (Google ile bağlan / CSV içe aktar / Şimdilik
   geç), OAuth hardening (revoke, CI guard, client-type check), shared-query classification, docs consistency
-  test; 274 tests; 90 rules.
+  test; render isolation via a policy proxy; 282 tests; 90 rules.
 - Product decisions (2026-10-30, owner accepted the recommended defaults): plugin + CLI first, no hosted
   services; file credential store behind an interface (keychain later); integration order GSC live → CSV →
   Bing live → CrUX/PSI → GA4 → Yandex; Bing via API key; no paid SERP/AI providers; branch + PR per
@@ -39,9 +39,12 @@ Use this file to resume work after an interrupted session. Newest entries first.
 - Fixed all of the above with regression tests (multi-site workspace, TR/EN exports, ZIP limits, revoke,
   CI guard, shared-query patterns) and an automated docs consistency test.
 - Real-site round 5 (see quality.md) found and fixed legal pages classified as `other`.
-- Not done yet (next): Playwright isolation review (WebSocket/WebRTC, redirect interception, per-site
-  contexts, process limits), live GSC/Bing/CrUX validation once the owner's credentials exist, OS keychain
-  backend, GA4/Yandex.
+- Playwright isolation: a counter test proved redirect-hop, WebSocket and popup escapes; fixed with a
+  local policy proxy (all browser traffic, connection-time DNS), WebRTC limited to proxied traffic, fresh
+  context per page, sandbox when available. Real render round on three permitted sites: no false blocks,
+  sandbox active on macOS, ~1.7 s per page; locale-adaptive and Inertia findings reproduced.
+- Not done yet (next): live GSC/Bing/CrUX validation once the owner's credentials exist, OS keychain
+  backend, GA4/Yandex, PSI/Lighthouse.
 
 ### 2026-10-30 — round 2 of the backlog (v0.5.0)
 - F: `crawl.facet-explosion`, `pagination.canonical-to-first`.
@@ -94,7 +97,7 @@ Use this file to resume work after an interrupted session. Newest entries first.
 | 8 | `npm install` needs `--legacy-peer-deps` (npm 10.9 arborist `edgesOut` crash with vitest 5 peers) | contributor friction | track npm fix; `.npmrc` sets legacy-peer-deps |
 | 9 | Plugin icon missing (directory warning) | listing only | add 512 px PNG before directory submission |
 | 10 | Each user needs their own Google Cloud Desktop OAuth client | setup friction | CSV import as the no-account path; hosted OAuth only with a future SaaS (owner decision) |
-| 16 | Render mode: browser re-resolves DNS (rebinding window); WebSocket/WebRTC and redirect-hop interception not verified; one browser context shared across pages | render-mode SSRF exposure on hostile sites | v0.7.x Playwright isolation round |
+| 16 | Render mode residual risk: browser zero-days; no OS sandbox in some containers; CPU-heavy scripts only bounded by the page timeout | renderer compromise on hostile sites | consider a separate low-privilege process/container option; documented in security.md |
 | 17 | `monitor --import` does not check that the export belongs to the monitored site | wrong performance section in monitor output | reuse property checks |
 | 18 | Turkish/other-language Search Console header wording verified only against published UI terms | localised imports may need synonyms | confirm with the owner's real exports |
 | 11 | Entity/answerability signals are heuristics | could be over-read | keep `info`, documented |

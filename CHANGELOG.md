@@ -33,6 +33,15 @@ All notable changes to this project are documented here. The format follows
 - `monitor --import` uses the new importer (localised headers, ZIP files).
 - Bing reports state that totals cover the top pages only.
 
+### Security
+- `--render` isolation: page scripts could reach targets outside the network policy through redirect hops
+  (only the first request of a chain was checked), WebSockets and the first request of popups, and the
+  browser re-resolved DNS (rebinding window). A test with a request counter on a forbidden server reproduced
+  four such requests. All browser traffic now goes through a local policy proxy (per-run credentials,
+  connection-time DNS validation, redirects/tunnels/upgrades checked, per-page byte budget); WebRTC is
+  limited to proxied connections; each page renders in a fresh context; Chromium's sandbox is used when
+  available and its status is reported.
+
 ### Fixed
 - `gsc report` / `bing report --audit latest` joined the newest website audit in the workspace even when it
   belonged to another site. The audit is now chosen by property scope (domain properties: all subdomains

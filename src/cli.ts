@@ -229,6 +229,12 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
         },
       },
     });
+    if (render) {
+      const st = render.stats;
+      report.limitations.push(
+        `JavaScript rendering: Chromium ${st.sandbox ? 'with' : 'WITHOUT'} its OS sandbox${st.sandbox ? '' : ' (not available on this system)'}, all traffic through Searvex's policy proxy; ${st.blockedRequests + st.proxy.blocked} browser request(s) blocked by the network policy${st.proxy.blockedTargets.length ? ` (${st.proxy.blockedTargets.slice(0, 5).join(', ')})` : ''}${st.proxy.budgetExceeded ? `; ${st.proxy.budgetExceeded} connection(s) cut at the per-page transfer limit` : ''}.`,
+      );
+    }
     const files = writeReports(store, report, kb, String(v['format'] ?? 'md,html,json').split(','));
     printSummary(report, files, v);
     return failOnExit(report, v['fail-on']);

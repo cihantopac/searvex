@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -134,3 +136,77 @@ describe.runIf(available)('JavaScript rendering (Playwright)', () => {
   });
 });
 
+
+/**
+ * Isolation: a page on the allowed origin tries to reach a forbidden server through paths that request
+ * interception alone does not see — redirect hops, WebSockets, popups. The forbidden server counts every
+ * request and upgrade it receives; the count must stay zero.
+ */
+describe.runIf(available)('render isolation (forbidden target via redirects, WebSockets, popups)', () => {
+  let site: TestServer;
+  let forbidden: http.Server;
+  let forbiddenHits: string[];
+  let titles: Record<string, string>;
+  let stats: Awaited<ReturnType<typeof createRenderer>>['stats'];
+  let fport: number;
+
+  beforeAll(async () => {
+    forbiddenHits = [];
+    forbidden = http.createServer((req, res) => {
+      forbiddenHits.push(`http ${req.url}`);
+      res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }).end('SECRET');
+    });
+    forbidden.on('upgrade', (req, socket) => {
+      forbiddenHits.push(`upgrade ${req.url}`);
+      socket.destroy();
+    });
+    await new Promise<void>((r) => forbidden.listen(0, '127.0.0.1', r));
+    fport = (forbidden.address() as AddressInfo).port;
+    const target = `http://127.0.0.1:${fport}`;
+    const routes: Record<string, Route> = {
+      '/redir': { redirect: `${target}/secret`, status: 302 },
+      '/fetch-redirect': { body: shell('<title>start</title>', "fetch('/redir').then(function(r){return r.text()}).then(function(t){document.title=t}).catch(function(){document.title='blocked'})") },
+      '/iframe-redirect': { body: '<!doctype html><html><head><title>iframe</title></head><body><iframe src="/redir"></iframe></body></html>' },
+      '/websocket': { body: shell('<title>ws</title>', `var w=new WebSocket('ws://127.0.0.1:${fport}/socket');w.onopen=function(){document.title='open'};w.onerror=function(){document.title='ws-blocked'};`) },
+      '/popup': { body: shell('<title>popup</title>', `window.open('${target}/popup')`) },
+      '/navigate': { body: shell('<title>nav</title>', `setTimeout(function(){location.href='${target}/navigated'},10)`) },
+      // Positive control: a same-origin redirect must still work through the proxy.
+      '/redir-ok': { redirect: '/ok', status: 302 },
+      '/ok': { body: 'OK', headers: { 'content-type': 'text/plain' } },
+      '/fetch-allowed': { body: shell('<title>start</title>', "fetch('/redir-ok').then(function(r){return r.text()}).then(function(t){document.title=t}).catch(function(){document.title='failed'})") },
+    };
+    site = await startServer(routes);
+    const isolated = { ...DEFAULT_POLICY, allowPrivate: true, ports: [site.port] };
+    const renderer = await createRenderer(isolated, 15000);
+    titles = {};
+    try {
+      for (const p of Object.keys(routes).filter((k) => !['/redir', '/redir-ok', '/ok'].includes(k))) {
+        const { html } = await renderer.render(site.url + p);
+        titles[p] = /<title>([^<]*)<\/title>/.exec(html)?.[1] ?? '';
+      }
+      await new Promise((r) => setTimeout(r, 500));
+      stats = renderer.stats;
+    } finally {
+      await renderer.close();
+    }
+  }, 120000);
+
+  afterAll(async () => {
+    await site.close();
+    await new Promise<void>((r) => forbidden.close(() => r()));
+  });
+
+  it('never lets the forbidden server receive a request or WebSocket upgrade', () => {
+    expect(forbiddenHits).toEqual([]);
+  });
+
+  it('page scripts do not read data through a redirect to a forbidden target', () => {
+    expect(titles['/fetch-redirect']).not.toBe('SECRET');
+  });
+
+  it('still follows allowed redirects, and records the blocked target', () => {
+    expect(titles['/fetch-allowed']).toBe('OK');
+    expect(stats.proxy.blockedTargets).toContain(`127.0.0.1:${fport}`);
+    expect(stats.proxy.requests).toBeGreaterThan(0);
+  });
+});
