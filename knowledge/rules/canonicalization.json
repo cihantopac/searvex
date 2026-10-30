@@ -323,6 +323,28 @@
         }
       ],
       "status": "active"
+    },
+    {
+      "id": "pagination.canonical-to-first",
+      "title": "Paginated pages canonicalise to the first page",
+      "category": "canonicalization",
+      "severity": "medium",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "Page 2 or later of a paginated series declares the first page as canonical. Google's guidance is to give each page its own URL and not to use the first page of a paginated sequence as the canonical page, so items linked only from later pages may not be found.",
+      "fix": "Make each paginated page self-canonical and link pages sequentially (and back to the first page).",
+      "verify": "Inspect the canonical of page 2+.",
+      "sources": [
+        {
+          "title": "Google: Pagination and incremental page loading",
+          "url": "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
     }
   ]
 }

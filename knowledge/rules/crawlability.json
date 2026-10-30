@@ -509,6 +509,35 @@
         }
       ],
       "status": "active"
+    },
+    {
+      "id": "crawl.facet-explosion",
+      "title": "Filter/sort parameters create many crawlable URL variants",
+      "category": "architecture",
+      "severity": "medium",
+      "confidence": "heuristic",
+      "engines": [
+        "google"
+      ],
+      "description": "Internal links expose many URLs that differ only by query parameters (filters, sorting, facets) for the same path. Google warns that faceted navigation can generate a large number of URLs that consume crawl capacity and slow the discovery of new content.",
+      "fix": "If filtered URLs don't need to be in search, prevent crawling (robots.txt disallow for the parameters, URL fragments instead of query parameters, or rel=nofollow on filter links); if some do, keep a consistent parameter order and return 404 for empty combinations. rel=canonical helps consolidate but does not stop crawling.",
+      "verify": "Re-crawl and count parameter variants per path; check Crawl Stats in Search Console.",
+      "exceptions": "Small sites rarely have a crawl-capacity problem; pagination parameters alone are expected.",
+      "sources": [
+        {
+          "title": "Google: Managing crawling of faceted navigation URLs",
+          "url": "https://developers.google.com/crawling/docs/faceted-navigation",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Crawl budget management",
+          "url": "https://developers.google.com/crawling/docs/crawl-budget",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
     }
   ]
 }

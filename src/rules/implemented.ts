@@ -8,7 +8,7 @@ export const IMPLEMENTED_RULES = new Set<string>([
   'http.start-url-error', 'robots.unreachable', 'robots.too-large', 'robots.disallow-all', 'robots.crawl-delay-ignored', 'robots.no-sitemap',
   'robots.blocked-sitemap-url', 'http.server-error', 'http.fetch-error', 'links.broken-internal', 'links.broken-external',
   'links.uncrawlable', 'links.empty-anchor', 'redirect.chain', 'redirect.loop', 'redirect.temporary-internal',
-  'redirect.meta-refresh', 'crawl.deep-pages', 'crawl.sitemap-orphan',
+  'redirect.meta-refresh', 'crawl.deep-pages', 'crawl.sitemap-orphan', 'crawl.facet-explosion', 'pagination.canonical-to-first',
   // indexability
   'index.noindex-in-sitemap', 'index.noindex', 'index.noindex-blocked', 'index.sitemap-non200', 'index.sitemap-non-canonical',
   'index.soft-404', 'index.client-rendered', 'index.render-mismatch', 'index.oversized-html',

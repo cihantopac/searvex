@@ -184,6 +184,41 @@ describe('real-world regression fixtures (anonymised)', () => {
   });
 });
 
+describe('faceted navigation and pagination', () => {
+  it('detects filter-parameter explosions and page-2 canonicals to page 1, but not plain pagination', async () => {
+    const colors = ['red', 'blue', 'green', 'black', 'white'];
+    const sizes = ['s', 'm', 'l', 'xl', 'xxl', 'xs'];
+    const filters = colors.flatMap((c) => sizes.map((z) => `<a href="/shoes?color=${c}&size=${z}">${c} ${z}</a>`)).join(' ');
+    const routes: Record<string, Route> = {
+      '/robots.txt': { headers: { 'content-type': 'text/plain' }, body: 'User-agent: *\nDisallow: /*?*size=xl\n' },
+      '/': { body: page({ title: 'Shop', body: `<a href="/shoes">Shoes</a><a href="/blog?page=2">Blog 2</a><a href="/blog?page=3">Blog 3</a>${text(60)}` }) },
+      '/shoes': { body: page({ title: 'Shoes', head: '<link rel="canonical" href="/shoes">', body: `${filters}<a href="/shoes?page=2">2</a>${text(60)}` }) },
+      '/blog': { body: page({ title: 'Blog', body: text(60) }) },
+    };
+    const s = await startServer((routes as unknown) as Record<string, Route>);
+    const B = s.url;
+    Object.assign(routes, {
+      '/shoes?page=2': { body: page({ title: 'Shoes 2', head: `<link rel="canonical" href="${B}/shoes">`, body: text(60) }) },
+      '/blog?page=2': { body: page({ title: 'Blog 2', head: `<link rel="canonical" href="${B}/blog">`, body: text(60) }) },
+      '/blog?page=3': { body: page({ title: 'Blog 3', head: `<link rel="canonical" href="${B}/blog?page=3">`, body: text(60) }) },
+    });
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-facet-'));
+    try {
+      const { report } = await auditWebsite(B + '/', { workspace: ws, crawl: { policy, delayMs: 0, useSitemaps: false, maxPages: 60 }, probes: false });
+      const facet = report.findings.find((f) => f.ruleId === 'crawl.facet-explosion')!;
+      expect(facet.evidence.map((e) => new URL(e.url!).pathname)).toEqual(['/shoes']);
+      expect(facet.evidence[0]!.observed).toMatch(/30 parameter variants/);
+      expect(facet.evidence[0]!.observed).toMatch(/color \(30\), size \(30\)/);
+      expect(facet.evidence[0]!.observed).toMatch(/[1-9]\d* robots-blocked/);
+      const pag = report.findings.find((f) => f.ruleId === 'pagination.canonical-to-first')!;
+      expect(pag.evidence.map((e) => new URL(e.url!).pathname + new URL(e.url!).search).sort()).toEqual(['/blog?page=2', '/shoes?page=2']);
+    } finally {
+      await s.close();
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('server-side locale adaptation', () => {
   it('flags a start URL whose content changes with Accept-Language (Googlebot sends none)', async () => {
     const s = await startServer({

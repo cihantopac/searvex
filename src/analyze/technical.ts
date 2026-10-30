@@ -203,6 +203,8 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     }
   }
 
+  checkFacetsAndPagination(ctx, sink);
+
   // Orphans: sitemap URLs that were crawled fine but have no internal inlinks.
   for (const u of ctx.sitemapUrls) {
     const rec = ctx.byUrl.get(u);
@@ -259,4 +261,50 @@ function checkHreflang(ctx: SiteContext, url: string, f: NonNullable<ReturnType<
   if (!hasDefault) sink.emit('hreflang.no-x-default', { url });
   const relative = f.hreflangRaw.find((h) => !/^https?:\/\//i.test(h));
   if (relative) sink.emit('hreflang.relative', { url, observed: relative });
+}
+
+const PAGE_PARAM = /^(page|p|pg|paged|sayfa|seite|pagina)$/i;
+
+/** Page number from ?page=N or /page/N style URLs; null when not paginated. */
+export function pageNumber(url: string): number | null {
+  const u = new URL(url);
+  for (const [k, v] of u.searchParams) if (PAGE_PARAM.test(k) && /^\d+$/.test(v)) return Number(v);
+  const m = /\/(?:page|sayfa|seite)\/(\d+)\/?$/i.exec(u.pathname);
+  return m ? Number(m[1]) : null;
+}
+
+function checkFacetsAndPagination(ctx: SiteContext, sink: FindingSink): void {
+  // Parameter variants per path among all internal link targets (crawled or merely discovered).
+  const variants = new Map<string, Set<string>>();
+  for (const target of new Set([...ctx.inlinks.keys(), ...ctx.pages.map((p) => p.url)])) {
+    const u = new URL(target);
+    if (!u.search) continue;
+    const params = [...u.searchParams.keys()].filter((k) => !PAGE_PARAM.test(k));
+    if (!params.length) continue;
+    const key = u.origin + u.pathname;
+    (variants.get(key) ?? variants.set(key, new Set()).get(key)!).add(u.search);
+  }
+  for (const [path, set] of variants) {
+    if (set.size < 10) continue;
+    const paramCount = new Map<string, number>();
+    for (const q of set) for (const k of new URLSearchParams(q).keys()) if (!PAGE_PARAM.test(k)) paramCount.set(k, (paramCount.get(k) ?? 0) + 1);
+    const crawled = ctx.pages.filter((p) => p.url.startsWith(path + '?'));
+    const blocked = crawled.filter((p) => p.blockedByRobots).length;
+    const canonicalised = crawled.filter((p) => { const f = factsOf(p); return f?.canonical && normalizeUrl(f.canonical) !== normalizeUrl(p.finalUrl); }).length;
+    const params = [...paramCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => `${k} (${n})`).join(', ');
+    sink.emit('crawl.facet-explosion', {
+      url: path,
+      observed: `${set.size} parameter variants linked internally; parameters: ${params}; of ${crawled.length} crawled variants, ${blocked} robots-blocked, ${canonicalised} canonicalised elsewhere`,
+    });
+  }
+  // Paginated pages that canonicalise to page 1.
+  for (const p of ctx.htmlPages) {
+    const n = pageNumber(p.finalUrl);
+    if (!n || n < 2) continue;
+    const canon = factsOf(p)?.canonical;
+    if (!canon) continue;
+    const cn = pageNumber(canon);
+    const sameSeries = new URL(canon).pathname.replace(/\/(?:page|sayfa|seite)\/\d+\/?$/i, '/').replace(/\/$/, '') === new URL(p.finalUrl).pathname.replace(/\/(?:page|sayfa|seite)\/\d+\/?$/i, '/').replace(/\/$/, '');
+    if (sameSeries && (cn === null || cn === 1)) sink.emit('pagination.canonical-to-first', { url: p.url, observed: `page ${n} → canonical ${canon}` });
+  }
 }
