@@ -59,6 +59,11 @@ to check them against their sources first.
 Ask the `content-strategist` agent for clusters, briefs and an editorial order based on `summary.json`.
 Mark every fact the user must supply. Do not invent statistics or product claims.
 
+## Search data (optional, verified)
+If the user can grant Search Console access, run `gsc report <property> --audit latest` (one-time `gsc auth
+--client <their Desktop OAuth client JSON>`); for Bing, `bing report <siteUrl>` with SEARVEX_BING_API_KEY. Use the
+striking-distance, low-CTR and multi-page-query sections to prioritise; label them as verified search data.
+
 ## Phase 7/7 — Monitoring
 Explain that running `searvex run <url>` again after deployment shows improvements and regressions
 (step 3). For CI, suggest `searvex audit <url> --fail-on high --format sarif`. Search Console data is

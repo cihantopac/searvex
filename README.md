@@ -5,7 +5,7 @@ repositories for technical SEO and GEO/AEO (AI search) issues against a **source
 base**, researches competitors, and applies **safe, verified code fixes with one-command rollback**.
 It ships as a standalone CLI and as a Claude Code plugin.
 
-> Status: **v0.3.0 (early)**. The engine, rule base, CLI and plugin are tested (187 automated tests incl. Playwright rendering, CI on Linux/macOS/Windows,
+> Status: **v0.4.0 (early)**. The engine, rule base, CLI and plugin are tested (209 automated tests incl. Playwright rendering, CI on Linux/macOS/Windows,
 > real-site and real-repository validation — see [docs/quality.md](docs/quality.md)). Expect rough
 > edges; read [Limitations](#limitations) before relying on it.
 
@@ -80,7 +80,13 @@ searvex research https://example.com --competitor https://rival-a.com --competit
 # Regression monitoring against the previous run (optionally with Search Console data)
 searvex monitor https://example.com --fail-on high
 
-# Inspect the rule base
+# Search performance (read-only, your own credentials)
+searvex gsc auth --client client_secret.json      # Google OAuth "Desktop app" client
+searvex gsc report sc-domain:example.com --audit latest
+SEARVEX_BING_API_KEY=… searvex bing report https://example.com/
+
+# Inspect the rule base and re-verify its official sources
+searvex rules check-sources
 searvex rules list
 searvex rules show canonical.in-body
 searvex rules validate
@@ -95,7 +101,8 @@ Full reference: [docs/cli.md](docs/cli.md).
 | Variable | Enables |
 |---|---|
 | `SEARVEX_CRUX_API_KEY` | Real-user Core Web Vitals (Chrome UX Report API) |
-| `SEARVEX_GSC_TOKEN` + `SEARVEX_GSC_SITE` | Search Console clicks/impressions in `monitor` |
+| `searvex gsc auth` (or `SEARVEX_GSC_TOKEN`) | Search Console query × page analysis, `monitor` performance |
+| `SEARVEX_BING_API_KEY` | Bing Webmaster Tools query × page analysis |
 | `--import export.csv` | Search Console Performance CSV exports |
 | `npm i -D playwright` | `--render`: JavaScript rendering and raw-vs-rendered comparison |
 
@@ -103,7 +110,7 @@ Without them, Searvex reports these metrics as **not measured** — it never est
 
 ## What it checks
 
-86 rules across crawlability, indexability, canonicalisation, international (hreflang), metadata,
+87 rules across crawlability, indexability, canonicalisation, international (hreflang), metadata,
 structured data (Google rich-result requirements), performance, security, links, content and GEO.
 Examples: robots.txt failures and AI crawler access, redirect chains and loops, noindex/sitemap
 conflicts, canonical conflicts (including canonicals pushed into `<body>` by invalid head markup),

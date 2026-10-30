@@ -5,6 +5,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-30
+
+### Added
+- `searvex rules check-sources [--update]`: re-fetches every official source (status, redirects, page update
+  date, main-text hash) against `knowledge/source-snapshots.json`; weekly GitHub workflow.
+- Impact-based prioritisation (score, P1–P3, effort, reasons) with a "Fix first" table, and URL-template
+  grouping per finding; HTML report sorts by priority.
+- `searvex gsc auth|sites|report|logout`: Search Console via your own OAuth Desktop client (loopback + PKCE,
+  read-only scope, 0600 token storage); query × page analysis (striking distance, low CTR vs own median,
+  multi-page queries, pages without impressions, audit issues on traffic pages).
+- `searvex bing report`: the same analysis on Bing Webmaster Tools API data (API key).
+- Rule `lang.locale-adaptive`: server-side Accept-Language probe and client-side locale switching in render mode.
+
+### Changed
+- 14 rule sources updated after Google moved its crawling documentation to developers.google.com/crawling/
+  (facts re-verified). Renderer uses a fixed en-US locale. Render mode keeps raw-HTML-only duplicates.
+
 ## [0.3.0] - 2026-10-30
 
 ### Added
