@@ -43,7 +43,7 @@ tests plus, where noted, real-world validation ([quality.md](quality.md)).
 
 | Requirement | Status |
 |---|---|
-| Windows/macOS/Linux | 🟡 CI matrix configured; locally verified on macOS only |
+| Windows/macOS/Linux | ✅ CI green on all three × Node 20/22/24 |
 | No paid API or server required | ✅ |
 | Large sites: queue, cache, checkpoint, resume | ✅ (in-memory analysis tested to 20k pages) |
 | JSON, Markdown, interactive HTML reports (+SARIF) | ✅ |

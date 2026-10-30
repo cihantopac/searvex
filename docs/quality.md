@@ -14,7 +14,7 @@ Last updated: 2026-10-30 (v0.1.0). Environment: macOS (Apple M4), Node 22.23.2.
 | Before/after verification and rollback | automatic verification with auto-rollback; manifest hashes | ✅ |
 | Measurable coverage, benchmarks | below | ✅ |
 | Usable reports and UX | MD/HTML/JSON/SARIF; real Claude Code plugin run | 🟡 more user testing needed |
-| Safe data handling, clean install | SSRF/FS/secret tests; plugin validation passes | 🟡 Windows/Linux not yet run locally (CI matrix configured) |
+| Safe data handling, clean install | SSRF/FS/secret tests; plugin validation; CI clean install from tarball on Linux, macOS, Windows × Node 20/22/24 | ✅ |
 | Documented limitations | [limitations.md](limitations.md) | ✅ |
 
 ## Automated tests

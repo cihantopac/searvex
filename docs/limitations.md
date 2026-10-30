@@ -41,5 +41,4 @@ Searvex reports what it can observe and labels everything else. Known limits (v0
 
 ## Platforms
 
-- Developed and verified on macOS. Windows and Linux are covered by the CI matrix but have not been run
-  manually yet.
+- Automated tests pass on Linux, macOS and Windows (Node 20, 22, 24) in CI. Manual testing has been on macOS.

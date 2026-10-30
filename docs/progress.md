@@ -8,10 +8,10 @@ Use this file to resume work after an interrupted session. Newest entries first.
 - Build: `npm run build` (tsc → `dist/`, esbuild → `dist/searvex.mjs`). The bundle is committed for the plugin.
 - Validate: `npm test`, `node bin/searvex rules validate`, `claude plugin validate .`.
 - Real-world validation done on 6 sites and 4 open-source repositories ([quality.md](quality.md)).
-- GitHub: https://github.com/cihantopac/searvex (**private**). Making it public needs the owner's approval.
-- **Blocker:** GitHub Actions jobs do not start ("recent account payments have failed or your spending
-  limit needs to be increased"). Private repos consume paid minutes; public repos run free. Until CI runs,
-  Windows/Linux remain unverified (macOS verified locally; LF line endings enforced via .gitattributes).
+- GitHub: https://github.com/cihantopac/searvex (**public** since 2026-10-30). No npm publish or GitHub release yet (needs owner approval).
+- CI green on Linux, macOS and Windows × Node 20/22/24, plus bundle-in-sync, plugin validation and clean
+  install from the packed tarball. The first Windows run caught a real bug (monorepo app roots built with
+  `path.join` → backslashes → apps analysed as empty), fixed in 6a2505b.
 
 ### How to resume
 
@@ -35,7 +35,6 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 | # | Item | Impact | Plan |
 |---|---|---|---|
-| 1 | Windows/Linux not run (CI blocked by GitHub billing; no local container runtime) | possible path/EOL bugs | fix billing or make repo public, then fix CI failures |
 | 2 | `--render` (Playwright) untested in CI | JS-site comparison unverified | add CI job + fixtures |
 | 3 | Bing help pages verified only via excerpts; some sources `url-resolved` | rule-text accuracy | manual re-read; source checker |
 | 4 | Framework source checks use regexes (Next.js metadata, Blade, Astro) | edge-case false positives/negatives | move to AST (TypeScript compiler API) for JS/TS |
