@@ -29,10 +29,10 @@
           "level": "fetched"
         },
         {
-          "title": "Bing: Keeping content discoverable with sitemaps (2025)",
-          "url": "https://blogs.bing.com/webmaster/2025/7/Keeping-Content-Discoverable-with-Sitemaps-in-AI-Powered-Search/",
+          "title": "Bing Webmaster Guidelines",
+          "url": "https://www.bing.com/webmasters/help/webmaster-guidelines-30fba23a",
           "checked": "2026-10-30",
-          "level": "excerpt"
+          "level": "fetched"
         }
       ],
       "status": "active"
@@ -58,7 +58,7 @@
         },
         {
           "title": "Yandex: Robots meta tag and X-Robots-Tag",
-          "url": "https://yandex.com/showcaptcha?cc=1&form-fb-hint=2.115&mt=29E12DC1BB66015BB4FE79DF9797AE99094C10B8B16BB4C219B90302CE5D413AFA70A3D7254DC0AA1F74E5844459FC87BFC3907B61830FBC19C907A6080E5070B70370761DC3C5C5641AC902F29E106856AE83E2CD2108388A474DEA17B5346C55662AF7BFE8488E18CCB56EC551B39B028F5F685CA04F8BD7468F9365D8F113E4B14A6DE8FC1650C5&retpath=aHR0cHM6Ly95YW5kZXguY29tL3N1cHBvcnQvd2VibWFzdGVyL2NvbnRyb2xsaW5nLXJvYm90L2h0bWwuaHRtbA%2C%2C_04b6f9e07c157641d47111d5f22abcae&t=2%252F1793371317%252Fb0a414ab64b21cfe33b53b40fd8e0123&u=9670647425019679259&s=d696889c6fc2d917594019078c379394",
+          "url": "https://yandex.com/support/webmaster/en/controlling-robot/metatags",
           "checked": "2026-10-30",
           "level": "fetched"
         }
@@ -108,10 +108,10 @@
           "level": "fetched"
         },
         {
-          "title": "Bing: Keeping content discoverable with sitemaps (2025)",
-          "url": "https://blogs.bing.com/webmaster/2025/7/Keeping-Content-Discoverable-with-Sitemaps-in-AI-Powered-Search/",
+          "title": "Bing Webmaster Guidelines",
+          "url": "https://www.bing.com/webmasters/help/webmaster-guidelines-30fba23a",
           "checked": "2026-10-30",
-          "level": "excerpt"
+          "level": "fetched"
         }
       ],
       "status": "active"
@@ -143,10 +143,10 @@
           "level": "fetched"
         },
         {
-          "title": "Bing: Does duplicate content hurt SEO and AI search visibility (2025)",
-          "url": "https://blogs.bing.com/webmaster/2025/12/Does-Duplicate-Content-Hurt-SEO-and-AI-Search-Visibility/",
+          "title": "Bing Webmaster Guidelines",
+          "url": "https://www.bing.com/webmasters/help/webmaster-guidelines-30fba23a",
           "checked": "2026-10-30",
-          "level": "excerpt"
+          "level": "fetched"
         }
       ],
       "status": "active"

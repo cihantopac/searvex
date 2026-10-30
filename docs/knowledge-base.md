@@ -74,5 +74,9 @@ before the URLs were updated.
    historical reports stay interpretable.
 5. Run `npm test` and `searvex rules validate`.
 
-Known re-verification backlog: Bing help pages (client-rendered, `excerpt` level) and `url-resolved`
-sources (images, URL structure, mobile-first, page experience, MDN/W3C pages).
+Re-verification round (2026-10-30): every `excerpt` and `url-resolved` source was re-read. Bing help pages
+were read rendered in a browser. 146 of 148 citations are now `fetched`. Sources that did not state the rule's
+claim were replaced (Bing duplicate-content and sitemap blog posts → Google "Build a sitemap" and Bing Webmaster
+Guidelines "Sitemaps should: List only canonical URLs"; site-names → Organization structured data). Still
+`url-resolved`: `canonical.target-error` and `sd.invalid-json` (the cited pages do not state the claim
+explicitly).

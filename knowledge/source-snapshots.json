@@ -3,7 +3,7 @@
   "sources": {
     "https://blogs.bing.com/webmaster/2023/9/Announcing-new-options-for-webmasters-to-control-usage-of-their-content-in-Bing-Chat/": {
       "url": "https://blogs.bing.com/webmaster/2023/9/Announcing-new-options-for-webmasters-to-control-usage-of-their-content-in-Bing-Chat/",
-      "fetchedAt": "2026-10-30T14:59:24.180Z",
+      "fetchedAt": "2026-10-30T16:07:29.292Z",
       "status": 200,
       "finalUrl": "https://blogs.bing.com/webmaster/2023/9/Announcing-new-options-for-webmasters-to-control-usage-of-their-content-in-Bing-Chat/",
       "title": "Announcing new options for webmasters to control usage of their...",
@@ -13,7 +13,7 @@
     },
     "https://blogs.bing.com/webmaster/2025/12/Does-Duplicate-Content-Hurt-SEO-and-AI-Search-Visibility/": {
       "url": "https://blogs.bing.com/webmaster/2025/12/Does-Duplicate-Content-Hurt-SEO-and-AI-Search-Visibility/",
-      "fetchedAt": "2026-10-30T14:59:25.210Z",
+      "fetchedAt": "2026-10-30T16:07:30.177Z",
       "status": 200,
       "finalUrl": "https://blogs.bing.com/webmaster/2025/12/Does-Duplicate-Content-Hurt-SEO-and-AI-Search-Visibility/",
       "title": "Does Duplicate Content Hurt SEO and AI Search Visibility? | Bing...",
@@ -33,7 +33,7 @@
     },
     "https://blogs.bing.com/webmaster/2026/2/Introducing-AI-Performance-in-Bing-Webmaster-Tools-Public-Preview/": {
       "url": "https://blogs.bing.com/webmaster/2026/2/Introducing-AI-Performance-in-Bing-Webmaster-Tools-Public-Preview/",
-      "fetchedAt": "2026-10-30T14:59:26.336Z",
+      "fetchedAt": "2026-10-30T16:07:31.035Z",
       "status": 200,
       "finalUrl": "https://blogs.bing.com/webmaster/2026/2/Introducing-AI-Performance-in-Bing-Webmaster-Tools-Public-Preview/",
       "title": "Introducing AI Performance in Bing Webmaster Tools Public Preview |...",
@@ -43,7 +43,7 @@
     },
     "https://commoncrawl.org/ccbot": {
       "url": "https://commoncrawl.org/ccbot",
-      "fetchedAt": "2026-10-30T14:59:24.473Z",
+      "fetchedAt": "2026-10-30T16:07:28.210Z",
       "status": 200,
       "finalUrl": "https://commoncrawl.org/ccbot",
       "title": "Common Crawl - CCBot",
@@ -53,7 +53,7 @@
     },
     "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/name/viewport": {
       "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/name/viewport",
-      "fetchedAt": "2026-10-30T14:59:24.718Z",
+      "fetchedAt": "2026-10-30T16:07:28.429Z",
       "status": 200,
       "finalUrl": "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/name/viewport",
       "title": "<meta name=\"viewport\"> HTML attribute value - HTML | MDN",
@@ -63,7 +63,7 @@
     },
     "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Compression": {
       "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Compression",
-      "fetchedAt": "2026-10-30T14:59:25.661Z",
+      "fetchedAt": "2026-10-30T16:07:29.380Z",
       "status": 200,
       "finalUrl": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Compression",
       "title": "Compression in HTTP - HTTP | MDN",
@@ -73,7 +73,7 @@
     },
     "https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Mixed_content": {
       "url": "https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Mixed_content",
-      "fetchedAt": "2026-10-30T14:59:26.651Z",
+      "fetchedAt": "2026-10-30T16:07:30.377Z",
       "status": 200,
       "finalUrl": "https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Mixed_content",
       "title": "Mixed content - Security | MDN",
@@ -83,7 +83,7 @@
     },
     "https://developers.facebook.com/documentation/sharing/webmasters/web-crawlers": {
       "url": "https://developers.facebook.com/documentation/sharing/webmasters/web-crawlers",
-      "fetchedAt": "2026-10-30T14:59:26.192Z",
+      "fetchedAt": "2026-10-30T16:07:29.720Z",
       "status": 200,
       "finalUrl": "https://developers.facebook.com/documentation/sharing/webmasters/web-crawlers",
       "title": null,
@@ -93,7 +93,7 @@
     },
     "https://developers.google.com/crawling/docs/crawl-budget": {
       "url": "https://developers.google.com/crawling/docs/crawl-budget",
-      "fetchedAt": "2026-10-30T14:59:27.023Z",
+      "fetchedAt": "2026-10-30T16:07:30.615Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/crawling/docs/crawl-budget",
       "title": "Crawl Budget Management | Google Crawling Infrastructure | Crawling infrastructure | Google for Developers",
@@ -103,17 +103,17 @@
     },
     "https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers": {
       "url": "https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers",
-      "fetchedAt": "2026-10-30T14:59:27.621Z",
+      "fetchedAt": "2026-10-30T16:07:31.323Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers",
       "title": "Google's common crawlers | Google Crawling Infrastructure | Crawling infrastructure | Google for Developers",
-      "lastUpdated": "2026-10-15",
+      "lastUpdated": "2026-10-30",
       "contentHash": "62aae0de72f57489808c36af489b2aed3c29da4d886ae7d18f90c3d5c85a8c71",
       "textLength": 8868
     },
     "https://developers.google.com/crawling/docs/crawlers-fetchers/overview-google-crawlers": {
       "url": "https://developers.google.com/crawling/docs/crawlers-fetchers/overview-google-crawlers",
-      "fetchedAt": "2026-10-30T14:59:28.611Z",
+      "fetchedAt": "2026-10-30T16:07:32.330Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/crawling/docs/crawlers-fetchers/overview-google-crawlers",
       "title": "Google Crawler (User Agent) Overview | Google Crawling Infrastructure | Crawling infrastructure | Google for Developers",
@@ -121,9 +121,19 @@
       "contentHash": "eb60c6c2db8217b10011d2b47737f531bea49433f81e7e1cc29334ee5a16f471",
       "textLength": 6718
     },
+    "https://developers.google.com/crawling/docs/faceted-navigation": {
+      "url": "https://developers.google.com/crawling/docs/faceted-navigation",
+      "fetchedAt": "2026-10-30T16:07:33.364Z",
+      "status": 200,
+      "finalUrl": "https://developers.google.com/crawling/docs/faceted-navigation",
+      "title": "Managing crawling of faceted navigation URLs | Google Crawling Infrastructure | Crawling infrastructure | Google for Developers",
+      "lastUpdated": "2025-12-18",
+      "contentHash": "fb536823448b9db985362f919bd82eeba8273aa82b9b167a969537049a053dec",
+      "textLength": 5533
+    },
     "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec": {
       "url": "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec",
-      "fetchedAt": "2026-10-30T14:59:29.857Z",
+      "fetchedAt": "2026-10-30T16:07:34.228Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec",
       "title": "How Google Interprets the robots.txt Specification | Google Crawling Infrastructure | Crawling infrastructure | Google for Developers",
@@ -133,7 +143,7 @@
     },
     "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes": {
       "url": "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes",
-      "fetchedAt": "2026-10-30T14:59:30.625Z",
+      "fetchedAt": "2026-10-30T16:07:35.531Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes",
       "title": "How HTTP Status Codes Affect Google's Crawlers | Google Crawling Infrastructure | Crawling infrastructure | Google for Developers",
@@ -143,7 +153,7 @@
     },
     "https://developers.google.com/search/blog/2023/08/howto-faq-changes": {
       "url": "https://developers.google.com/search/blog/2023/08/howto-faq-changes",
-      "fetchedAt": "2026-10-30T14:59:31.657Z",
+      "fetchedAt": "2026-10-30T16:07:36.464Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/blog/2023/08/howto-faq-changes",
       "title": "Changes to HowTo and FAQ rich results | Google Search Central Blog | Google for Developers",
@@ -153,7 +163,7 @@
     },
     "https://developers.google.com/search/blog/2025/06/simplifying-search-results": {
       "url": "https://developers.google.com/search/blog/2025/06/simplifying-search-results",
-      "fetchedAt": "2026-10-30T14:59:32.649Z",
+      "fetchedAt": "2026-10-30T16:07:37.436Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/blog/2025/06/simplifying-search-results",
       "title": "Simplifying the search results page | Google Search Central Blog | Google for Developers",
@@ -163,7 +173,7 @@
     },
     "https://developers.google.com/search/docs/appearance/ai-features": {
       "url": "https://developers.google.com/search/docs/appearance/ai-features",
-      "fetchedAt": "2026-10-30T14:59:33.725Z",
+      "fetchedAt": "2026-10-30T16:07:38.306Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/appearance/ai-features",
       "title": "AI Features and Your Website | Google Search Central | Documentation | Google for Developers",
@@ -173,7 +183,7 @@
     },
     "https://developers.google.com/search/docs/appearance/core-web-vitals": {
       "url": "https://developers.google.com/search/docs/appearance/core-web-vitals",
-      "fetchedAt": "2026-10-30T14:59:34.635Z",
+      "fetchedAt": "2026-10-30T16:07:39.837Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/appearance/core-web-vitals",
       "title": "Understanding Core Web Vitals and Google search results | Google Search Central | Documentation | Google for Developers",
@@ -183,7 +193,7 @@
     },
     "https://developers.google.com/search/docs/appearance/google-images": {
       "url": "https://developers.google.com/search/docs/appearance/google-images",
-      "fetchedAt": "2026-10-30T14:59:35.664Z",
+      "fetchedAt": "2026-10-30T16:07:40.195Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/appearance/google-images",
       "title": "Image SEO Best Practices | Google Search Central | Documentation | Google for Developers",
@@ -193,7 +203,7 @@
     },
     "https://developers.google.com/search/docs/appearance/page-experience": {
       "url": "https://developers.google.com/search/docs/appearance/page-experience",
-      "fetchedAt": "2026-10-30T14:59:37.170Z",
+      "fetchedAt": "2026-10-30T16:07:41.242Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/appearance/page-experience",
       "title": "Understanding Google Page Experience | Google Search Central | Documentation | Google for Developers",
@@ -203,7 +213,7 @@
     },
     "https://developers.google.com/search/docs/appearance/site-names": {
       "url": "https://developers.google.com/search/docs/appearance/site-names",
-      "fetchedAt": "2026-10-30T14:59:37.878Z",
+      "fetchedAt": "2026-10-30T16:07:42.373Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/appearance/site-names",
       "title": "Site Names in Google Search | Google Search Central | Documentation | Google for Developers",
@@ -213,7 +223,7 @@
     },
     "https://developers.google.com/search/docs/appearance/snippet": {
       "url": "https://developers.google.com/search/docs/appearance/snippet",
-      "fetchedAt": "2026-10-30T14:59:39.155Z",
+      "fetchedAt": "2026-10-30T16:07:43.283Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/appearance/snippet",
       "title": "How to Write Meta Descriptions | Google Search Central | Documentation | Google for Developers",
@@ -223,7 +233,7 @@
     },
     "https://developers.google.com/search/docs/appearance/structured-data/intro-structured-data": {
       "url": "https://developers.google.com/search/docs/appearance/structured-data/intro-structured-data",
-      "fetchedAt": "2026-10-30T14:59:39.712Z",
+      "fetchedAt": "2026-10-30T16:07:44.253Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/appearance/structured-data/intro-structured-data",
       "title": "Intro to How Structured Data Markup Works | Google Search Central | Documentation | Google for Developers",
@@ -233,7 +243,7 @@
     },
     "https://developers.google.com/search/docs/appearance/structured-data/organization": {
       "url": "https://developers.google.com/search/docs/appearance/structured-data/organization",
-      "fetchedAt": "2026-10-30T14:59:40.931Z",
+      "fetchedAt": "2026-10-30T16:07:45.578Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/appearance/structured-data/organization",
       "title": "Organization Schema Markup | Google Search Central | Documentation | Google for Developers",
@@ -243,7 +253,7 @@
     },
     "https://developers.google.com/search/docs/appearance/structured-data/sd-policies": {
       "url": "https://developers.google.com/search/docs/appearance/structured-data/sd-policies",
-      "fetchedAt": "2026-10-30T14:59:41.676Z",
+      "fetchedAt": "2026-10-30T16:07:46.311Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/appearance/structured-data/sd-policies",
       "title": "General Structured Data Guidelines | Google Search Central | Documentation | Google for Developers",
@@ -253,7 +263,7 @@
     },
     "https://developers.google.com/search/docs/appearance/structured-data/search-gallery": {
       "url": "https://developers.google.com/search/docs/appearance/structured-data/search-gallery",
-      "fetchedAt": "2026-10-30T14:59:42.720Z",
+      "fetchedAt": "2026-10-30T16:07:47.243Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/appearance/structured-data/search-gallery",
       "title": "Structured Data Markup that Google Search Supports | Google Search Central | Documentation | Google for Developers",
@@ -263,7 +273,7 @@
     },
     "https://developers.google.com/search/docs/appearance/title-link": {
       "url": "https://developers.google.com/search/docs/appearance/title-link",
-      "fetchedAt": "2026-10-30T14:59:43.544Z",
+      "fetchedAt": "2026-10-30T16:07:48.232Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/appearance/title-link",
       "title": "Influencing Title Links in Google Search | Google Search Central | Documentation | Google for Developers",
@@ -273,7 +283,7 @@
     },
     "https://developers.google.com/search/docs/crawling-indexing/301-redirects": {
       "url": "https://developers.google.com/search/docs/crawling-indexing/301-redirects",
-      "fetchedAt": "2026-10-30T14:59:44.877Z",
+      "fetchedAt": "2026-10-30T16:07:49.524Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/crawling-indexing/301-redirects",
       "title": "Redirects and Google Search | Google Search Central | Documentation | Google for Developers",
@@ -283,7 +293,7 @@
     },
     "https://developers.google.com/search/docs/crawling-indexing/block-indexing": {
       "url": "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
-      "fetchedAt": "2026-10-30T14:59:45.672Z",
+      "fetchedAt": "2026-10-30T16:07:50.522Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
       "title": "Block Search Indexing with noindex | Google Search Central | Documentation | Google for Developers",
@@ -293,7 +303,7 @@
     },
     "https://developers.google.com/search/docs/crawling-indexing/canonicalization": {
       "url": "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
-      "fetchedAt": "2026-10-30T14:59:46.599Z",
+      "fetchedAt": "2026-10-30T16:07:51.553Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
       "title": "What is URL Canonicalization | Google Search Central | Documentation | Google for Developers",
@@ -303,7 +313,7 @@
     },
     "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls": {
       "url": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
-      "fetchedAt": "2026-10-30T14:59:47.691Z",
+      "fetchedAt": "2026-10-30T16:07:52.218Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
       "title": "How to Specify a Canonical with rel=\"canonical\" and Other Methods | Google Search Central | Documentation | Google for Developers",
@@ -313,7 +323,7 @@
     },
     "https://developers.google.com/search/docs/crawling-indexing/control-what-you-share": {
       "url": "https://developers.google.com/search/docs/crawling-indexing/control-what-you-share",
-      "fetchedAt": "2026-10-30T14:59:48.551Z",
+      "fetchedAt": "2026-10-30T16:07:53.948Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/crawling-indexing/control-what-you-share",
       "title": "Control the Content You Share on Search | Google Search Central | Documentation | Google for Developers",
@@ -323,7 +333,7 @@
     },
     "https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics": {
       "url": "https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics",
-      "fetchedAt": "2026-10-30T14:59:49.849Z",
+      "fetchedAt": "2026-10-30T16:07:54.371Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics",
       "title": "Understand JavaScript SEO Basics | Google Search Central | Documentation | Google for Developers",
@@ -333,7 +343,7 @@
     },
     "https://developers.google.com/search/docs/crawling-indexing/links-crawlable": {
       "url": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable",
-      "fetchedAt": "2026-10-30T14:59:50.805Z",
+      "fetchedAt": "2026-10-30T16:07:55.414Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable",
       "title": "SEO Link Best Practices for Google | Google Search Central | Documentation | Google for Developers",
@@ -343,7 +353,7 @@
     },
     "https://developers.google.com/search/docs/crawling-indexing/mobile/mobile-sites-mobile-first-indexing": {
       "url": "https://developers.google.com/search/docs/crawling-indexing/mobile/mobile-sites-mobile-first-indexing",
-      "fetchedAt": "2026-10-30T14:59:51.628Z",
+      "fetchedAt": "2026-10-30T16:07:56.171Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/crawling-indexing/mobile/mobile-sites-mobile-first-indexing",
       "title": "Mobile-first Indexing Best Practices | Google Search Central | Documentation | Google for Developers",
@@ -353,7 +363,7 @@
     },
     "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag": {
       "url": "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag",
-      "fetchedAt": "2026-10-30T14:59:52.572Z",
+      "fetchedAt": "2026-10-30T16:07:57.371Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag",
       "title": "Robots Meta Tags Specifications | Google Search Central | Documentation | Google for Developers",
@@ -363,7 +373,7 @@
     },
     "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap": {
       "url": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap",
-      "fetchedAt": "2026-10-30T14:59:53.764Z",
+      "fetchedAt": "2026-10-30T16:07:58.344Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap",
       "title": "Build and Submit a Sitemap | Google Search Central | Documentation | Google for Developers",
@@ -373,7 +383,7 @@
     },
     "https://developers.google.com/search/docs/crawling-indexing/special-tags": {
       "url": "https://developers.google.com/search/docs/crawling-indexing/special-tags",
-      "fetchedAt": "2026-10-30T14:59:55.367Z",
+      "fetchedAt": "2026-10-30T16:07:59.199Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/crawling-indexing/special-tags",
       "title": "Meta Tags and Attributes that Google Supports | Google Search Central | Documentation | Google for Developers",
@@ -383,7 +393,7 @@
     },
     "https://developers.google.com/search/docs/crawling-indexing/url-structure": {
       "url": "https://developers.google.com/search/docs/crawling-indexing/url-structure",
-      "fetchedAt": "2026-10-30T14:59:55.527Z",
+      "fetchedAt": "2026-10-30T16:08:00.229Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/crawling-indexing/url-structure",
       "title": "URL Structure Best Practices for Google Search | Google Search Central | Documentation | Google for Developers",
@@ -393,7 +403,7 @@
     },
     "https://developers.google.com/search/docs/fundamentals/ai-optimization-guide": {
       "url": "https://developers.google.com/search/docs/fundamentals/ai-optimization-guide",
-      "fetchedAt": "2026-10-30T14:59:56.723Z",
+      "fetchedAt": "2026-10-30T16:08:01.404Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/fundamentals/ai-optimization-guide",
       "title": "Google's Guide to Optimizing for Generative AI Features on Google Search | Google Search Central | Documentation | Google for Developers",
@@ -403,7 +413,7 @@
     },
     "https://developers.google.com/search/docs/fundamentals/creating-helpful-content": {
       "url": "https://developers.google.com/search/docs/fundamentals/creating-helpful-content",
-      "fetchedAt": "2026-10-30T14:59:57.694Z",
+      "fetchedAt": "2026-10-30T16:08:02.200Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/fundamentals/creating-helpful-content",
       "title": "Creating Helpful, Reliable, People-First Content | Google Search Central | Documentation | Google for Developers",
@@ -411,9 +421,19 @@
       "contentHash": "d128bb14b622ade721fde2db67b8e54e186e83708260a3a8cb1e732c550f11ac",
       "textLength": 14344
     },
+    "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading": {
+      "url": "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading",
+      "fetchedAt": "2026-10-30T16:08:03.134Z",
+      "status": 200,
+      "finalUrl": "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading",
+      "title": "Pagination Best Practices for Google | Google Search Central | Documentation | Google for Developers",
+      "lastUpdated": "2025-12-10",
+      "contentHash": "8391c8b9172617cb8c688328c5c92aa1dd0057715794ed5b1df3789037a91a57",
+      "textLength": 5890
+    },
     "https://developers.google.com/search/docs/specialty/international/locale-adaptive-pages": {
       "url": "https://developers.google.com/search/docs/specialty/international/locale-adaptive-pages",
-      "fetchedAt": "2026-10-30T14:59:58.813Z",
+      "fetchedAt": "2026-10-30T16:08:04.381Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/specialty/international/locale-adaptive-pages",
       "title": "How Google Crawls Locale-Adaptive Pages | Google Search Central | Documentation | Google for Developers",
@@ -423,7 +443,7 @@
     },
     "https://developers.google.com/search/docs/specialty/international/localized-versions": {
       "url": "https://developers.google.com/search/docs/specialty/international/localized-versions",
-      "fetchedAt": "2026-10-30T14:59:59.759Z",
+      "fetchedAt": "2026-10-30T16:08:05.396Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/specialty/international/localized-versions",
       "title": "Localized Versions of your Pages | Google Search Central | Documentation | Google for Developers",
@@ -433,7 +453,7 @@
     },
     "https://developers.google.com/search/docs/specialty/international/managing-multi-regional-sites": {
       "url": "https://developers.google.com/search/docs/specialty/international/managing-multi-regional-sites",
-      "fetchedAt": "2026-10-30T15:00:00.706Z",
+      "fetchedAt": "2026-10-30T16:08:06.192Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/docs/specialty/international/managing-multi-regional-sites",
       "title": "Managing Multi-Regional and Multilingual Sites | Google Search Central | Documentation | Google for Developers",
@@ -443,7 +463,7 @@
     },
     "https://developers.google.com/search/updates": {
       "url": "https://developers.google.com/search/updates",
-      "fetchedAt": "2026-10-30T15:00:01.821Z",
+      "fetchedAt": "2026-10-30T16:08:07.360Z",
       "status": 200,
       "finalUrl": "https://developers.google.com/search/updates",
       "title": "Latest Google Search Documentation Updates | Google Search Central | What's new | Google for Developers",
@@ -453,7 +473,7 @@
     },
     "https://developers.openai.com/api/docs/bots": {
       "url": "https://developers.openai.com/api/docs/bots",
-      "fetchedAt": "2026-10-30T14:59:59.045Z",
+      "fetchedAt": "2026-10-30T16:08:04.602Z",
       "status": 200,
       "finalUrl": "https://developers.openai.com/api/docs/bots",
       "title": "Overview of OpenAI Crawlers",
@@ -463,7 +483,7 @@
     },
     "https://docs.perplexity.ai/docs/resources/perplexity-crawlers": {
       "url": "https://docs.perplexity.ai/docs/resources/perplexity-crawlers",
-      "fetchedAt": "2026-10-30T14:59:59.365Z",
+      "fetchedAt": "2026-10-30T16:08:04.904Z",
       "status": 200,
       "finalUrl": "https://docs.perplexity.ai/docs/resources/perplexity-crawlers",
       "title": "Perplexity Crawlers - Perplexity",
@@ -473,7 +493,7 @@
     },
     "https://llmstxt.org/": {
       "url": "https://llmstxt.org/",
-      "fetchedAt": "2026-10-30T14:59:59.821Z",
+      "fetchedAt": "2026-10-30T16:08:05.209Z",
       "status": 200,
       "finalUrl": "https://llmstxt.org/",
       "title": "The /llms.txt file, v2 – llms-txt",
@@ -483,7 +503,7 @@
     },
     "https://ogp.me/": {
       "url": "https://ogp.me/",
-      "fetchedAt": "2026-10-30T15:00:00.065Z",
+      "fetchedAt": "2026-10-30T16:08:05.383Z",
       "status": 200,
       "finalUrl": "https://ogp.me/",
       "title": "The Open Graph protocol",
@@ -493,7 +513,7 @@
     },
     "https://support.apple.com/en-us/119829": {
       "url": "https://support.apple.com/en-us/119829",
-      "fetchedAt": "2026-10-30T14:59:59.918Z",
+      "fetchedAt": "2026-10-30T16:08:05.451Z",
       "status": 200,
       "finalUrl": "https://support.apple.com/en-us/119829",
       "title": "About Applebot - Apple Support",
@@ -503,7 +523,7 @@
     },
     "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler": {
       "url": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
-      "fetchedAt": "2026-10-30T15:00:00.503Z",
+      "fetchedAt": "2026-10-30T16:08:05.992Z",
       "status": 200,
       "finalUrl": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
       "title": "Does Anthropic crawl data from the web, and how can site owners block the crawler? | Claude Help Center",
@@ -513,7 +533,7 @@
     },
     "https://web.dev/articles/optimize-cls": {
       "url": "https://web.dev/articles/optimize-cls",
-      "fetchedAt": "2026-10-30T15:00:00.686Z",
+      "fetchedAt": "2026-10-30T16:08:05.971Z",
       "status": 200,
       "finalUrl": "https://web.dev/articles/optimize-cls",
       "title": "Optimize Cumulative Layout Shift | Articles | web.dev",
@@ -523,7 +543,7 @@
     },
     "https://web.dev/articles/ttfb": {
       "url": "https://web.dev/articles/ttfb",
-      "fetchedAt": "2026-10-30T15:00:01.627Z",
+      "fetchedAt": "2026-10-30T16:08:07.226Z",
       "status": 200,
       "finalUrl": "https://web.dev/articles/ttfb",
       "title": "Time to First Byte (TTFB) | Articles | web.dev",
@@ -533,7 +553,7 @@
     },
     "https://web.dev/articles/vitals": {
       "url": "https://web.dev/articles/vitals",
-      "fetchedAt": "2026-10-30T15:00:02.674Z",
+      "fetchedAt": "2026-10-30T16:08:07.978Z",
       "status": 200,
       "finalUrl": "https://web.dev/articles/vitals",
       "title": "Web Vitals | Articles | web.dev",
@@ -543,7 +563,7 @@
     },
     "https://www.bing.com/webmasters/help/crawl-control-55a30303": {
       "url": "https://www.bing.com/webmasters/help/crawl-control-55a30303",
-      "fetchedAt": "2026-10-30T15:00:01.207Z",
+      "fetchedAt": "2026-10-30T16:08:06.692Z",
       "status": 200,
       "finalUrl": "https://www.bing.com/webmasters/help/crawl-control-55a30303",
       "title": "Bing Webmaster Tools - Help Documentation",
@@ -553,7 +573,7 @@
     },
     "https://www.bing.com/webmasters/help/webmaster-guidelines-30fba23a": {
       "url": "https://www.bing.com/webmasters/help/webmaster-guidelines-30fba23a",
-      "fetchedAt": "2026-10-30T15:00:02.219Z",
+      "fetchedAt": "2026-10-30T16:08:07.864Z",
       "status": 200,
       "finalUrl": "https://www.bing.com/webmasters/help/webmaster-guidelines-30fba23a",
       "title": "Bing Webmaster Tools - Help Documentation",
@@ -563,7 +583,7 @@
     },
     "https://www.rfc-editor.org/rfc/rfc9309.html": {
       "url": "https://www.rfc-editor.org/rfc/rfc9309.html",
-      "fetchedAt": "2026-10-30T15:00:02.038Z",
+      "fetchedAt": "2026-10-30T16:08:07.724Z",
       "status": 200,
       "finalUrl": "https://www.rfc-editor.org/rfc/rfc9309.html",
       "title": "RFC 9309: Robots Exclusion Protocol",
@@ -573,7 +593,7 @@
     },
     "https://www.sitemaps.org/protocol.html": {
       "url": "https://www.sitemaps.org/protocol.html",
-      "fetchedAt": "2026-10-30T15:00:02.840Z",
+      "fetchedAt": "2026-10-30T16:08:08.150Z",
       "status": 200,
       "finalUrl": "https://www.sitemaps.org/protocol.html",
       "title": "sitemaps.org - Protocol",
@@ -583,7 +603,7 @@
     },
     "https://www.w3.org/International/questions/qa-html-language-declarations": {
       "url": "https://www.w3.org/International/questions/qa-html-language-declarations",
-      "fetchedAt": "2026-10-30T15:00:02.372Z",
+      "fetchedAt": "2026-10-30T16:08:08.065Z",
       "status": 200,
       "finalUrl": "https://www.w3.org/International/questions/qa-html-language-declarations",
       "title": "Declaring language in HTML",
@@ -593,7 +613,7 @@
     },
     "https://www.w3.org/WAI/tutorials/images/": {
       "url": "https://www.w3.org/WAI/tutorials/images/",
-      "fetchedAt": "2026-10-30T15:00:03.217Z",
+      "fetchedAt": "2026-10-30T16:08:08.949Z",
       "status": 200,
       "finalUrl": "https://www.w3.org/WAI/tutorials/images/",
       "title": "Images Tutorial | Web Accessibility Initiative (WAI) | W3C",
@@ -601,19 +621,19 @@
       "contentHash": "0e883103909b584c9bc51218a5328cba25d8ff077236063460a3eb956ea8f12b",
       "textLength": 3220
     },
-    "https://yandex.com/showcaptcha?cc=1&form-fb-hint=2.115&mt=29E12DC1BB66015BB4FE79DF9797AE99094C10B8B16BB4C219B90302CE5D413AFA70A3D7254DC0AA1F74E5844459FC87BFC3907B61830FBC19C907A6080E5070B70370761DC3C5C5641AC902F29E106856AE83E2CD2108388A474DEA17B5346C55662AF7BFE8488E18CCB56EC551B39B028F5F685CA04F8BD7468F9365D8F113E4B14A6DE8FC1650C5&retpath=aHR0cHM6Ly95YW5kZXguY29tL3N1cHBvcnQvd2VibWFzdGVyL2NvbnRyb2xsaW5nLXJvYm90L2h0bWwuaHRtbA%2C%2C_04b6f9e07c157641d47111d5f22abcae&t=2%252F1793371317%252Fb0a414ab64b21cfe33b53b40fd8e0123&u=9670647425019679259&s=d696889c6fc2d917594019078c379394": {
-      "url": "https://yandex.com/showcaptcha?cc=1&form-fb-hint=2.115&mt=29E12DC1BB66015BB4FE79DF9797AE99094C10B8B16BB4C219B90302CE5D413AFA70A3D7254DC0AA1F74E5844459FC87BFC3907B61830FBC19C907A6080E5070B70370761DC3C5C5641AC902F29E106856AE83E2CD2108388A474DEA17B5346C55662AF7BFE8488E18CCB56EC551B39B028F5F685CA04F8BD7468F9365D8F113E4B14A6DE8FC1650C5&retpath=aHR0cHM6Ly95YW5kZXguY29tL3N1cHBvcnQvd2VibWFzdGVyL2NvbnRyb2xsaW5nLXJvYm90L2h0bWwuaHRtbA%2C%2C_04b6f9e07c157641d47111d5f22abcae&t=2%252F1793371317%252Fb0a414ab64b21cfe33b53b40fd8e0123&u=9670647425019679259&s=d696889c6fc2d917594019078c379394",
-      "fetchedAt": "2026-10-30T15:00:02.715Z",
+    "https://yandex.com/support/webmaster/en/controlling-robot/metatags": {
+      "url": "https://yandex.com/support/webmaster/en/controlling-robot/metatags",
+      "fetchedAt": "2026-10-30T16:08:08.788Z",
       "status": 200,
-      "finalUrl": "https://yandex.com/showcaptcha?cc=1&form-fb-hint=2.115&mt=29E12DC1BB66015BB4FE79DF9797AE99094C10B8B16BB4C219B90302CE5D413AFA70A3D7254DC0AA1F74E5844459FC87BFC3907B61830FBC19C907A6080E5070B70370761DC3C5C5641AC902F29E106856AE83E2CD2108388A474DEA17B5346C55662AF7BFE8488E18CCB56EC551B39B028F5F685CA04F8BD7468F9365D8F113E4B14A6DE8FC1650C5&retpath=aHR0cHM6Ly95YW5kZXguY29tL3N1cHBvcnQvd2VibWFzdGVyL2NvbnRyb2xsaW5nLXJvYm90L2h0bWwuaHRtbA%2C%2C_04b6f9e07c157641d47111d5f22abcae&t=2%252F1793371317%252Fb0a414ab64b21cfe33b53b40fd8e0123&u=9670647425019679259&s=d696889c6fc2d917594019078c379394",
-      "title": "Are you not a robot?",
+      "finalUrl": "https://yandex.com/support/webmaster/en/controlling-robot/metatags",
+      "title": "Meta tags | Webmaster",
       "lastUpdated": null,
-      "contentHash": null,
-      "textLength": 87
+      "contentHash": "6860e58ce7804607cf7f1e9b2c1223d01873f4260a5139334d5016b82c8bd3d5",
+      "textLength": 5602
     },
     "https://yandex.com/support/webmaster/en/controlling-robot/robots-txt.html": {
       "url": "https://yandex.com/support/webmaster/en/controlling-robot/robots-txt.html",
-      "fetchedAt": "2026-10-30T15:00:04.124Z",
+      "fetchedAt": "2026-10-30T16:08:10.529Z",
       "status": 200,
       "finalUrl": "https://yandex.com/support/webmaster/en/controlling-robot/robots-txt.html",
       "title": "Using robots.txt | Webmaster",
@@ -623,7 +643,7 @@
     },
     "https://yandex.com/support/webmaster/en/yandex-indexing/locale-pages": {
       "url": "https://yandex.com/support/webmaster/en/yandex-indexing/locale-pages",
-      "fetchedAt": "2026-10-30T15:00:05.177Z",
+      "fetchedAt": "2026-10-30T16:08:10.891Z",
       "status": 200,
       "finalUrl": "https://yandex.com/support/webmaster/en/yandex-indexing/locale-pages",
       "title": "Indexing localized pages | Webmaster",

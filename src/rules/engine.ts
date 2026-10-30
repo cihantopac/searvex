@@ -145,6 +145,7 @@ export function validateKnowledge(kb: KnowledgeBase, opts: { implemented?: Set<s
         continue;
       }
       if (!OFFICIAL_DOMAINS.includes(host)) err(`source ${s.url} is not on the official-domain allowlist`);
+      if (/captcha|cdn-cgi\/challenge|__cf_chl/i.test(s.url)) err(`source ${s.url} is a bot-challenge URL, not the documentation page`);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(s.checked)) err(`source ${s.url} has invalid checked date`);
       else {
         const age = (today.getTime() - Date.parse(s.checked)) / 86400000;

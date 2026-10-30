@@ -24,19 +24,23 @@ describe('source revalidation', () => {
       '/moved': { redirect: '/new-home' },
       '/new-home': { body: doc(LONG) },
       '/gone': { status: 404, body: 'x' },
+      '/guarded': { redirect: '/showcaptcha?retpath=abc' },
+      '/showcaptcha': { body: '<html><head><title>Are you not a robot?</title></head><body><form>captcha</form></body></html>' },
       '/spa': { body: '<html><head><title>App</title></head><body><div id="root"></div><script>render()</script></body></html>' },
     };
     const s = await startServer(routes);
     const u = (p: string) => s.url + p;
     const rule = (id: string, url: string) => ({ id, sources: [{ title: id, url, checked: '2026-10-30' }] }) as unknown as Rule;
-    const kb: KnowledgeBase = { version: 'x', files: [], rules: new Map(['/stable', '/edited', '/dated', '/moved', '/gone', '/spa'].map((p, i) => [`r.${i}`, rule(`r.${i}`, u(p))])) };
+    const kb: KnowledgeBase = { version: 'x', files: [], rules: new Map(['/stable', '/edited', '/dated', '/moved', '/gone', '/spa', '/guarded'].map((p, i) => [`r.${i}`, rule(`r.${i}`, u(p))])) };
     const prevHash = (await checkSources(kb, {}, { policy: { ...DEFAULT_POLICY, allowPrivate: true }, delayMs: 0 })).reduce<Record<string, SourceSnapshot>>((m, r) => ({ ...m, [r.url]: r.current }), {});
     // Baseline: the "edited" page had different text; the "dated" page an older date.
     prevHash[u('/edited')] = { ...prevHash[u('/edited')]!, contentHash: 'old-hash' };
     prevHash[u('/dated')] = { ...prevHash[u('/dated')]!, lastUpdated: '2026-01-10' };
     const results = await checkSources(kb, prevHash, { policy: { ...DEFAULT_POLICY, allowPrivate: true }, delayMs: 0 });
     const by = Object.fromEntries(results.map((r) => [new URL(r.url).pathname, r.change]));
-    expect(by, JSON.stringify(by)).toEqual({ '/stable': 'unchanged', '/edited': 'content-changed', '/dated': 'date-changed', '/moved': 'redirected', '/gone': 'broken', '/spa': 'unreadable' });
+    expect(by, JSON.stringify(by)).toEqual({ '/stable': 'unchanged', '/edited': 'content-changed', '/dated': 'date-changed', '/moved': 'redirected', '/gone': 'broken', '/spa': 'unreadable', '/guarded': 'unreadable' });
+    // A bot challenge is reported, not treated as a redirect to "update" the rule's source to.
+    expect(results.find((r) => r.url.endsWith('/guarded'))).toMatchObject({ current: { challenged: true }, detail: expect.stringMatching(/bot challenge/) });
     expect(results.find((r) => r.url.endsWith('/edited'))!.rules).toEqual(['r.1']);
     await s.close();
   });

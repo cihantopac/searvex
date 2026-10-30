@@ -26,7 +26,7 @@
           "title": "Yandex: Locale (hreflang) pages",
           "url": "https://yandex.com/support/webmaster/en/yandex-indexing/locale-pages",
           "checked": "2026-10-30",
-          "level": "excerpt"
+          "level": "fetched"
         }
       ],
       "status": "active",
@@ -150,7 +150,7 @@
           "title": "Yandex: Locale (hreflang) pages",
           "url": "https://yandex.com/support/webmaster/en/yandex-indexing/locale-pages",
           "checked": "2026-10-30",
-          "level": "excerpt"
+          "level": "fetched"
         }
       ],
       "status": "active"
@@ -172,7 +172,7 @@
           "title": "W3C: Declaring language in HTML",
           "url": "https://www.w3.org/International/questions/qa-html-language-declarations",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         },
         {
           "title": "Google: Localized versions of your pages",

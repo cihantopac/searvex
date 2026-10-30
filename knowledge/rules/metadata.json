@@ -175,13 +175,13 @@
           "title": "Google: Mobile site and mobile-first indexing best practices",
           "url": "https://developers.google.com/search/docs/crawling-indexing/mobile/mobile-sites-mobile-first-indexing",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         },
         {
           "title": "MDN: Viewport meta element",
           "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/name/viewport",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         }
       ],
       "status": "active",
@@ -204,7 +204,7 @@
           "title": "The Open Graph protocol",
           "url": "https://ogp.me/",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         }
       ],
       "status": "active"
@@ -226,13 +226,13 @@
           "title": "Google: Google Images SEO best practices",
           "url": "https://developers.google.com/search/docs/appearance/google-images",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         },
         {
           "title": "W3C WAI: Images tutorial",
           "url": "https://www.w3.org/WAI/tutorials/images/",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         }
       ],
       "status": "active"
@@ -254,7 +254,7 @@
           "title": "web.dev: Optimize Cumulative Layout Shift",
           "url": "https://web.dev/articles/optimize-cls",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         }
       ],
       "status": "active"

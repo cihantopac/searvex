@@ -26,7 +26,7 @@
           "title": "Bing: Does duplicate content hurt SEO and AI search visibility (2025)",
           "url": "https://blogs.bing.com/webmaster/2025/12/Does-Duplicate-Content-Hurt-SEO-and-AI-Search-Visibility/",
           "checked": "2026-10-30",
-          "level": "excerpt"
+          "level": "fetched"
         }
       ],
       "status": "active",
@@ -269,7 +269,7 @@
           "title": "Bing: Does duplicate content hurt SEO and AI search visibility (2025)",
           "url": "https://blogs.bing.com/webmaster/2025/12/Does-Duplicate-Content-Hurt-SEO-and-AI-Search-Visibility/",
           "checked": "2026-10-30",
-          "level": "excerpt"
+          "level": "fetched"
         }
       ],
       "status": "active"
@@ -291,13 +291,13 @@
           "title": "Google: What is URL canonicalization",
           "url": "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         },
         {
           "title": "Google: Understanding page experience",
           "url": "https://developers.google.com/search/docs/appearance/page-experience",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         }
       ],
       "status": "active"
@@ -316,10 +316,10 @@
       "verify": "Fetch both hosts and confirm one redirects.",
       "sources": [
         {
-          "title": "Google: What is URL canonicalization",
-          "url": "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
+          "title": "Google: How to specify a canonical URL (consolidate duplicate URLs)",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         }
       ],
       "status": "active"

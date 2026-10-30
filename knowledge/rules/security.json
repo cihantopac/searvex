@@ -19,7 +19,7 @@
           "title": "Google: Understanding page experience",
           "url": "https://developers.google.com/search/docs/appearance/page-experience",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         }
       ],
       "status": "active"
@@ -41,7 +41,7 @@
           "title": "MDN: Mixed content",
           "url": "https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Mixed_content",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         }
       ],
       "status": "active"

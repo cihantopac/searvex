@@ -293,7 +293,8 @@ async function commandRules(flags: GlobalFlags): Promise<number> {
     const results = await checkSources(kb, previous, { onProgress: (d, t, u) => log(v, `  [${d}/${t}] ${u}`) });
     if (v['update']) {
       const next = { ...previous };
-      for (const r of results) if (r.change !== 'broken') next[r.url] = r.current;
+      // Never overwrite a snapshot with an error page or a bot challenge.
+      for (const r of results) if (r.change !== 'broken' && !r.current.challenged) next[r.url] = r.current;
       writeSnapshots(file, next);
     }
     const attention = results.filter((r) => ['broken', 'redirected', 'content-changed', 'date-changed'].includes(r.change));

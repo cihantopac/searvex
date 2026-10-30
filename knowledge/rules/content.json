@@ -98,7 +98,7 @@
           "title": "Google: URL structure best practices",
           "url": "https://developers.google.com/search/docs/crawling-indexing/url-structure",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         }
       ],
       "status": "active",
@@ -121,7 +121,7 @@
           "title": "Google: URL structure best practices",
           "url": "https://developers.google.com/search/docs/crawling-indexing/url-structure",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         },
         {
           "title": "Google: Large site owner's guide to managing crawl budget",

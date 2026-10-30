@@ -32,7 +32,7 @@
           "title": "Bing Webmaster Guidelines",
           "url": "https://www.bing.com/webmasters/help/webmaster-guidelines-30fba23a",
           "checked": "2026-10-30",
-          "level": "excerpt"
+          "level": "fetched"
         }
       ],
       "status": "active"
@@ -205,7 +205,7 @@
           "title": "Google: Site names in Google Search",
           "url": "https://developers.google.com/search/docs/appearance/site-names",
           "checked": "2026-10-30",
-          "level": "url-resolved"
+          "level": "fetched"
         },
         {
           "title": "Google: Organization structured data",
@@ -261,7 +261,7 @@
           "title": "Bing: AI Performance in Bing Webmaster Tools (public preview)",
           "url": "https://blogs.bing.com/webmaster/2026/2/Introducing-AI-Performance-in-Bing-Webmaster-Tools-Public-Preview/",
           "checked": "2026-10-30",
-          "level": "excerpt"
+          "level": "fetched"
         },
         {
           "title": "Google: Control what you share with Google",
