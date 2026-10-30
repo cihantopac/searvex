@@ -98,6 +98,33 @@ describe('research', () => {
   });
 });
 
+describe('searvex run (ordered workflow)', () => {
+  it('runs all six steps in order with one crawl and never changes the repository', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-run-'));
+    fs.cpSync(path.resolve('test/fixtures/repos/static-site'), repo, { recursive: true });
+    const before = fs.readFileSync(path.join(repo, 'index.html'), 'utf8');
+    try {
+      const args = ['run', server.url + '/', repo, '--competitor', comp.url + '/', '--allow-private', '--delay', '0', '--out', ws, '-q'];
+      expect(await main(args)).toBe(0);
+      expect(await main(args)).toBe(0);
+      const runs = fs.readdirSync(path.join(ws, '.searvex', 'runs')).filter((d) => d.startsWith('run-')).sort();
+      const summary = JSON.parse(fs.readFileSync(path.join(ws, '.searvex', 'runs', runs.at(-1)!, 'summary.json'), 'utf8'));
+      expect(summary.steps.map((s: { step: number; status: string }) => `${s.step}:${s.status}`)).toEqual(['1:done', '2:done', '3:done', '4:done', '5:done', '6:done']);
+      expect(summary.plan.fixes.length).toBeGreaterThan(0);
+      expect(fs.readFileSync(path.join(repo, 'index.html'), 'utf8')).toBe(before);
+      const md = fs.readFileSync(path.join(ws, '.searvex', 'runs', runs.at(-1)!, 'summary.md'), 'utf8');
+      expect(md.indexOf('## 1. Website audit')).toBeLessThan(md.indexOf('## 6. Fix plan'));
+      expect(await main(['run', '--out', ws, '-q'])).toBe(2);
+    } finally {
+      log.mockRestore();
+      err.mockRestore();
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('CLI in-process', () => {
   it('audit, geo, report re-render, runs, rules show/list', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});

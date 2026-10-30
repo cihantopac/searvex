@@ -16,12 +16,15 @@ import { commandRepo } from './commands/repo.js';
 import { commandOptimize, commandRollback } from './commands/optimize.js';
 import { commandMonitor } from './commands/monitor.js';
 import { commandResearch } from './commands/research.js';
+import { commandRun } from './commands/run.js';
 
 const HELP = `Searvex ${SEARVEX_VERSION} — open-source search intelligence & optimization engine
 
 Usage: searvex <command> [target] [options]
 
 Commands
+  run <url> [path]      Full workflow in order: audit → GEO → change since last run → competitor research
+                        (--competitor) → repository audit → fix plan (dry run). One crawl, one summary.
   audit <url|path>      Full technical SEO + GEO + content audit (website or repository)
   geo <url>             GEO / AI-search readiness (crawler access, snippet controls, entities)
   research <url>        Site inventory, business model, topics; compare with --competitor URLs
@@ -274,7 +277,8 @@ async function commandReport(flags: GlobalFlags): Promise<number> {
   const v = flags.values;
   const workspace = path.resolve(String(v['out'] ?? process.cwd()));
   let id = flags.positionals[1] ?? 'latest';
-  if (id === 'latest') id = RunStore.latest(workspace) ?? '';
+  // "latest" = newest run that has a report (run/optimize summaries do not).
+  if (id === 'latest') id = RunStore.list(workspace).filter((r) => fs.existsSync(path.join(workspace, '.searvex', 'runs', r, 'report.json'))).at(-1) ?? '';
   if (!id) throw new UsageError('No stored runs found');
   const store = new RunStore(workspace, id);
   const report = store.readJson<AuditReport>('report.json');
@@ -307,6 +311,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   if (!cmd || flags.values['help']) return (console.log(HELP), cmd ? 0 : flags.values['help'] ? 0 : 2);
   try {
     switch (cmd) {
+      case 'run':
+        return await commandRun(flags);
       case 'audit':
         return await commandAudit(flags);
       case 'geo':

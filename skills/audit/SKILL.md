@@ -1,5 +1,5 @@
 ---
-description: Run a full Searvex technical SEO + GEO + content audit on a website URL or a repository path and explain the prioritised findings.
+description: Single step 1 of the /searvex workflow - Run a full Searvex technical SEO + GEO + content audit on a website URL or a repository path and explain the prioritised findings.
 argument-hint: "<url | path> [--max-pages N] [--render] [--check-external]"
 allowed-tools: Bash(node *) Bash(searvex *) Read Grep Glob
 ---

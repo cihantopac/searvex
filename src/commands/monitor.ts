@@ -88,7 +88,7 @@ export function renderDiffMarkdown(d: MonitorDiff, gsc?: { rows: GscRow[]; sourc
   return L.join('\n');
 }
 
-function findBaseline(workspace: string, target: string, exclude: string): { id: string; report: AuditReport } | null {
+export function findBaseline(workspace: string, target: string, exclude: string): { id: string; report: AuditReport } | null {
   const runs = RunStore.list(workspace).filter((id) => id !== exclude).reverse();
   for (const id of runs) {
     const r = new RunStore(workspace, id).readJson<AuditReport>('report.json');

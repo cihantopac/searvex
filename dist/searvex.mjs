@@ -992,35 +992,35 @@ var require_Robots = __commonJS({
       }
       return formattedUserAgent.trim();
     }
-    function normaliseEncoding(path14) {
+    function normaliseEncoding(path15) {
       try {
-        return urlEncodeToUpper(encodeURI(path14).replace(/%25/g, "%"));
+        return urlEncodeToUpper(encodeURI(path15).replace(/%25/g, "%"));
       } catch (e) {
-        return path14;
+        return path15;
       }
     }
-    function urlEncodeToUpper(path14) {
-      return path14.replace(/%[0-9a-fA-F]{2}/g, function(match) {
+    function urlEncodeToUpper(path15) {
+      return path15.replace(/%[0-9a-fA-F]{2}/g, function(match) {
         return match.toUpperCase();
       });
     }
-    function matches(pattern, path14) {
-      var matchingLengths = new Array(path14.length + 1);
+    function matches(pattern, path15) {
+      var matchingLengths = new Array(path15.length + 1);
       var numMatchingLengths = 1;
       matchingLengths[0] = 0;
       for (var p = 0; p < pattern.length; p++) {
         if (pattern[p] === "$" && p + 1 === pattern.length) {
-          return matchingLengths[numMatchingLengths - 1] === path14.length;
+          return matchingLengths[numMatchingLengths - 1] === path15.length;
         }
         if (pattern[p] == "*") {
-          numMatchingLengths = path14.length - matchingLengths[0] + 1;
+          numMatchingLengths = path15.length - matchingLengths[0] + 1;
           for (var i = 1; i < numMatchingLengths; i++) {
             matchingLengths[i] = matchingLengths[i - 1] + 1;
           }
         } else {
           var numMatches = 0;
           for (var i = 0; i < numMatchingLengths; i++) {
-            if (matchingLengths[i] < path14.length && path14[matchingLengths[i]] === pattern[p]) {
+            if (matchingLengths[i] < path15.length && path15[matchingLengths[i]] === pattern[p]) {
               matchingLengths[numMatches++] = matchingLengths[i] + 1;
             }
           }
@@ -1074,11 +1074,11 @@ var require_Robots = __commonJS({
         isNoneUserAgentState = line[0].toLowerCase() !== "user-agent";
       }
     }
-    function findRule(path14, rules) {
+    function findRule(path15, rules) {
       var matchedRule = null;
       for (var i = 0; i < rules.length; i++) {
         var rule = rules[i];
-        if (!matches(rule.pattern, path14)) {
+        if (!matches(rule.pattern, path15)) {
           continue;
         }
         if (!matchedRule || rule.pattern.length > matchedRule.pattern.length) {
@@ -1145,8 +1145,8 @@ var require_Robots = __commonJS({
         return;
       }
       var rules = this._rules[userAgent] || this._rules["*"] || [];
-      var path14 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
-      var rule = findRule(path14, rules);
+      var path15 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
+      var rule = findRule(path15, rules);
       return rule;
     };
     Robots.prototype.isAllowed = function(url, ua) {
@@ -1246,8 +1246,8 @@ var init_render = __esm({
 });
 
 // src/cli.ts
-import fs8 from "node:fs";
-import path13 from "node:path";
+import fs9 from "node:fs";
+import path14 from "node:path";
 import { parseArgs } from "node:util";
 
 // src/core/url.ts
@@ -17776,16 +17776,16 @@ var MatcherView = class {
    * @returns {string|undefined}
    */
   getCurrentTag() {
-    const path14 = this._matcher.path;
-    return path14.length > 0 ? path14[path14.length - 1].tag : void 0;
+    const path15 = this._matcher.path;
+    return path15.length > 0 ? path15[path15.length - 1].tag : void 0;
   }
   /**
    * Get current namespace.
    * @returns {string|undefined}
    */
   getCurrentNamespace() {
-    const path14 = this._matcher.path;
-    return path14.length > 0 ? path14[path14.length - 1].namespace : void 0;
+    const path15 = this._matcher.path;
+    return path15.length > 0 ? path15[path15.length - 1].namespace : void 0;
   }
   /**
    * Get current node's attribute value.
@@ -17793,9 +17793,9 @@ var MatcherView = class {
    * @returns {*}
    */
   getAttrValue(attrName) {
-    const path14 = this._matcher.path;
-    if (path14.length === 0) return void 0;
-    return path14[path14.length - 1].values?.[attrName];
+    const path15 = this._matcher.path;
+    if (path15.length === 0) return void 0;
+    return path15[path15.length - 1].values?.[attrName];
   }
   /**
    * Check if current node has an attribute.
@@ -17803,9 +17803,9 @@ var MatcherView = class {
    * @returns {boolean}
    */
   hasAttr(attrName) {
-    const path14 = this._matcher.path;
-    if (path14.length === 0) return false;
-    const current = path14[path14.length - 1];
+    const path15 = this._matcher.path;
+    if (path15.length === 0) return false;
+    const current = path15[path15.length - 1];
     return current.values !== void 0 && attrName in current.values;
   }
   /**
@@ -17831,18 +17831,18 @@ var MatcherView = class {
    * @returns {number}
    */
   getPosition() {
-    const path14 = this._matcher.path;
-    if (path14.length === 0) return -1;
-    return path14[path14.length - 1].position ?? 0;
+    const path15 = this._matcher.path;
+    if (path15.length === 0) return -1;
+    return path15[path15.length - 1].position ?? 0;
   }
   /**
    * Get current node's repeat counter (occurrence count of this tag name).
    * @returns {number}
    */
   getCounter() {
-    const path14 = this._matcher.path;
-    if (path14.length === 0) return -1;
-    return path14[path14.length - 1].counter ?? 0;
+    const path15 = this._matcher.path;
+    if (path15.length === 0) return -1;
+    return path15[path15.length - 1].counter ?? 0;
   }
   /**
    * Get current node's sibling index (alias for getPosition).
@@ -20783,10 +20783,10 @@ function buildInventory(ctx) {
     if (!f || p.status !== 200 || p.redirects.length) continue;
     const types = /* @__PURE__ */ new Set();
     for (const b of f.jsonLd) for (const n2 of typedNodes(b.data)) for (const t of [].concat(n2["@type"] ?? [])) if (typeof t === "string") types.add(t);
-    const path14 = new URL(p.finalUrl).pathname;
+    const path15 = new URL(p.finalUrl).pathname;
     let type = "other";
     let basis = "default";
-    if (p === ctx.homepage || path14 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path14)) {
+    if (p === ctx.homepage || path15 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path15)) {
       type = "home";
       basis = "url";
     } else {
@@ -20795,7 +20795,7 @@ function buildInventory(ctx) {
         type = s;
         basis = "schema";
       } else {
-        const r = URL_RULES.find(([re]) => re.test(path14));
+        const r = URL_RULES.find(([re]) => re.test(path15));
         if (r) {
           type = r[1];
           basis = "url";
@@ -20852,7 +20852,7 @@ function buildInventory(ctx) {
     hreflangLanguages,
     statusCodes,
     businessModel: { label, evidence },
-    sections: [...sectionsMap.entries()].map(([path14, c]) => ({ path: path14, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
+    sections: [...sectionsMap.entries()].map(([path15, c]) => ({ path: path15, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
   };
 }
 
@@ -20974,8 +20974,8 @@ function runTechnicalChecks(ctx, sink) {
     const ttfb = p.ttfbMs ?? p.timingMs;
     if (ttfb > 800 && !p.redirects.length) sink.emit("perf.slow-ttfb", { url: p.url, observed: `TTFB ${ttfb} ms (single sample from the crawler's location; full response ${p.timingMs} ms)` });
     if (p.bytes > 10 * 1024 && !p.headers["content-encoding"]) sink.emit("perf.no-compression", { url: p.url, observed: `${Math.round(p.bytes / 1024)} KB uncompressed` });
-    const path14 = new URL(p.finalUrl).pathname;
-    if (path14.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
+    const path15 = new URL(p.finalUrl).pathname;
+    if (path15.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
     checkHreflang(ctx, p.url, f, sink);
     checkStructuredData(p.url, f, sink, p === ctx.homepage);
   }
@@ -21117,7 +21117,7 @@ function failingMetrics(m) {
 // src/analyze/audit.ts
 var WEIGHT = { critical: 25, high: 10, medium: 4, low: 1.5, info: 0 };
 function computeScores(findings, pageCount) {
-  const penalty = (fs9) => fs9.reduce((sum, f) => {
+  const penalty = (fs10) => fs10.reduce((sum, f) => {
     if (f.confidence === "unmeasurable") return sum;
     const share = pageCount > 0 ? Math.min(1, f.count / pageCount) : 1;
     return sum + WEIGHT[f.severity] * Math.max(share, f.severity === "critical" ? 1 : share) * (f.confidence === "heuristic" ? 0.5 : 1);
@@ -23049,12 +23049,137 @@ async function commandResearch(flags) {
   return 0;
 }
 
+// src/commands/run.ts
+import fs8 from "node:fs";
+import path13 from "node:path";
+var top = (r, n = 5) => r.findings.filter((f) => f.severity !== "info").slice(0, n);
+function renderRunSummary(s) {
+  const L = ["# Searvex run summary", ""];
+  L.push("| Step | Status | Note |", "|---|---|---|");
+  for (const st of s.steps) L.push(`| ${st.step}. ${st.name} | ${st.status === "done" ? "\u2705" : "\u23ED\uFE0F skipped"} | ${md(st.note)} |`);
+  L.push("");
+  if (s.website) {
+    const r = s.website.report;
+    L.push("## 1. Website audit", "", `${md(r.target)} \u2014 health score **${r.scores.overall}/100**, ${r.crawl.crawled} pages${r.crawl.truncated ? " (page limit reached)" : ""}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, "");
+    for (const f of top(r)) L.push(`- [${f.severity}] ${md(f.title)} \u2014 ${f.count} \xD7 (\`${f.ruleId}\`)`);
+    L.push("", `Full report: \`.searvex/runs/${s.website.runId}/report.md\``, "");
+    L.push("## 2. GEO / AI search readiness", "");
+    const blocked = r.geo.bots.filter((b) => !b.allowed);
+    L.push(`- Blocked crawlers: ${blocked.length ? blocked.map((b) => `${b.token} (${b.purpose})`).join(", ") : "none"}`);
+    L.push(`- Content clarity (heuristic): ${r.geo.answerability.average}/100 \xB7 AI citations: not measured`);
+    for (const f of r.findings.filter((x) => x.category === "geo" && x.severity !== "info")) L.push(`- [${f.severity}] ${md(f.title)}`);
+    L.push("");
+  }
+  if (s.diff) L.push("## 3. Change since previous run", "", renderDiffMarkdown(s.diff).split("\n").slice(2).join("\n"), "");
+  if (s.research) L.push("## 4. Competitor research", "", renderResearchMarkdown(s.research).split("\n").slice(2).join("\n"), "");
+  if (s.repository) {
+    L.push("## 5. Repository audit", "", `Framework: ${s.repository.framework} \u2014 health score **${s.repository.report.scores.overall}/100**.`, "");
+    for (const f of top(s.repository.report)) L.push(`- [${f.severity}] ${md(f.title)} \u2014 ${f.count} \xD7 (\`${f.ruleId}\`)`);
+    L.push("");
+  }
+  if (s.plan) {
+    L.push("## 6. Fix plan (dry run \u2014 nothing was changed)", "", "```", renderPlan(s.plan), "```", "");
+  }
+  L.push("## Next steps", "");
+  if (s.plan?.fixes.length) L.push("- Review `plan.patch`, then apply with `searvex optimize <path> --apply` (verified, reversible).");
+  if (s.plan?.tasks.length) L.push("- Draft the judgement tasks (titles, descriptions, alt text\u2026) with your agent and review them.");
+  if (s.website && !s.research) L.push("- Add competitors (`--competitor <url>`) for content-gap research.");
+  if (s.website) L.push("- Re-run `searvex run` after deploying changes: step 3 will show what improved or regressed.");
+  return L.join("\n") + "\n";
+}
+async function commandRun(flags) {
+  const v = flags.values;
+  const targets = flags.positionals.slice(1);
+  const url = targets.find((t) => /^https?:\/\//i.test(t));
+  const repo = targets.find((t) => !/^https?:\/\//i.test(t));
+  if (!url && !repo) throw new UsageError("run requires a URL, a repository path, or both (e.g. searvex run https://example.com ./site)");
+  if (repo && !(fs8.existsSync(repo) && fs8.statSync(repo).isDirectory())) throw new UsageError(`Not a directory: ${repo}`);
+  const competitors = v["competitor"] ?? [];
+  if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
+  if (competitors.length && !url) throw new UsageError("--competitor requires a website URL");
+  const kb = loadKnowledge();
+  const workspace = path13.resolve(String(v["out"] ?? (repo ?? process.cwd())));
+  const opts = crawlOptionsFrom(v);
+  const summary = { steps: [] };
+  const step = (n, name, status, note) => {
+    summary.steps.push({ step: n, name, status, note });
+    log(v, `${status === "done" ? "\u2713" : "\xB7"} ${n}. ${name} \u2014 ${note}`);
+  };
+  if (url) {
+    log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)\u2026`);
+    const { report, store: store2 } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v["check-external"], cruxApiKey: process.env["SEARVEX_CRUX_API_KEY"] });
+    const files = writeReports(store2, report, kb, ["json", "md", "html"]);
+    summary.website = { report, runId: store2.runId, files };
+    step(1, "Website audit", "done", `${report.crawl.crawled} pages, score ${report.scores.overall}/100`);
+    step(2, "GEO / AI search", "done", `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
+    const base = findBaseline(workspace, report.target, store2.runId);
+    if (base) {
+      summary.diff = diffReports(base.report, report, base.id);
+      step(3, "Change since previous run", "done", `${summary.diff.newFindings.length} new, ${summary.diff.resolved.length} resolved${summary.diff.regression ? " \u2014 regression" : ""}`);
+    } else step(3, "Change since previous run", "skipped", "first run for this site: saved as baseline");
+    if (competitors.length) {
+      const perSite = num(v["max-pages"], 100, 1, 1e5);
+      const compReports = [];
+      for (const c of competitors) {
+        log(v, `4. Crawling competitor ${c} (max ${perSite} pages)\u2026`);
+        compReports.push(await analyzeCrawl(await crawl(c, { ...opts, maxPages: perSite }), kb, { ...opts, probes: false }));
+      }
+      const allTerms = new Set(report.content.pageTerms.flatMap((p) => p.terms).concat(report.content.topTerms.map((t) => t.term)));
+      summary.research = {
+        target: profile(report),
+        competitors: compReports.map(profile),
+        gaps: computeGaps(profile(report), compReports.map(profile), allTerms),
+        limitations: ["Topic gaps compare on-page term statistics of crawled pages; they show coverage differences, not search demand."]
+      };
+      step(4, "Competitor research", "done", `${competitors.length} competitor(s), ${summary.research.gaps.topics.length} topic gaps`);
+    } else step(4, "Competitor research", "skipped", "no --competitor given");
+  } else {
+    step(1, "Website audit", "skipped", "no URL given");
+    step(2, "GEO / AI search", "skipped", "no URL given");
+    step(3, "Change since previous run", "skipped", "no URL given");
+    step(4, "Competitor research", "skipped", "no URL given");
+  }
+  if (repo) {
+    const root2 = fs8.realpathSync(repo);
+    const siteUrl = v["site-url"] ?? (url ? new URL(url).origin : void 0);
+    log(v, `5. Auditing repository ${root2}\u2026`);
+    const ra = auditRepository(root2, { siteUrl, kb });
+    summary.repository = { report: ra.report, framework: ra.scan.apps.map((a) => a.framework + (a.appRoot === "." ? "" : "@" + a.appRoot)).join(", ") };
+    step(5, "Repository audit", "done", `${summary.repository.framework}, score ${ra.report.scores.overall}/100`);
+    summary.plan = planFixes(ra.report, ra.scan, { siteUrl, lang: v["lang"] });
+    step(6, "Fix plan (dry run)", "done", `${summary.plan.fixes.length} automatic fix(es), ${summary.plan.tasks.length} task(s); nothing applied`);
+  } else {
+    step(5, "Repository audit", "skipped", "no repository path given");
+    step(6, "Fix plan (dry run)", "skipped", "no repository path given");
+  }
+  const store = new RunStore(workspace, RunStore.newRunId("run"));
+  store.writeJson("meta.json", { kind: "run", target: url ?? repo, repo, competitors, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
+  store.writeJson("summary.json", {
+    steps: summary.steps,
+    websiteRun: summary.website?.runId,
+    diff: summary.diff,
+    research: summary.research,
+    repository: summary.repository && { framework: summary.repository.framework, report: summary.repository.report },
+    plan: summary.plan && { ...summary.plan, files: summary.plan.files.map((f) => ({ path: f.path, action: f.action })), fixes: summary.plan.fixes.map((f) => ({ ...f, changes: f.changes.map((c) => ({ path: c.path, action: c.action })) })) }
+  });
+  if (summary.plan) store.writeText("plan.patch", summary.plan.files.map((c) => unifiedDiff(c.path, c.before, c.after)).join("\n") + "\n");
+  if (summary.repository) store.writeText("repository-report.md", renderMarkdown(summary.repository.report));
+  const out = store.writeText("summary.md", renderRunSummary(summary));
+  if (v["json"]) process.stdout.write(JSON.stringify(store.readJson("summary.json"), null, 2) + "\n");
+  else if (!v["quiet"]) console.log("\n" + renderRunSummary(summary) + `
+Saved: ${out}`);
+  const codes = [summary.website && failOnExit(summary.website.report, v["fail-on"]), summary.repository && failOnExit(summary.repository.report, v["fail-on"])];
+  return codes.some((c) => c === 1) ? 1 : 0;
+}
+
 // src/cli.ts
 var HELP = `Searvex ${SEARVEX_VERSION} \u2014 open-source search intelligence & optimization engine
 
 Usage: searvex <command> [target] [options]
 
 Commands
+  run <url> [path]      Full workflow in order: audit \u2192 GEO \u2192 change since last run \u2192 competitor research
+                        (--competitor) \u2192 repository audit \u2192 fix plan (dry run). One crawl, one summary.
   audit <url|path>      Full technical SEO + GEO + content audit (website or repository)
   geo <url>             GEO / AI-search readiness (crawler access, snippet controls, entities)
   research <url>        Site inventory, business model, topics; compare with --competitor URLs
@@ -23197,11 +23322,11 @@ async function commandAudit(flags) {
   const target = positionals[1];
   if (!target) throw new UsageError("audit requires a URL or a repository path");
   if (!/^https?:\/\//i.test(target)) {
-    if (fs8.existsSync(target)) return commandRepo(flags);
+    if (fs9.existsSync(target)) return commandRepo(flags);
     throw new UsageError(`Not a URL and not an existing path: ${target}`);
   }
   const kb = loadKnowledge();
-  const workspace = path13.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path14.resolve(String(v["out"] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
   const render3 = v["render"] ? await (await Promise.resolve().then(() => (init_render(), render_exports))).createRenderer(opts.policy) : void 0;
   try {
@@ -23237,7 +23362,7 @@ async function commandGeo(flags) {
   if (!target || !/^https?:\/\//i.test(target)) throw new UsageError("geo requires a URL");
   const kb = loadKnowledge();
   const opts = crawlOptionsFrom({ ...v, "max-pages": v["max-pages"] ?? "50" });
-  const { report, store } = await auditWebsite(target, { workspace: path13.resolve(String(v["out"] ?? process.cwd())), kb, crawl: opts });
+  const { report, store } = await auditWebsite(target, { workspace: path14.resolve(String(v["out"] ?? process.cwd())), kb, crawl: opts });
   const files = writeReports(store, report, kb, String(v["format"] ?? "md,html,json").split(","));
   if (v["json"]) {
     process.stdout.write(JSON.stringify({ target: report.target, geo: report.geo, findings: report.findings.filter((f) => f.category === "geo" || f.ruleId.startsWith("sd.")) }, null, 2) + "\n");
@@ -23303,9 +23428,9 @@ ${kb.rules.size} rules, ${errors.length} errors, ${issues.length - errors.length
 }
 async function commandReport(flags) {
   const v = flags.values;
-  const workspace = path13.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path14.resolve(String(v["out"] ?? process.cwd()));
   let id = flags.positionals[1] ?? "latest";
-  if (id === "latest") id = RunStore.latest(workspace) ?? "";
+  if (id === "latest") id = RunStore.list(workspace).filter((r) => fs9.existsSync(path14.join(workspace, ".searvex", "runs", r, "report.json"))).at(-1) ?? "";
   if (!id) throw new UsageError("No stored runs found");
   const store = new RunStore(workspace, id);
   const report = store.readJson("report.json");
@@ -23316,7 +23441,7 @@ async function commandReport(flags) {
   return 0;
 }
 function commandRuns(flags) {
-  const workspace = path13.resolve(String(flags.values["out"] ?? process.cwd()));
+  const workspace = path14.resolve(String(flags.values["out"] ?? process.cwd()));
   for (const id of RunStore.list(workspace)) {
     const meta = new RunStore(workspace, id).readJson("meta.json");
     console.log(`${id}  ${meta?.kind ?? ""}  ${meta?.startUrl ?? meta?.target ?? ""}`);
@@ -23337,6 +23462,8 @@ Run "searvex --help" for usage.`);
   if (!cmd || flags.values["help"]) return console.log(HELP), cmd ? 0 : flags.values["help"] ? 0 : 2;
   try {
     switch (cmd) {
+      case "run":
+        return await commandRun(flags);
       case "audit":
         return await commandAudit(flags);
       case "geo":
@@ -23367,8 +23494,8 @@ Run "searvex --help" for usage.`);
     return 2;
   }
 }
-var invoked = process.argv[1] ? path13.resolve(process.argv[1]) : "";
-if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path13.sep}searvex`))) {
+var invoked = process.argv[1] ? path14.resolve(process.argv[1]) : "";
+if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path14.sep}searvex`))) {
   main().then((code) => process.exit(code));
 }
 export {

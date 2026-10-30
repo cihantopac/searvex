@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `searvex run`: ordered full workflow (audit → GEO → diff → research → repo audit → fix plan) sharing one crawl.
+- `/searvex` skill rewritten as a 7-phase workflow with approval checkpoints; single-step skills labelled.
+
+### Fixed
+- Windows: monorepo app roots used backslashes, so apps were analysed as empty.
+- `report latest` now selects the newest run that contains a report.
+
 ## [0.1.0] - 2026-10-30
 
 ### Added

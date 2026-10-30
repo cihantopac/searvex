@@ -45,13 +45,18 @@ In Claude Code:
 /plugin install searvex@searvex
 ```
 
-Then use `/searvex <url or path>`, or the namespaced skills `/searvex:audit`, `/searvex:research`,
+Then use **`/searvex <url> [path]`** — it runs the whole workflow in a fixed order (scope → competitors →
+audit → GEO → change since last run → research → repository audit → fix plan → approved fixes → content
+plan → monitoring) with approval checkpoints. Single steps are available as the namespaced skills `/searvex:audit`, `/searvex:research`,
 `/searvex:optimize`, `/searvex:geo`, `/searvex:monitor`. The plugin bundles the CLI
 (`dist/searvex.mjs`), so no `npm install` is needed.
 
 ## Usage
 
 ```bash
+# Everything in order with one crawl: audit → GEO → change since last run → research → repo audit → fix plan (dry run)
+searvex run https://example.com ./my-site --competitor https://rival-a.com
+
 # Website mode: crawl (robots.txt-compliant, rate-limited) and audit
 searvex audit https://example.com --max-pages 300
 

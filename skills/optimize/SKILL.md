@@ -1,5 +1,5 @@
 ---
-description: Apply safe, framework-aware SEO fixes to the current repository with Searvex - dry-run diff, explicit user approval, automatic verification and rollback. Drafts judgement-based changes (titles, descriptions, alt text) for review.
+description: Single step 6 of the /searvex workflow - Apply safe, framework-aware SEO fixes to the current repository with Searvex - dry-run diff, explicit user approval, automatic verification and rollback. Drafts judgement-based changes (titles, descriptions, alt text) for review.
 argument-hint: "[path] [--site-url https://example.com] [--lang en] [--only ruleId]"
 allowed-tools: Bash(node *) Bash(searvex *) Bash(git status *) Bash(git diff *) Read Grep Glob Edit
 ---

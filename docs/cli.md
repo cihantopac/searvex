@@ -10,6 +10,7 @@ Exit codes: `0` success · `1` `--fail-on` threshold met, optimize verification 
 
 | Command | Description |
 |---|---|
+| `run <url> [path]` | Full workflow in order with one crawl: 1 website audit · 2 GEO · 3 change since previous run · 4 competitor research (`--competitor`) · 5 repository audit · 6 fix plan (dry run, never applied). Writes `summary.md/json` and `plan.patch`. Missing inputs skip their steps. |
 | `audit <url\|path>` | Website audit (URL) or repository audit (path). Writes reports to `.searvex/runs/<runId>/`. |
 | `geo <url>` | GEO/AI-search readiness summary (default 50 pages). |
 | `research <url> [--competitor <url>…]` | Target profile, competitor profiles (max 10), topic/page-type gaps (default 150 pages per site). |

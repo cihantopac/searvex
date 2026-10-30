@@ -1,5 +1,5 @@
 ---
-description: Market and competitor research for a website - discover real competitors with web search, crawl them with Searvex and report topic, page-type and structure gaps plus a content plan grounded in the user's actual product.
+description: Single step 4 of the /searvex workflow - Market and competitor research for a website - discover real competitors with web search, crawl them with Searvex and report topic, page-type and structure gaps plus a content plan grounded in the user's actual product.
 argument-hint: "<url> [market/country/language]"
 allowed-tools: Bash(node *) Bash(searvex *) Read Grep Glob WebSearch WebFetch
 ---

@@ -1,5 +1,5 @@
 ---
-description: Re-audit a website with Searvex and compare against the previous run to find regressions and improvements; optionally include Search Console data (read-only).
+description: Single step 3 of the /searvex workflow - Re-audit a website with Searvex and compare against the previous run to find regressions and improvements; optionally include Search Console data (read-only).
 argument-hint: "<url> [--baseline runId] [--import gsc-export.csv]"
 allowed-tools: Bash(node *) Bash(searvex *) Read
 ---

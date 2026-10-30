@@ -1,5 +1,5 @@
 ---
-description: GEO / AEO / AI-search readiness check for a website - AI crawler access by purpose (training vs search vs user fetch), snippet controls, entity consistency and content clarity, with honest limits on what can be measured.
+description: Single step 2 of the /searvex workflow - GEO / AEO / AI-search readiness check for a website - AI crawler access by purpose (training vs search vs user fetch), snippet controls, entity consistency and content clarity, with honest limits on what can be measured.
 argument-hint: "<url>"
 allowed-tools: Bash(node *) Bash(searvex *) Read
 ---

@@ -31,7 +31,7 @@ export interface ResearchReport {
   limitations: string[];
 }
 
-function profile(r: AuditReport): SiteProfile {
+export function profile(r: AuditReport): SiteProfile {
   const schema = new Set<string>();
   for (const f of r.findings) if (f.ruleId === 'sd.retired-type') for (const e of f.evidence) if (e.observed) schema.add(e.observed);
   return {
