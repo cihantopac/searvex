@@ -15870,18 +15870,171 @@ var init_bing = __esm({
   }
 });
 
+// src/net/policy-proxy.ts
+import crypto6 from "node:crypto";
+import http5 from "node:http";
+import net from "node:net";
+async function startPolicyProxy(policy, opts = {}) {
+  const maxBytes = opts.maxBytesPerWindow ?? 64 * 1024 * 1024;
+  const idle = opts.idleTimeoutMs ?? 3e4;
+  const username = "searvex";
+  const password = crypto6.randomBytes(18).toString("base64url");
+  const expectedAuth = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+  const stats = { requests: 0, tunnels: 0, blocked: 0, blockedTargets: [], bytes: 0, budgetExceeded: 0 };
+  const sockets = /* @__PURE__ */ new Set();
+  let windowBytes = 0;
+  const track = (s) => {
+    sockets.add(s);
+    s.on("close", () => sockets.delete(s));
+    if (s instanceof net.Socket) s.setTimeout(idle, () => s.destroy());
+  };
+  const meter = (s, peer) => {
+    s.on("data", (chunk) => {
+      stats.bytes += chunk.length;
+      windowBytes += chunk.length;
+      if (windowBytes > maxBytes) {
+        stats.budgetExceeded++;
+        s.destroy();
+        peer.destroy();
+      }
+    });
+  };
+  const block = (target) => {
+    stats.blocked++;
+    if (stats.blockedTargets.length < 20 && !stats.blockedTargets.includes(target)) stats.blockedTargets.push(target);
+  };
+  const authorized = (req) => req.headers["proxy-authorization"] === expectedAuth;
+  const rawDeny = (socket, status, extra = "") => {
+    socket.end(`HTTP/1.1 ${status}\r
+${extra}Content-Length: 0\r
+Connection: close\r
+\r
+`);
+  };
+  const allowed = (raw) => {
+    try {
+      return assertUrlAllowed(raw, policy);
+    } catch {
+      let target = raw;
+      try {
+        target = new URL(raw).host;
+      } catch {
+      }
+      block(target);
+      return null;
+    }
+  };
+  const server = http5.createServer((req, res) => {
+    stats.requests++;
+    if (!authorized(req)) {
+      res.writeHead(407, { "proxy-authenticate": 'Basic realm="searvex"', connection: "close" }).end();
+      return;
+    }
+    const u = req.url && /^http:\/\//i.test(req.url) ? allowed(req.url) : null;
+    if (!u) {
+      res.writeHead(403, { connection: "close" }).end();
+      return;
+    }
+    const headers = {};
+    for (const [k, val2] of Object.entries(req.headers)) if (!HOP_BY_HOP.has(k.toLowerCase()) && val2 !== void 0) headers[k] = val2;
+    const upstream = http5.request(
+      { host: u.hostname.replace(/^\[|\]$/g, ""), port: u.port || 80, path: `${u.pathname}${u.search}`, method: req.method, headers, lookup: guardedLookup(policy), agent: false, timeout: idle },
+      (up) => {
+        const out = {};
+        for (const [k, val2] of Object.entries(up.headers)) if (!HOP_BY_HOP.has(k.toLowerCase()) && val2 !== void 0) out[k] = val2;
+        res.writeHead(up.statusCode ?? 502, out);
+        meter(up, res.socket ?? up);
+        up.pipe(res);
+      }
+    );
+    upstream.on("timeout", () => upstream.destroy(new Error("upstream timeout")));
+    upstream.on("error", (e) => {
+      if (e instanceof BlockedUrlError) block(u.host);
+      if (!res.headersSent) res.writeHead(e instanceof BlockedUrlError ? 403 : 502, { connection: "close" });
+      res.end();
+    });
+    req.pipe(upstream);
+  });
+  const tunnel = (target, client, head, preamble) => {
+    stats.tunnels++;
+    track(client);
+    const host = target.hostname.replace(/^\[|\]$/g, "");
+    const port2 = Number(target.port) || (target.protocol === "https:" ? 443 : 80);
+    const upstream = net.connect({ host, port: port2, lookup: guardedLookup(policy) });
+    track(upstream);
+    upstream.on("connect", () => {
+      if (preamble === null) client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+      else upstream.write(preamble);
+      if (head.length) upstream.write(head);
+      meter(upstream, client);
+      meter(client, upstream);
+      upstream.pipe(client);
+      client.pipe(upstream);
+    });
+    upstream.on("error", (e) => {
+      if (e instanceof BlockedUrlError) block(target.host);
+      if (client.writable) rawDeny(client, e instanceof BlockedUrlError ? "403 Forbidden" : "502 Bad Gateway");
+      client.destroy();
+    });
+    client.on("error", () => upstream.destroy());
+  };
+  server.on("connect", (req, client, head) => {
+    stats.requests++;
+    if (!authorized(req)) return rawDeny(client, "407 Proxy Authentication Required", 'Proxy-Authenticate: Basic realm="searvex"\r\n');
+    const hostPort = req.url ?? "";
+    const u = /^[\w.-]+:\d+$|^\[[0-9a-f:.]+\]:\d+$/i.test(hostPort) ? allowed(`https://${hostPort}/`) : (block(hostPort), null);
+    if (!u) return rawDeny(client, "403 Forbidden");
+    tunnel(u, client, head, null);
+  });
+  server.on("upgrade", (req, client, head) => {
+    stats.requests++;
+    if (!authorized(req)) return rawDeny(client, "407 Proxy Authentication Required", 'Proxy-Authenticate: Basic realm="searvex"\r\n');
+    const u = req.url && /^(http|ws):\/\//i.test(req.url) ? allowed(req.url.replace(/^ws:/i, "http:")) : null;
+    if (!u) return rawDeny(client, "403 Forbidden");
+    const lines = [`${req.method} ${u.pathname}${u.search} HTTP/1.1`];
+    for (let i = 0; i < req.rawHeaders.length; i += 2) if (!/^proxy-/i.test(req.rawHeaders[i])) lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`);
+    tunnel(u, client, head, lines.join("\r\n") + "\r\n\r\n");
+  });
+  server.on("connection", (s) => track(s));
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const { port } = server.address();
+  return {
+    server: `http://127.0.0.1:${port}`,
+    username,
+    password,
+    stats,
+    resetBudget: () => {
+      windowBytes = 0;
+    },
+    close: () => new Promise((resolve) => {
+      for (const s of sockets) s.destroy();
+      server.close(() => resolve());
+    })
+  };
+}
+var HOP_BY_HOP;
+var init_policy_proxy = __esm({
+  "src/net/policy-proxy.ts"() {
+    "use strict";
+    init_fetcher();
+    init_ssrf();
+    HOP_BY_HOP = /* @__PURE__ */ new Set(["connection", "keep-alive", "proxy-authorization", "proxy-authenticate", "proxy-connection", "te", "trailer", "transfer-encoding", "upgrade"]);
+  }
+});
+
 // src/crawl/render.ts
 var render_exports = {};
 __export(render_exports, {
+  BROWSER_ARGS: () => BROWSER_ARGS,
   createRenderer: () => createRenderer
 });
-import dns2 from "node:dns/promises";
-import { isIP as isIP2 } from "node:net";
-async function assertResolvable(host, policy) {
-  const h = host.replace(/^\[|\]$/g, "");
-  if (isIP2(h)) return;
-  const addrs = await dns2.lookup(h, { all: true });
-  if (addrs.some((a) => !isAddressAllowed(a.address, policy))) throw new Error(`Blocked address for ${h}`);
+async function launch(chromium, proxy) {
+  const base = { headless: true, args: BROWSER_ARGS, proxy: { server: proxy.server, username: proxy.username, password: proxy.password, bypass: "" } };
+  try {
+    return { browser: await chromium.launch({ ...base, chromiumSandbox: true }), sandbox: true };
+  } catch {
+    return { browser: await chromium.launch({ ...base, chromiumSandbox: false }), sandbox: false };
+  }
 }
 async function createRenderer(policy, timeoutMs = 3e4) {
   let chromium;
@@ -15891,19 +16044,30 @@ async function createRenderer(policy, timeoutMs = 3e4) {
   } catch {
     throw new Error('--render requires Playwright: run "npm i -D playwright && npx playwright install chromium" in your project (or globally).');
   }
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ userAgent: DEFAULT_USER_AGENT, serviceWorkers: "block", acceptDownloads: false, javaScriptEnabled: true, locale: "en-US", timezoneId: "America/Los_Angeles" });
-  const stats = { pages: 0, blockedRequests: 0, skippedResources: 0 };
+  const proxy = await startPolicyProxy(policy);
+  let browser;
+  let sandbox;
+  try {
+    ({ browser, sandbox } = await launch(chromium, proxy));
+  } catch (e) {
+    await proxy.close();
+    throw e;
+  }
+  const stats = { pages: 0, blockedRequests: 0, skippedResources: 0, sandbox, proxy: proxy.stats };
   return {
     stats,
     async render(url) {
-      const page = await context.newPage();
-      page.on("popup", (p) => void p.close().catch(() => {
-      }));
       stats.pages++;
+      proxy.resetBudget();
+      const context = await browser.newContext({ userAgent: DEFAULT_USER_AGENT, serviceWorkers: "block", acceptDownloads: false, javaScriptEnabled: true, locale: "en-US", timezoneId: "America/Los_Angeles" });
       let requests = 0;
+      let main2;
+      context.on("page", (p) => {
+        if (main2 && p !== main2) void p.close().catch(() => {
+        });
+      });
       try {
-        await page.route("**/*", async (route) => {
+        await context.route("**/*", async (route) => {
           const req = route.request();
           if (SKIPPED_RESOURCE_TYPES.has(req.resourceType())) {
             stats.skippedResources++;
@@ -15914,38 +16078,54 @@ async function createRenderer(policy, timeoutMs = 3e4) {
             return route.abort();
           }
           try {
-            const u = assertUrlAllowed(req.url(), policy);
-            await assertResolvable(u.hostname, policy);
+            assertUrlAllowed(req.url(), policy);
             return route.continue();
           } catch {
             stats.blockedRequests++;
             return route.abort();
           }
         });
-        await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
-        await page.waitForLoadState("networkidle", { timeout: 5e3 }).catch(() => {
+        main2 = await context.newPage();
+        await main2.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+        await main2.waitForLoadState("networkidle", { timeout: 5e3 }).catch(() => {
         });
-        return { html: await page.content() };
+        return { html: await main2.content() };
       } catch (e) {
         return { html: "", error: e.message.split("\n")[0] };
       } finally {
-        await page.close();
+        await context.close().catch(() => {
+        });
       }
     },
     async close() {
-      await context.close();
-      await browser.close();
+      await browser.close().catch(() => {
+      });
+      await proxy.close();
     }
   };
 }
-var SKIPPED_RESOURCE_TYPES, MAX_REQUESTS_PER_PAGE;
+var SKIPPED_RESOURCE_TYPES, MAX_REQUESTS_PER_PAGE, BROWSER_ARGS;
 var init_render = __esm({
   "src/crawl/render.ts"() {
     "use strict";
     init_ssrf();
     init_fetcher();
+    init_policy_proxy();
     SKIPPED_RESOURCE_TYPES = /* @__PURE__ */ new Set(["image", "media", "font"]);
     MAX_REQUESTS_PER_PAGE = 300;
+    BROWSER_ARGS = [
+      // Send loopback through the proxy too (Chromium bypasses proxies for localhost by default).
+      "--proxy-bypass-list=<-loopback>",
+      // WebRTC: no UDP outside the proxy, so peer connections cannot reach internal hosts directly.
+      "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+      "--webrtc-ip-handling-policy=disable_non_proxied_udp",
+      // Bound the JavaScript heap of hostile pages.
+      "--js-flags=--max-old-space-size=512",
+      "--disable-background-networking",
+      "--disable-sync",
+      "--no-first-run",
+      "--disable-extensions"
+    ];
   }
 });
 
@@ -36545,10 +36725,10 @@ async function probeLocaleAdaptive(startUrl, opts, sink) {
 async function probeHostVariants(startUrl, opts, sink) {
   const u = new URL(startUrl);
   if (u.protocol === "https:") {
-    const http5 = new URL(startUrl);
-    http5.protocol = "http:";
-    const res2 = await safeFetch(http5.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
-    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http5.toString(), observed: "HTTP 200 without redirect to HTTPS" });
+    const http6 = new URL(startUrl);
+    http6.protocol = "http:";
+    const res2 = await safeFetch(http6.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
+    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http6.toString(), observed: "HTTP 200 without redirect to HTTPS" });
   }
   if (/^[\d.]+$/.test(u.hostname) || u.hostname === "localhost" || u.hostname.split(".").length < 2) return;
   const alt = new URL(startUrl);
@@ -40583,6 +40763,12 @@ async function commandAudit(flags) {
         }
       }
     });
+    if (render3) {
+      const st = render3.stats;
+      report.limitations.push(
+        `JavaScript rendering: Chromium ${st.sandbox ? "with" : "WITHOUT"} its OS sandbox${st.sandbox ? "" : " (not available on this system)"}, all traffic through Searvex's policy proxy; ${st.blockedRequests + st.proxy.blocked} browser request(s) blocked by the network policy${st.proxy.blockedTargets.length ? ` (${st.proxy.blockedTargets.slice(0, 5).join(", ")})` : ""}${st.proxy.budgetExceeded ? `; ${st.proxy.budgetExceeded} connection(s) cut at the per-page transfer limit` : ""}.`
+      );
+    }
     const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
     printSummary(report, files, v);
     return failOnExit(report, v["fail-on"]);

@@ -43,7 +43,7 @@ Each item lists how it will be verified; nothing is marked done without that ver
 | 28 | Onboarding: `connect` with Google / CSV / skip, per-site preference, "Not measured" in summaries | ✅ v0.7.0 |
 | 29 | OAuth hardening: revoke on logout, CI guard, Desktop-client check, invalid_grant guidance, credential store interface | ✅ v0.7.0 (mock-tested; live pending) |
 | 30 | OS keychain credential backend (macOS Keychain, Windows Credential Manager, libsecret) | ⬜ v0.8 |
-| 31 | Playwright isolation round (WebSocket/WebRTC, redirect hops, per-site contexts, process limits) | ⬜ next |
+| 31 | Playwright isolation round (WebSocket/WebRTC, redirect hops, per-site contexts, process limits) | ✅ v0.7.0 — policy proxy, fresh context per page, sandbox when available |
 | 32 | Docs consistency checks (versions, commands, env vars) | ✅ v0.7.0 |
 
 ### P2 — Product experience

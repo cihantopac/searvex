@@ -19,7 +19,7 @@ Last updated: 2026-10-30 (v0.7.0). Environment: macOS (Apple M4), Node 22.23.2; 
 
 ## Automated tests
 
-`npm test` — automated tests across unit, integration and E2E files (count printed by the run; 274 at v0.7.0) (unit, integration, Playwright rendering, E2E on the bundled CLI).
+`npm test` — automated tests across unit, integration and E2E files (count printed by the run; 282 at v0.7.0) (unit, integration, Playwright rendering, E2E on the bundled CLI).
 
 | Area | What is tested |
 |---|---|
@@ -134,6 +134,17 @@ was **synthetic**: Turkish headers and number formats, URLs taken from the real 
   remembered for `www.` and bare hosts alike.
 - Still unverified against real data: live OAuth, the real Search Console ZIP layout and Turkish UI header
   wording (synthesised from the published UI terms), Bing totals.
+
+### Round 6 — render isolation (2026-10-31)
+
+- A forbidden local server with a request counter was reachable from rendered pages through four paths that
+  `page.route()` does not see: a redirect after an allowed request (fetch and iframe), a WebSocket upgrade
+  and a popup's first request. The page could also read the forbidden server's response through the
+  redirect. After routing all traffic through the policy proxy the counter stays at zero, and an allowed
+  same-origin redirect still works (positive control).
+- Three permitted HTTPS sites rendered through the proxy: 6 tunnels, 0 blocked requests, Chromium sandbox
+  active (macOS), ~1.7 s per page. A 15-page `--render` audit reproduced the locale-adaptive canonical
+  switch and the Inertia duplicate titles found by hand in round 3.
 
 ## Benchmarks
 
