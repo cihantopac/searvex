@@ -2,6 +2,7 @@ import { normalizeUrl, sameSite } from '../core/url.js';
 import type { FindingSink } from '../rules/engine.js';
 import { factsOf, isNoindex, isSelfCanonical, resolveRecord, robotsDirectives, type SiteContext } from './context.js';
 import { checkStructuredData } from './structured-data.js';
+import { detectLanguage, detectShortLanguage, primaryTag } from './language.js';
 
 /** ISO 639-1 codes (complete list) used to validate hreflang. */
 const ISO639_1 = new Set(
@@ -118,7 +119,7 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
       if (!f.metaDescription) sink.emit('description.missing', ev);
       if (!f.headings.some((h) => h.level === 1)) sink.emit('h1.missing', ev);
     }
-    if (f.metaDescriptionCount > 1) sink.emit('description.multiple', { url: p.url, observed: `${f.metaDescriptionCount} meta descriptions` });
+    if (f.metaDescriptionCount > 1) sink.emit('description.multiple', { url: p.url, observed: `${f.metaDescriptionCount} meta descriptions${p.data?.generator === 'inertia' ? ' — Inertia.js: keep the description only in the page <Head> (or mark the template tag with data-inertia/inertia)' : ''}` });
     if (f.hasMetaKeywords) sink.emit('meta.keywords-present', ev);
     if (!f.viewport) sink.emit('mobile.viewport-missing', ev);
     if (!f.lang) sink.emit('html.lang-missing', ev);
@@ -164,6 +165,17 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     // URL structure
     const path = new URL(p.finalUrl).pathname;
     if (path.includes('_') && !p.foundOn?.startsWith('sitemap')) sink.emit('url.underscores', { url: p.url });
+
+    // Content language vs declared language (only for languages the detector knows).
+    const declared = primaryTag(f.lang);
+    if (declared && ['en', 'tr', 'de', 'fr', 'es', 'it', 'pt', 'nl'].includes(declared) && !noindex) {
+      const detected = detectLanguage(f.mainText);
+      if (detected && detected.lang !== declared) sink.emit('lang.content-mismatch', { url: p.url, observed: `lang="${f.lang}" but main content reads as "${detected.lang}"` });
+      const foreign = f.headings.filter((h) => !h.chrome && h.level <= 2).map((h) => ({ h, lang: detectShortLanguage(h.text) })).filter((x) => x.lang && x.lang !== declared && x.lang !== detected?.lang);
+      if (foreign.length && (!detected || detected.lang === declared)) {
+        sink.emit('lang.mixed-navigation', { url: p.url, observed: `lang="${f.lang}"; ${foreign.slice(0, 3).map((x) => `H${x.h.level} "${x.h.text.slice(0, 50)}" looks ${x.lang}`).join('; ')}` });
+      }
+    }
 
     // hreflang
     // Google ignores hreflang on non-canonical URLs (e.g. ?filter variants canonicalised to the clean URL).

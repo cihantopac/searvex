@@ -67,6 +67,13 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 
 export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentReport {
   const pages = ctx.indexable.map((p) => ({ p, f: factsOf(p)! }));
+  /** Locale + first path segment, e.g. "/help", "en/help": templates and title patterns live per section. */
+  const groupOf = (url: string) => {
+    const segs = new URL(url).pathname.split('/').filter(Boolean);
+    const locale = segs[0] && /^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0]) ? segs.shift()! : '';
+    return `${locale}/${segs[0] ?? ''}`;
+  };
+
 
   // TF-IDF over title + headings + body.
   const docTerms = new Map<string, Map<string, number>>();
@@ -128,11 +135,6 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
   }
   // Templates live per section and language (e.g. a help-centre sidebar on /help/* and another on /en/help/*),
   // so boilerplate frequency is counted within each locale+section group as well as site-wide.
-  const groupOf = (url: string) => {
-    const segs = new URL(url).pathname.split('/').filter(Boolean);
-    const locale = segs[0] && /^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0]) ? segs.shift()! : '';
-    return `${locale}/${segs[0] ?? ''}`;
-  };
   const siteDf = new Map<string, number>();
   const groupDf = new Map<string, Map<string, number>>();
   const groupSize = new Map<string, number>();
@@ -188,19 +190,68 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
   }
   if (nearDuplicates.length) sink.emit('content.near-duplicate', nearDuplicates.slice(0, 50).map((d) => ({ url: d.a, observed: `${Math.round(d.similarity * 100)}% similar to ${d.b}` })));
 
-  // Cannibalisation: same top-3 title/H1 term set across different indexable pages.
+  // Cannibalisation: indexable pages whose specific title/H1 terms strongly overlap.
   const groups = new Map<string, string[]>();
+  const titleTerms = new Map<string, string[]>();
+  const specificTerms = new Map<string, Set<string>>();
+  const sectionTermDf = new Map<string, Map<string, number>>();
+  const sectionPages = new Map<string, number>();
   for (const { p, f } of pages) {
-    const terms = [...new Set([...tokenize(f.title ?? ''), ...tokenize(f.headings.find((h) => h.level === 1)?.text ?? '')])];
-    // Remove brand terms that appear on most pages (e.g. "Acme" in every title).
-    const specific = terms.filter((t) => (df.get(t) ?? 0) < N * 0.5 || N < 4).slice(0, 3).sort();
-    if (specific.length < 2) continue;
-    const key = specific.join(' ');
-    const g = groups.get(key);
-    if (g) g.push(p.url);
-    else groups.set(key, [p.url]);
+    const terms = [...new Set([...tokenize(f.title ?? ''), ...tokenize(f.headings.find((h) => h.level === 1 && !h.chrome)?.text ?? '')])];
+    titleTerms.set(p.url, terms);
+    const g = groupOf(p.url);
+    sectionPages.set(g, (sectionPages.get(g) ?? 0) + 1);
+    const m = sectionTermDf.get(g) ?? new Map<string, number>();
+    sectionTermDf.set(g, m);
+    for (const t of terms) m.set(t, (m.get(t) ?? 0) + 1);
   }
-  const cannibalization = [...groups.entries()].filter(([, g]) => g.length > 1).map(([k, g]) => ({ terms: k.split(' '), pages: g }));
+  for (const { p } of pages) {
+    const terms = titleTerms.get(p.url)!;
+    const section = groupOf(p.url);
+    const gSize = sectionPages.get(section) ?? 0;
+    // Remove brand terms that appear on most pages site-wide (e.g. "Acme" in every title) and section
+    // template terms (e.g. every help article titled "… — Help centre").
+    const specific = terms.filter((t) => ((df.get(t) ?? 0) < N * 0.5 || N < 4) && !(gSize >= 4 && (sectionTermDf.get(section)!.get(t) ?? 0) >= gSize * 0.5));
+    if (specific.length >= 2) specificTerms.set(p.url, new Set(specific));
+  }
+  // Candidate pairs via an inverted index; pages collide when their specific title/H1 terms overlap
+  // strongly (Jaccard ≥ 0.6 with at least two shared terms). Union-find groups chains of collisions.
+  const index = new Map<string, string[]>();
+  for (const [url, set] of specificTerms) for (const t of set) (index.get(t) ?? index.set(t, []).get(t)!).push(url);
+  const parent = new Map<string, string>();
+  const find = (x: string): string => {
+    const px = parent.get(x) ?? x;
+    if (px === x) return x;
+    const r = find(px);
+    parent.set(x, r);
+    return r;
+  };
+  const checked = new Set<string>();
+  for (const urls of index.values()) {
+    if (urls.length > 100) continue;
+    for (let i = 0; i < urls.length; i++)
+      for (let j = i + 1; j < urls.length; j++) {
+        const a = urls[i]!, b = urls[j]!;
+        const key = a < b ? a + '|' + b : b + '|' + a;
+        if (checked.has(key)) continue;
+        checked.add(key);
+        const sa = specificTerms.get(a)!, sb = specificTerms.get(b)!;
+        let shared = 0;
+        for (const t of sa) if (sb.has(t)) shared++;
+        if (shared >= 2 && shared / (sa.size + sb.size - shared) >= 0.6) parent.set(find(a), find(b));
+      }
+  }
+  for (const url of specificTerms.keys()) {
+    const root = find(url);
+    (groups.get(root) ?? groups.set(root, []).get(root)!).push(url);
+  }
+  const cannibalization = [...groups.values()]
+    .filter((g) => g.length > 1)
+    .map((g) => {
+      const sets = g.map((u) => specificTerms.get(u)!);
+      const common = [...sets[0]!].filter((t) => sets.every((x) => x.has(t)));
+      return { terms: (common.length ? common : [...sets[0]!]).slice(0, 4), pages: g };
+    });
   for (const c of cannibalization) sink.emit('content.cannibalization', { url: c.pages[0], observed: `"${c.terms.join(' ')}" shared by ${c.pages.length} pages: ${c.pages.slice(0, 5).join(', ')}` });
 
   // Topic clusters: first path segment groups, labelled with their dominant terms.

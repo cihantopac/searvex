@@ -183,6 +183,59 @@
       ],
       "status": "active",
       "autofix": true
+    },
+    {
+      "id": "lang.content-mismatch",
+      "title": "Declared language differs from the content language",
+      "category": "international",
+      "severity": "medium",
+      "confidence": "heuristic",
+      "engines": [
+        "google",
+        "bing"
+      ],
+      "description": "The html lang attribute declares one language but the main content is detected as another. Google determines a page's language from its visible content, not from the lang attribute or hreflang, so localized versions and hreflang annotations may not be matched as intended.",
+      "fix": "Serve each language version with content in that language and declare the matching lang; or correct the lang attribute.",
+      "verify": "Re-audit; confirm declared and detected languages match.",
+      "exceptions": "Detection uses function-word statistics and can be wrong on very short or highly technical pages.",
+      "sources": [
+        {
+          "title": "Google: Managing multi-regional and multilingual sites",
+          "url": "https://developers.google.com/search/docs/specialty/international/managing-multi-regional-sites",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Localized versions of your pages",
+          "url": "https://developers.google.com/search/docs/specialty/international/localized-versions",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "lang.mixed-navigation",
+      "title": "Headings or navigation in a different language than the page",
+      "category": "international",
+      "severity": "low",
+      "confidence": "heuristic",
+      "engines": [
+        "google"
+      ],
+      "description": "Main headings (H1/H2) appear to be in a different language than the page's declared language — typically untranslated interface strings on localized pages. Google recommends using a single language for content and navigation on each page.",
+      "fix": "Translate the remaining interface strings (headings, labels, navigation) for this locale.",
+      "verify": "Re-audit the localized pages.",
+      "exceptions": "Brand or product names containing language-specific letters can trigger this check.",
+      "sources": [
+        {
+          "title": "Google: Managing multi-regional and multilingual sites",
+          "url": "https://developers.google.com/search/docs/specialty/international/managing-multi-regional-sites",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
     }
   ]
 }

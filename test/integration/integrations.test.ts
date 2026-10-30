@@ -146,6 +146,30 @@ describe('real-world regression fixtures (anonymised)', () => {
     }
   });
 
+  it('ignores section template headings for cannibalisation but keeps real topic collisions', async () => {
+    const help = (h2: string) => page({ title: `${h2} - Help centre`, body: `<main><h1>Help centre</h1><h2>${h2}</h2><p>${h2} explained in detail for every plan and workspace type.</p></main>` });
+    const routes: Record<string, Route> = {
+      '/': { body: page({ title: 'Home', body: '<a href="/help/a">a</a><a href="/help/b">b</a><a href="/help/c">c</a><a href="/help/d">d</a><a href="/blog/migrate">m</a><a href="/guides/migrate">g</a>' }) },
+      '/help/a': { body: help('Inviting teammates') },
+      '/help/b': { body: help('Deleting messages') },
+      '/help/c': { body: help('Exporting history') },
+      '/help/d': { body: help('Pinning channels') },
+      '/blog/migrate': { body: page({ title: 'Migrate old mailboxes', body: '<main><h1>Migrate old mailboxes</h1></main>' }) },
+      '/guides/migrate': { body: page({ title: 'Migrate mailboxes guide', body: '<main><h1>Old mailboxes migration</h1></main>' }) },
+    };
+    const s = await startServer(routes);
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-cannibal-'));
+    try {
+      const { report } = await auditWebsite(s.url + '/', { workspace: ws, crawl: { policy, delayMs: 0, useSitemaps: false }, probes: false });
+      const c = report.content.cannibalization;
+      expect(c.some((x) => x.pages.some((u) => u.includes('/help/')))).toBe(false);
+      expect(c.some((x) => x.pages.some((u) => u.endsWith('/blog/migrate')) && x.pages.some((u) => u.endsWith('/guides/migrate')))).toBe(true);
+    } finally {
+      await s.close();
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
   it('explains duplicate titles produced by Inertia SSR', async () => {
     const s = await startServer({ '/': { body: '<!doctype html><html lang="en"><head><title>ACME</title><title data-inertia="">Home</title><meta name="viewport" content="width=device-width"></head><body><div id="app" data-page="{}"><h1>Home</h1></div></body></html>' } });
     const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-inertia-'));

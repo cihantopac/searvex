@@ -171,3 +171,18 @@ describe('tokenize', () => {
     expect(tokenize('Profesyonel mutfak ekipmanları ve the kitchen 2026')).toEqual(['profesyonel', 'mutfak', 'ekipmanları', 'kitchen']);
   });
 });
+
+describe('language detection', async () => {
+  const { detectLanguage, detectShortLanguage } = await import('../../src/analyze/language.js');
+  it('identifies longer texts and refuses ambiguous ones', () => {
+    expect(detectLanguage('Create an account and verify your email address. In the panel, type a name into the form and submit it. Share the join link on the page of the room with your guests and wait for them to join, then approve each guest from the list.')?.lang).toBe('en');
+    expect(detectLanguage('Bu sayfada odanızı nasıl açacağınızı ve bağlantıyı nasıl paylaşacağınızı anlatıyoruz. Hesap açın, e-posta adresinizi doğrulayın ve oda adını yazın. Sonra bağlantıyı misafirlerinize gönderin; her biri için onay verin ve görüşmeyi başlatın.')?.lang).toBe('tr');
+    expect(detectLanguage('API SDK CLI JSON YAML HTTP')).toBeNull();
+  });
+  it('identifies short strings only with distinctive evidence', () => {
+    expect(detectShortLanguage('Yardım merkezi')).toBe('tr');
+    expect(detectShortLanguage('Getting started')).toBeNull();
+    expect(detectShortLanguage('How to share the link')).toBe('en');
+    expect(detectShortLanguage('What B.O.S.S. does not do')).not.toBe('pt'); // real-world false positive
+  });
+});

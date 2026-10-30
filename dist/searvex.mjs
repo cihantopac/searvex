@@ -20469,9 +20469,9 @@ var STOPWORDS = new Set(
 function tokenize(text4) {
   return text4.toLowerCase().replace(/\u0307/g, "").normalize("NFKC").split(/[^\p{L}\p{M}\p{N}]+/u).filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
 }
-function shingles(words, k = 5) {
+function shingles(words2, k = 5) {
   const s = /* @__PURE__ */ new Set();
-  for (let i = 0; i + k <= words.length; i++) s.add(words.slice(i, i + k).join(" "));
+  for (let i = 0; i + k <= words2.length; i++) s.add(words2.slice(i, i + k).join(" "));
   return s;
 }
 var MINHASH_N = 64;
@@ -20495,6 +20495,11 @@ function jaccard(a, b) {
 }
 function runContentChecks(ctx, sink) {
   const pages = ctx.indexable.map((p) => ({ p, f: factsOf(p) }));
+  const groupOf = (url) => {
+    const segs = new URL(url).pathname.split("/").filter(Boolean);
+    const locale = segs[0] && /^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0]) ? segs.shift() : "";
+    return `${locale}/${segs[0] ?? ""}`;
+  };
   const docTerms = /* @__PURE__ */ new Map();
   const df = /* @__PURE__ */ new Map();
   for (const { p, f } of pages) {
@@ -20535,14 +20540,9 @@ function runContentChecks(ctx, sink) {
   for (const g of exactDuplicates) sink.emit("duplicate.content", { url: g[0], observed: `identical text on ${g.length} URLs: ${g.slice(0, 5).join(", ")}` });
   const allSh = /* @__PURE__ */ new Map();
   for (const { p, f } of pages) {
-    const words = f.mainText.toLowerCase().split(/\s+/).filter(Boolean);
-    if (words.length >= 50) allSh.set(p.url, shingles(words));
+    const words2 = f.mainText.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words2.length >= 50) allSh.set(p.url, shingles(words2));
   }
-  const groupOf = (url) => {
-    const segs = new URL(url).pathname.split("/").filter(Boolean);
-    const locale = segs[0] && /^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0]) ? segs.shift() : "";
-    return `${locale}/${segs[0] ?? ""}`;
-  };
   const siteDf = /* @__PURE__ */ new Map();
   const groupDf = /* @__PURE__ */ new Map();
   const groupSize = /* @__PURE__ */ new Map();
@@ -20597,16 +20597,60 @@ function runContentChecks(ctx, sink) {
   }
   if (nearDuplicates.length) sink.emit("content.near-duplicate", nearDuplicates.slice(0, 50).map((d) => ({ url: d.a, observed: `${Math.round(d.similarity * 100)}% similar to ${d.b}` })));
   const groups = /* @__PURE__ */ new Map();
+  const titleTerms = /* @__PURE__ */ new Map();
+  const specificTerms = /* @__PURE__ */ new Map();
+  const sectionTermDf = /* @__PURE__ */ new Map();
+  const sectionPages = /* @__PURE__ */ new Map();
   for (const { p, f } of pages) {
-    const terms = [.../* @__PURE__ */ new Set([...tokenize(f.title ?? ""), ...tokenize(f.headings.find((h) => h.level === 1)?.text ?? "")])];
-    const specific = terms.filter((t) => (df.get(t) ?? 0) < N * 0.5 || N < 4).slice(0, 3).sort();
-    if (specific.length < 2) continue;
-    const key = specific.join(" ");
-    const g = groups.get(key);
-    if (g) g.push(p.url);
-    else groups.set(key, [p.url]);
+    const terms = [.../* @__PURE__ */ new Set([...tokenize(f.title ?? ""), ...tokenize(f.headings.find((h) => h.level === 1 && !h.chrome)?.text ?? "")])];
+    titleTerms.set(p.url, terms);
+    const g = groupOf(p.url);
+    sectionPages.set(g, (sectionPages.get(g) ?? 0) + 1);
+    const m = sectionTermDf.get(g) ?? /* @__PURE__ */ new Map();
+    sectionTermDf.set(g, m);
+    for (const t of terms) m.set(t, (m.get(t) ?? 0) + 1);
   }
-  const cannibalization = [...groups.entries()].filter(([, g]) => g.length > 1).map(([k, g]) => ({ terms: k.split(" "), pages: g }));
+  for (const { p } of pages) {
+    const terms = titleTerms.get(p.url);
+    const section = groupOf(p.url);
+    const gSize = sectionPages.get(section) ?? 0;
+    const specific = terms.filter((t) => ((df.get(t) ?? 0) < N * 0.5 || N < 4) && !(gSize >= 4 && (sectionTermDf.get(section).get(t) ?? 0) >= gSize * 0.5));
+    if (specific.length >= 2) specificTerms.set(p.url, new Set(specific));
+  }
+  const index2 = /* @__PURE__ */ new Map();
+  for (const [url, set] of specificTerms) for (const t of set) (index2.get(t) ?? index2.set(t, []).get(t)).push(url);
+  const parent2 = /* @__PURE__ */ new Map();
+  const find5 = (x) => {
+    const px = parent2.get(x) ?? x;
+    if (px === x) return x;
+    const r = find5(px);
+    parent2.set(x, r);
+    return r;
+  };
+  const checked = /* @__PURE__ */ new Set();
+  for (const urls of index2.values()) {
+    if (urls.length > 100) continue;
+    for (let i = 0; i < urls.length; i++)
+      for (let j = i + 1; j < urls.length; j++) {
+        const a = urls[i], b = urls[j];
+        const key = a < b ? a + "|" + b : b + "|" + a;
+        if (checked.has(key)) continue;
+        checked.add(key);
+        const sa = specificTerms.get(a), sb = specificTerms.get(b);
+        let shared = 0;
+        for (const t of sa) if (sb.has(t)) shared++;
+        if (shared >= 2 && shared / (sa.size + sb.size - shared) >= 0.6) parent2.set(find5(a), find5(b));
+      }
+  }
+  for (const url of specificTerms.keys()) {
+    const root2 = find5(url);
+    (groups.get(root2) ?? groups.set(root2, []).get(root2)).push(url);
+  }
+  const cannibalization = [...groups.values()].filter((g) => g.length > 1).map((g) => {
+    const sets = g.map((u) => specificTerms.get(u));
+    const common = [...sets[0]].filter((t) => sets.every((x) => x.has(t)));
+    return { terms: (common.length ? common : [...sets[0]]).slice(0, 4), pages: g };
+  });
   for (const c of cannibalization) sink.emit("content.cannibalization", { url: c.pages[0], observed: `"${c.terms.join(" ")}" shared by ${c.pages.length} pages: ${c.pages.slice(0, 5).join(", ")}` });
   const clusterMap = /* @__PURE__ */ new Map();
   for (const { p } of pages) {
@@ -21034,6 +21078,57 @@ function classifyBusiness(ctx, byType, sd) {
   };
 }
 
+// src/analyze/language.ts
+var FUNCTION_WORDS = {
+  en: ["the", "and", "of", "to", "is", "in", "for", "with", "you", "your", "this", "that", "on", "are", "it", "be", "as", "can", "from", "or", "an", "how", "what", "we", "our"],
+  tr: ["ve", "bir", "bu", "i\xE7in", "ile", "da", "de", "\xE7ok", "daha", "olarak", "gibi", "ama", "ne", "veya", "sonra", "her", "kadar", "de\u011Fil", "var", "nas\u0131l", "olan", "en", "tek", "yok", "m\u0131", "mi"],
+  de: ["der", "die", "und", "das", "ist", "nicht", "mit", "f\xFCr", "auf", "ein", "eine", "den", "von", "zu", "sie", "es", "sich", "auch", "wie", "oder"],
+  fr: ["le", "la", "les", "et", "des", "un", "une", "du", "pour", "dans", "est", "que", "qui", "pas", "sur", "au", "avec", "vous", "ce", "votre"],
+  es: ["el", "la", "los", "las", "y", "de", "que", "en", "un", "una", "por", "con", "para", "es", "del", "se", "su", "como", "m\xE1s", "tu"],
+  it: ["il", "la", "che", "di", "e", "un", "una", "per", "non", "con", "del", "sono", "gli", "le", "della", "come", "pi\xF9", "questo"],
+  pt: ["o", "a", "os", "as", "e", "de", "que", "um", "uma", "para", "com", "n\xE3o", "do", "da", "em", "voc\xEA", "seu", "mais", "como"],
+  nl: ["de", "het", "een", "en", "van", "is", "dat", "niet", "op", "te", "met", "voor", "zijn", "je", "u", "ook", "wordt"]
+};
+var DISTINCT_LETTERS = [
+  ["tr", /[ğĞşŞıİ]/],
+  ["de", /ß/],
+  ["es", /[ñÑ¿¡]/],
+  ["pt", /[ãõÃÕ]/],
+  ["fr", /[œŒ]/]
+];
+var SETS = Object.fromEntries(Object.entries(FUNCTION_WORDS).map(([k, v]) => [k, new Set(v)]));
+function words(text4) {
+  return text4.toLowerCase().replace(/\u0307/g, "").split(/[^\p{L}\p{M}]+/u).filter(Boolean);
+}
+function detectLanguage(text4, minWords = 30) {
+  const w = words(text4);
+  if (w.length < minWords) return null;
+  const counts = {};
+  for (const x of w) for (const [lang, set] of Object.entries(SETS)) if (set.has(x)) counts[lang] = (counts[lang] ?? 0) + 1;
+  for (const [lang, re] of DISTINCT_LETTERS) {
+    const hits = w.filter((x) => re.test(x)).length;
+    if (hits) counts[lang] = (counts[lang] ?? 0) + hits * 0.5;
+  }
+  const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const [best, second] = ranked;
+  if (!best || best[1] < 5) return null;
+  const margin = best[1] / Math.max(1, second?.[1] ?? 0);
+  if (margin < 1.6) return null;
+  return { lang: best[0], score: best[1] / w.length, margin };
+}
+function detectShortLanguage(text4) {
+  const w = words(text4).filter((x) => x.length > 1);
+  for (const [lang, re] of DISTINCT_LETTERS) if (re.test(text4)) return lang;
+  const counts = {};
+  for (const x of w) for (const [lang, set] of Object.entries(SETS)) if (set.has(x)) counts[lang] = (counts[lang] ?? 0) + 1;
+  const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  if (ranked[0] && ranked[0][1] >= 2 && (!ranked[1] || ranked[0][1] > ranked[1][1])) return ranked[0][0];
+  return null;
+}
+function primaryTag(lang) {
+  return lang ? lang.toLowerCase().split(/[-_]/)[0] : null;
+}
+
 // src/analyze/technical.ts
 var ISO639_1 = new Set(
   "aa ab ae af ak am an ar as av ay az ba be bg bh bi bm bn bo br bs ca ce ch co cr cs cu cv cy da de dv dz ee el en eo es et eu fa ff fi fj fo fr fy ga gd gl gn gu gv ha he hi ho hr ht hu hy hz ia id ie ig ii ik io is it iu ja jv ka kg ki kj kk kl km kn ko kr ks ku kv kw ky la lb lg li ln lo lt lu lv mg mh mi mk ml mn mr ms mt my na nb nd ne ng nl nn no nr nv ny oc oj om or os pa pi pl ps pt qu rm rn ro ru rw sa sc sd se sg si sk sl sm sn so sq sr ss st su sv sw ta te tg th ti tk tl tn to tr ts tt tw ty ug uk ur uz ve vi vo wa wo xh yi yo za zh zu".split(" ")
@@ -21128,7 +21223,7 @@ function runTechnicalChecks(ctx, sink) {
       if (!f.metaDescription) sink.emit("description.missing", ev);
       if (!f.headings.some((h) => h.level === 1)) sink.emit("h1.missing", ev);
     }
-    if (f.metaDescriptionCount > 1) sink.emit("description.multiple", { url: p.url, observed: `${f.metaDescriptionCount} meta descriptions` });
+    if (f.metaDescriptionCount > 1) sink.emit("description.multiple", { url: p.url, observed: `${f.metaDescriptionCount} meta descriptions${p.data?.generator === "inertia" ? " \u2014 Inertia.js: keep the description only in the page <Head> (or mark the template tag with data-inertia/inertia)" : ""}` });
     if (f.hasMetaKeywords) sink.emit("meta.keywords-present", ev);
     if (!f.viewport) sink.emit("mobile.viewport-missing", ev);
     if (!f.lang) sink.emit("html.lang-missing", ev);
@@ -21160,6 +21255,15 @@ function runTechnicalChecks(ctx, sink) {
     if (p.bytes > 10 * 1024 && !p.headers["content-encoding"]) sink.emit("perf.no-compression", { url: p.url, observed: `${Math.round(p.bytes / 1024)} KB uncompressed` });
     const path16 = new URL(p.finalUrl).pathname;
     if (path16.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
+    const declared = primaryTag(f.lang);
+    if (declared && ["en", "tr", "de", "fr", "es", "it", "pt", "nl"].includes(declared) && !noindex) {
+      const detected = detectLanguage(f.mainText);
+      if (detected && detected.lang !== declared) sink.emit("lang.content-mismatch", { url: p.url, observed: `lang="${f.lang}" but main content reads as "${detected.lang}"` });
+      const foreign = f.headings.filter((h) => !h.chrome && h.level <= 2).map((h) => ({ h, lang: detectShortLanguage(h.text) })).filter((x) => x.lang && x.lang !== declared && x.lang !== detected?.lang);
+      if (foreign.length && (!detected || detected.lang === declared)) {
+        sink.emit("lang.mixed-navigation", { url: p.url, observed: `lang="${f.lang}"; ${foreign.slice(0, 3).map((x) => `H${x.h.level} "${x.h.text.slice(0, 50)}" looks ${x.lang}`).join("; ")}` });
+      }
+    }
     if (selfCanon && !noindex) checkHreflang(ctx, p.url, f, sink);
     checkStructuredData(p.url, f, sink, p === ctx.homepage);
   }
@@ -21693,6 +21797,8 @@ var IMPLEMENTED_RULES = /* @__PURE__ */ new Set([
   "hreflang.relative",
   "hreflang.no-x-default",
   "html.lang-missing",
+  "lang.content-mismatch",
+  "lang.mixed-navigation",
   // metadata / media
   "title.missing",
   "title.multiple",
