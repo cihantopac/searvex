@@ -11,7 +11,7 @@ Exit codes: `0` success · `1` `--fail-on` threshold met, optimize verification 
 | Command | Description |
 |---|---|
 | `run <url> [path]` | Full workflow in order with one crawl: 1 website audit · 2 GEO · 3 change since previous run · 4 competitor research (`--competitor`) · 5 repository audit · 6 fix plan (dry run, never applied). Writes `summary.md/json` and `plan.patch`. Missing inputs skip their steps. |
-| `ecosystem <url> <url>…` | Brand-family analysis across 2–20 related sites (crawled in parallel, `--max-pages` per site, default 60): entity graph, cross-links, topic overlap, family-wide issues, language coverage. `--reuse` analyses the latest stored run of each site instead of crawling. Writes `ecosystem.md/json`. |
+| `ecosystem <url> <url>…` | Brand-family analysis across 2–20 related sites (crawled in parallel, `--max-pages` per site, default 60): entity graph, cross-links, topic overlap, family-wide issues, language coverage. `--reuse` analyses the latest stored run of each site instead of crawling. Writes `ecosystem.md/json/html`. |
 | `audit <url\|path>` | Website audit (URL) or repository audit (path). Writes reports to `.searvex/runs/<runId>/`. |
 | `geo <url>` | GEO/AI-search readiness summary (default 50 pages). |
 | `research <url> [--competitor <url>…]` | Target profile, competitor profiles (max 10), topic/page-type gaps (default 150 pages per site). |
@@ -19,9 +19,9 @@ Exit codes: `0` success · `1` `--fail-on` threshold met, optimize verification 
 | `rollback <changeId> [path]` | Restore files changed by an optimization. Refuses if files changed afterwards (use `--yes` to force). `rollback list [path]` lists changes. |
 | `gsc auth --client <file>` | Authorise read-only Search Console access with **your own** OAuth "Desktop app" client (loopback + PKCE). Refresh token stored in the user config dir (`~/.config/searvex/credentials.json`, `%APPDATA%\searvex` on Windows) with 0600 permissions. `gsc logout` removes it. |
 | `gsc sites` | List the properties the credential can read. |
-| `gsc report <property> [--days 28] [--audit latest\|<runId>] [--max-rows n]` | Query × page analysis: top queries/pages, page → primary query, striking distance (positions 8–20), low CTR vs the site's own median at the same position, queries shared by several pages, indexable pages without impressions, audit issues on pages with traffic. Writes `search-performance.md/json`. |
+| `gsc report <property> [--days 28] [--audit latest\|<runId>] [--max-rows n]` | Query × page analysis: top queries/pages, page → primary query, striking distance (positions 8–20), low CTR vs the site's own median at the same position, queries shared by several pages, indexable pages without impressions, audit issues on pages with traffic, an intent mix and intent mismatches (intent inferred from query wording and page type; clicks/impressions are verified). Writes `search-performance.md/json`. |
 | `bing report <siteUrl> [--days 28] [--audit …] [--max-pages 25]` | Same analysis on Bing Webmaster Tools data (`SEARVEX_BING_API_KEY`): page stats select the top pages, `GetPageQueryStats` supplies query × page rows. Read-only; the key is never printed. |
-| `monitor <url>` | Re-audit and diff with the previous run of the same target (`--baseline <runId>` to choose). Regression = new/worsened critical or high issues. |
+| `monitor <url>` | Re-audit and diff with the previous run of the same target (`--baseline <runId>` to choose). Regression = new/worsened critical or high issues. Writes `monitor.md/json/html` (before/after view). |
 | `rules list [--category c]` · `rules show <id>` · `rules validate [--strict]` | Inspect and validate the knowledge base. |
 | `report <runId\|latest> [--format …]` | Re-render a stored report. |
 | `runs` | List stored runs. |

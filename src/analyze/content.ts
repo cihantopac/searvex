@@ -105,13 +105,28 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
   const N = Math.max(1, pages.length);
   const pageTerms: ContentReport['pageTerms'] = [];
   const vectors = new Map<string, Map<string, number>>();
+  // Section template vocabulary ("Help centre", "Categories", "Related articles" on every help page) says
+  // nothing about a page's topic: drop terms on at least 80% of the pages of the same section. (A lower
+  // threshold also removes the shared subject of a topical blog, e.g. "mail" on a mail product's blog.)
+  const secSize = new Map<string, number>();
+  const secDf = new Map<string, Map<string, number>>();
   for (const [url, tf] of docTerms) {
+    const g = groupOf(url);
+    secSize.set(g, (secSize.get(g) ?? 0) + 1);
+    const m = secDf.get(g) ?? secDf.set(g, new Map()).get(g)!;
+    for (const t of tf.keys()) m.set(t, (m.get(t) ?? 0) + 1);
+  }
+  for (const [url, tf] of docTerms) {
+    const g = groupOf(url);
+    const gs = secSize.get(g)!;
+    const sectionTemplate = (t: string) => gs >= 4 && (secDf.get(g)!.get(t) ?? 0) >= gs * 0.8;
     const scored = [...tf.entries()].map(([t, c]) => [t, c * Math.log(1 + N / (df.get(t) ?? 1))] as const).sort((a, b) => b[1] - a[1]);
     pageTerms.push({ url, terms: scored.slice(0, 8).map(([t]) => t) });
-    // Topic vector: top 20 TF-IDF terms, excluding terms present on more than 30% of pages (site vocabulary).
-    vectors.set(url, new Map(scored.filter(([t]) => (df.get(t) ?? 0) <= Math.max(3, N * 0.3)).slice(0, 20)));
+    // Topic vector: top 20 TF-IDF terms, excluding site vocabulary (on more than half of all pages).
+    vectors.set(url, new Map(scored.filter(([t]) => (df.get(t) ?? 0) <= Math.max(3, N * 0.5) && !sectionTemplate(t)).slice(0, 20)));
   }
-  const linkOpportunities = findLinkOpportunities(ctx, vectors);
+  const langOf = new Map(pages.map(({ p, f }) => [p.url, (f.lang ?? '').toLowerCase().split('-')[0]!]));
+  const linkOpportunities = findLinkOpportunities(ctx, vectors, langOf);
   if (linkOpportunities.length) {
     sink.emit('links.internal-opportunity', linkOpportunities.slice(0, 50).map((o) => ({ url: o.to, observed: `link from ${o.from} (topic similarity ${Math.round(o.similarity * 100)}%: ${o.sharedTerms.slice(0, 4).join(', ')}); target has ${o.toInlinks} internal inlink(s)` })));
   }
@@ -296,8 +311,14 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
  * Internal-linking opportunities: pairs of indexable pages with similar topic vectors (cosine ≥ 0.3, ≥ 2
  * shared terms) and no link in either direction. Direction: from the better-linked page to the weaker one.
  * Each target gets at most 3 suggestions; near-identical pairs (similarity > 0.9) are left to duplicate checks.
+ * Pages declaring different languages are never paired.
  */
-export function findLinkOpportunities(ctx: SiteContext, vectors: Map<string, Map<string, number>>): NonNullable<ContentReport['linkOpportunities']> {
+export function findLinkOpportunities(ctx: SiteContext, vectors: Map<string, Map<string, number>>, langOf?: Map<string, string>): NonNullable<ContentReport['linkOpportunities']> {
+  // Pages in different declared languages are alternates for different readers, not link candidates.
+  const otherLanguage = (a: string, b: string) => {
+    const la = langOf?.get(a), lb = langOf?.get(b);
+    return !!la && !!lb && la !== lb;
+  };
   const norm = new Map<string, number>();
   for (const [u, v] of vectors) norm.set(u, Math.sqrt([...v.values()].reduce((a, x) => a + x * x, 0)) || 1);
   const index = new Map<string, string[]>();
@@ -316,6 +337,7 @@ export function findLinkOpportunities(ctx: SiteContext, vectors: Map<string, Map
         const key = a < b ? a + '|' + b : b + '|' + a;
         if (seen.has(key)) continue;
         seen.add(key);
+        if (otherLanguage(a, b)) continue;
         const va = vectors.get(a)!, vb = vectors.get(b)!;
         let dot = 0;
         const shared: string[] = [];

@@ -26,6 +26,19 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Session log
 
+### 2026-10-30 — round 2 of the backlog (v0.5.0)
+- F: `crawl.facet-explosion`, `pagination.canonical-to-first`.
+- G: internal-link opportunities (topic vectors, no link either way, stronger → weaker page). The real-site
+  round caught cross-language pairs and help-centre template words inflating similarity; both fixed.
+- H: inferred search intent for queries (multilingual cues) and pages (page type), intent mismatches in
+  Search Console/Bing reports.
+- J: every `excerpt`/`url-resolved` citation re-read; 146/148 now `fetched`. Found and fixed a citation that an
+  earlier snapshot update had replaced with a Yandex captcha URL; bot challenges are now detected.
+- K: HTML charts, Templates tab, `monitor.html`, `ecosystem.html` (executed in Chromium in tests).
+- `ecosystem` now runs the per-site probes (Accept-Language etc.); without them the locale-adaptive finding
+  was missing from family audits.
+- Not done: I (AST-based framework checks) waits for a decision on the parser dependency size.
+
 ### 2026-10-30 — backlog round (after v0.3.0)
 - A: `rules check-sources` + weekly workflow; first run caught 14 moved sources (Google crawling docs moved to
   developers.google.com/crawling/); facts re-verified, URLs updated.
@@ -55,10 +68,9 @@ Use this file to resume work after an interrupted session. Newest entries first.
 | # | Item | Impact | Plan |
 |---|---|---|---|
 | 2 | Render tests rely on local fixtures; no real-site render validation round yet | rendered-DOM accuracy on complex sites | run `--render` rounds on permitted sites |
-| 3 | Bing help pages verified only via excerpts; some sources `url-resolved` | rule-text accuracy | manual re-read; source checker |
+| 3 | Two citations still `url-resolved` (`canonical.target-error`, `sd.invalid-json`); Bing help pages are client-rendered, so the source checker cannot hash them | rule-text accuracy | find pages that state the claims; browser re-read on each review |
 | 4 | Framework source checks use regexes (Next.js metadata, Blade, Astro) | edge-case false positives/negatives | move to AST (TypeScript compiler API) for JS/TS |
 | 5 | In-memory analysis | >50k pages heavy | streaming / disk indexes |
-| 6 | No facet/pagination detection | e-commerce crawl-budget advice missing | phase 2 |
 | 7 | Research has no demand data | gaps ≠ opportunities | optional data providers, user CSV import |
 | 8 | `npm install` needs `--legacy-peer-deps` (npm 10.9 arborist `edgesOut` crash with vitest 5 peers) | contributor friction | track npm fix; `.npmrc` sets legacy-peer-deps |
 | 9 | Plugin icon missing (directory warning) | listing only | add 512 px PNG before directory submission |

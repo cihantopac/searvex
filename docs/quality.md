@@ -103,6 +103,21 @@ two sites without hreflang while the rest of the family is bilingual.
   "raw HTML only".
 - Raw vs rendered title/canonical differences confirmed on 25 pages (`index.render-mismatch`).
 
+### Round 4 — v0.5.0 features on the same family (2026-10-30)
+
+Seven sites, 40 pages each, 279 pages in total, with probes enabled:
+- Internal-link opportunities: the first version suggested links from Turkish pages to English pages, and it
+  rated help pages as similar because they shared help-centre template words ("help centre", "categories",
+  "topic"). Fixes: pages that declare different languages are never paired; terms that appear on ≥80% of the
+  pages in a section are dropped. A 50% cut-off was tried first, but it also dropped the shared subject of a
+  topical blog. After the fixes there are 16 suggestions, for example a help article on importing old mail
+  linked to the blog post on mail migration (67% similarity). The same pair had been flagged by hand in round 2.
+- `ecosystem` had disabled the per-site probes, so `lang.locale-adaptive` (6 of 7 sites) was missing from family
+  audits. Probes are now on, and the finding reproduces on exactly the 6 sites verified by hand in round 3.
+- The HTML report, `ecosystem.html` and the Templates tab were checked visually in a browser on real data.
+- Source re-verification found a knowledge-base citation that had been replaced by a Yandex captcha URL. Bot
+  challenges are now detected and never stored.
+
 ## Benchmarks
 
 `npm run build && node scripts/benchmark.mjs <pages> <concurrency>` — synthetic site on localhost

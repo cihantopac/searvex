@@ -193,7 +193,14 @@ describe('internal-link opportunities', () => {
       '/dose': { body: page({ title: 'Espresso dose', body: `<a href="/grind">grind</a>${espresso('a basket dose between eighteen and twenty grams')}` }) },
       '/tamping': { body: page({ title: 'Tamping pressure', body: espresso('tamping evenly prevents channeling during extraction') }) },
       '/shipping': { body: page({ title: 'Shipping', body: `<main><p>${'Orders ship within two business days by courier with tracking and insurance included. '.repeat(6)}</p></main>` }) },
+      // Same topic in another language: an alternate, not a link candidate.
+      '/de/tamping': { body: page({ lang: 'de', title: 'Tamping pressure', body: espresso('tamping evenly prevents channeling during extraction') }) },
+      // Help pages sharing only help-centre template words ("help centre categories topics").
+      ...Object.fromEntries(['billing invoices refunds', 'passwords login security', 'exports backups archives', 'webhooks integrations tokens'].map((t, i) => [`/help/h${i}`, {
+        body: page({ title: `Help centre — ${t}`, body: `<main><h1>Help centre</h1><h2>Categories</h2><h2>Related topics</h2><p>${(t + ' explained step by step with screenshots. ').repeat(8)}</p></main>` }),
+      }])),
     };
+    routes['/']!.body = routes['/']!.body!.replace('</body>', '<a href="/de/tamping">de</a><a href="/help/h0">h0</a><a href="/help/h1">h1</a><a href="/help/h2">h2</a><a href="/help/h3">h3</a></body>');
     const s = await startServer(routes);
     const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-links-'));
     try {
@@ -202,6 +209,8 @@ describe('internal-link opportunities', () => {
       expect(ops).toEqual(expect.arrayContaining(['/grind->/tamping', '/dose->/tamping']));
       expect(ops.some((o) => o.includes('/shipping'))).toBe(false);
       expect(ops).not.toContain('/grind->/dose'); // already linked
+      expect(ops.some((o) => o.includes('/de/'))).toBe(false); // different language
+      expect(ops.some((o) => o.includes('/help/'))).toBe(false); // only template words in common
       expect(report.findings.find((f) => f.ruleId === 'links.internal-opportunity')?.confidence).toBe('heuristic');
     } finally {
       await s.close();

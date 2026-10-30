@@ -8,7 +8,7 @@ import { analyzeEcosystem, type SiteSnapshot } from '../../src/commands/ecosyste
 import { renderEcosystemHtml, renderHtml, renderMonitorHtml, templateView } from '../../src/report/html.js';
 import { loadKnowledge } from '../../src/rules/engine.js';
 import { DEFAULT_POLICY } from '../../src/net/ssrf.js';
-import { page, startServer } from '../helpers/server.js';
+import { page, startServer, type Route } from '../helpers/server.js';
 
 const EVIL = '</script><img src=x onerror=alert(1)>';
 const kb = loadKnowledge();
@@ -19,7 +19,7 @@ let ws: string;
 beforeAll(async () => {
   ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-html-'));
   const body = (t: string) => `<main><p>${(t + ' kitchen tools and equipment for cafes. ').repeat(20)}</p></main>`;
-  const routes = {
+  const routes: Record<string, Route> = {
     '/': { body: page({ title: 'Home ' + EVIL, body: '<a href="/blog/a">a</a><a href="/blog/b">b</a><a href="/blog/c">c</a><a href="/blog/d">d</a><a href="/blog/e">e</a>' + body('home') }) },
     ...Object.fromEntries(['a', 'b', 'c', 'd', 'e'].map((x) => [`/blog/${x}`, { body: page({ title: undefined, body: body('post ' + x) }) }])),
   };

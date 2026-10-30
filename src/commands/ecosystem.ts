@@ -272,7 +272,9 @@ export async function commandEcosystem(flags: GlobalFlags): Promise<number> {
       log(v, `Crawling ${u} (max ${opts.maxPages} pages)…`);
       const store = new RunStore(workspace, RunStore.newRunId('audit'));
       const result = await crawl(u, opts, store);
-      const report = await analyzeCrawl(result, kb, { ...opts, probes: false });
+      // Probes are a handful of requests per site (host variants, Accept-Language, llms.txt) and catch
+      // family-wide issues such as locale-adaptive serving.
+      const report = await analyzeCrawl(result, kb, { ...opts, probes: true });
       report.runId = store.runId;
       store.writeJson('report.json', report);
       snaps[i] = snapshot(report, result.pages);

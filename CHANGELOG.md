@@ -5,6 +5,30 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-30
+
+### Added
+- Rule `crawl.facet-explosion`: faceted navigation / filter parameters multiplying crawlable URLs; rule
+  `pagination.canonical-to-first`: paginated pages canonicalised to page 1.
+- Internal-link opportunities (`links.internal-opportunity`, heuristic): topically related indexable pages
+  with no link in either direction, suggested from the better-linked page to the weaker one.
+- Search intent (always labelled inferred): multilingual query intent, page intent from the page type, an
+  intent mix and intent mismatches (e.g. a how-to query ranking with a pricing page) in Search Console and
+  Bing reports; intent per page in the inventory.
+- HTML report: severity, category and fix-first charts, a Templates tab (issues grouped by URL pattern),
+  page-type and intent charts. `monitor` writes `monitor.html` (before/after) and `ecosystem` writes
+  `ecosystem.html` (site table, cross-link matrix, overlap, shared issues).
+
+### Changed
+- Knowledge base re-verification: every `excerpt`/`url-resolved` citation was re-read (Bing help pages
+  rendered in a browser); 146 of 148 citations are now `fetched`. Citations that did not state the rule's
+  claim were replaced.
+
+### Fixed
+- The `index.noindex` Yandex citation pointed to a captcha URL captured by an earlier snapshot update. The
+  source checker now detects bot challenges, reports them as unreadable, never stores them, and the validator
+  rejects challenge URLs.
+
 ## [0.4.0] - 2026-10-30
 
 ### Added

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Searvex 0.4.0 — Apache-2.0 — https://github.com/cihantopac/searvex
+// Searvex 0.5.0 — Apache-2.0 — https://github.com/cihantopac/searvex
 import { createRequire as __searvexCreateRequire } from 'node:module';
 const require = __searvexCreateRequire(import.meta.url);
 var __create = Object.create;
@@ -930,7 +930,7 @@ var init_fetcher = __esm({
   "src/net/fetcher.ts"() {
     "use strict";
     init_ssrf();
-    SEARVEX_VERSION = "0.4.0";
+    SEARVEX_VERSION = "0.5.0";
     DEFAULT_USER_AGENT = `Mozilla/5.0 (compatible; SearvexBot/${SEARVEX_VERSION}; +https://github.com/cihantopac/searvex)`;
     DEFAULTS = {
       timeoutMs: 15e3,
@@ -20624,12 +20624,24 @@ function runContentChecks(ctx, sink) {
   const N = Math.max(1, pages.length);
   const pageTerms = [];
   const vectors = /* @__PURE__ */ new Map();
+  const secSize = /* @__PURE__ */ new Map();
+  const secDf = /* @__PURE__ */ new Map();
   for (const [url, tf] of docTerms) {
+    const g = groupOf(url);
+    secSize.set(g, (secSize.get(g) ?? 0) + 1);
+    const m = secDf.get(g) ?? secDf.set(g, /* @__PURE__ */ new Map()).get(g);
+    for (const t of tf.keys()) m.set(t, (m.get(t) ?? 0) + 1);
+  }
+  for (const [url, tf] of docTerms) {
+    const g = groupOf(url);
+    const gs = secSize.get(g);
+    const sectionTemplate = (t) => gs >= 4 && (secDf.get(g).get(t) ?? 0) >= gs * 0.8;
     const scored = [...tf.entries()].map(([t, c]) => [t, c * Math.log(1 + N / (df.get(t) ?? 1))]).sort((a, b) => b[1] - a[1]);
     pageTerms.push({ url, terms: scored.slice(0, 8).map(([t]) => t) });
-    vectors.set(url, new Map(scored.filter(([t]) => (df.get(t) ?? 0) <= Math.max(3, N * 0.3)).slice(0, 20)));
+    vectors.set(url, new Map(scored.filter(([t]) => (df.get(t) ?? 0) <= Math.max(3, N * 0.5) && !sectionTemplate(t)).slice(0, 20)));
   }
-  const linkOpportunities = findLinkOpportunities(ctx, vectors);
+  const langOf = new Map(pages.map(({ p, f }) => [p.url, (f.lang ?? "").toLowerCase().split("-")[0]]));
+  const linkOpportunities = findLinkOpportunities(ctx, vectors, langOf);
   if (linkOpportunities.length) {
     sink.emit("links.internal-opportunity", linkOpportunities.slice(0, 50).map((o) => ({ url: o.to, observed: `link from ${o.from} (topic similarity ${Math.round(o.similarity * 100)}%: ${o.sharedTerms.slice(0, 4).join(", ")}); target has ${o.toInlinks} internal inlink(s)` })));
   }
@@ -20779,7 +20791,11 @@ function runContentChecks(ctx, sink) {
   }).sort((a, b) => b.pages.length - a.pages.length);
   return { topTerms, pageTerms, clusters, cannibalization, nearDuplicates, exactDuplicates, linkOpportunities: linkOpportunities.slice(0, 200) };
 }
-function findLinkOpportunities(ctx, vectors) {
+function findLinkOpportunities(ctx, vectors, langOf) {
+  const otherLanguage = (a, b) => {
+    const la = langOf?.get(a), lb = langOf?.get(b);
+    return !!la && !!lb && la !== lb;
+  };
   const norm3 = /* @__PURE__ */ new Map();
   for (const [u, v] of vectors) norm3.set(u, Math.sqrt([...v.values()].reduce((a, x) => a + x * x, 0)) || 1);
   const index2 = /* @__PURE__ */ new Map();
@@ -20798,6 +20814,7 @@ function findLinkOpportunities(ctx, vectors) {
         const key = a < b ? a + "|" + b : b + "|" + a;
         if (seen.has(key)) continue;
         seen.add(key);
+        if (otherLanguage(a, b)) continue;
         const va = vectors.get(a), vb = vectors.get(b);
         let dot = 0;
         const shared = [];
@@ -24545,7 +24562,7 @@ async function commandEcosystem(flags) {
       log(v, `Crawling ${u} (max ${opts.maxPages} pages)\u2026`);
       const store2 = new RunStore(workspace, RunStore.newRunId("audit"));
       const result = await crawl(u, opts, store2);
-      const report = await analyzeCrawl(result, kb, { ...opts, probes: false });
+      const report = await analyzeCrawl(result, kb, { ...opts, probes: true });
       report.runId = store2.runId;
       store2.writeJson("report.json", report);
       snaps[i] = snapshot(report, result.pages);
