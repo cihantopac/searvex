@@ -60,7 +60,7 @@ export function pageSchemaTypes(f: NonNullable<ReturnType<typeof factsOf>>): Map
   return out;
 }
 
-const URL_RULES: Array<[RegExp, PageType]> = [
+export const URL_RULES: Array<[RegExp, PageType]> = [
   [/\/(products?|p|shop\/[^/]+|item|urun|urunler)\/[^/]+/i, 'product'],
   [/\/(category|categories|collections?|c|kategori|shop)(\/|$)/i, 'category'],
   [/\/(blog|news|articles?|posts?|haber|yazilar|insights)\/[^/]+/i, 'blog-post'],
@@ -69,7 +69,7 @@ const URL_RULES: Array<[RegExp, PageType]> = [
   [/\/(pricing|plans|fiyat|fiyatlandirma)(\/|$)/i, 'pricing'],
   [/\/(about|about-us|company|team|hakkimizda|hakkinda)(\/|$)/i, 'about'],
   [/\/(contact|contact-us|iletisim)(\/|$)/i, 'contact'],
-  [/\/(privacy|terms|legal|cookie|gdpr|kvkk|impressum|imprint)/i, 'legal'],
+  [/\/(privacy|terms|legal|cookie|gdpr|kvkk|impressum|imprint|acceptable-use|refund-policy|refunds?(\/|$)|cancellation-policy|disclaimer|subprocessors|data-processing|dpa(\/|$)|sla(\/|$)|gizlilik|cerez|aydinlatma|kullanim-kosullari|mesafeli-satis|datenschutz|agb(\/|$)|mentions-legales|aviso-legal)/i, 'legal'],
   [/\/(careers|jobs|kariyer)(\/|$)/i, 'careers'],
   [/\/(tag|tags|etiket|topics?)\//i, 'tag-archive'],
   [/\/(author|authors|yazar)\//i, 'author'],

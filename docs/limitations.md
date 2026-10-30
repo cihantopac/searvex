@@ -1,17 +1,26 @@
 # Limitations & unsupported scenarios
 
-Searvex reports what it can observe and labels everything else. Known limits (v0.3.0):
+Searvex reports what it can observe and labels everything else. Known limits (v0.7.0):
 
 ## Data Searvex does not have
 
-- **Traffic, rankings, impressions, CTR:** only via Search Console (token or CSV import). Never estimated.
+- **Traffic, rankings, impressions, CTR:** only via Search Console (`gsc auth` with your own OAuth client, or
+  `gsc import` of a CSV export) or Bing Webmaster Tools. Never estimated; without data they are "Not measured".
+- **Search Console CSV exports** have no query × page combination and at most 1,000 rows per table, so query →
+  page mapping, shared-query analysis and intent mismatches need the API. Headers are verified for the English
+  and Turkish UI; other UI languages are best-effort.
+- **Shared queries** (several pages with impressions for one query) are classified heuristically; one
+  aggregated period cannot prove harmful cannibalisation.
 - **Search volumes, keyword difficulty, SERP features, backlinks:** not fetched; no paid data providers.
   Research reports topic *coverage* differences, not demand.
 - **AI citations:** not observable directly. Official sources are Bing Webmaster Tools AI Performance
-  (preview) and Search Console; integrations are not implemented yet (CSV import is generic).
+  (preview) and Search Console; no AI-visibility integration is implemented yet.
 - **Core Web Vitals field data:** only with a CrUX API key, and only for origins with enough traffic.
   No Lighthouse/lab measurements.
-- **Bing Webmaster, Yandex Webmaster, GA4 APIs:** not implemented.
+- **Bing Webmaster:** API key only; reports are built from the top pages by clicks, so totals are not site
+  totals. **Yandex Webmaster, GA4:** not implemented.
+- **Google OAuth:** each user needs their own Google Cloud "Desktop app" client; there is no hosted one-click
+  login. Clients in "Testing" status get refresh tokens that expire after 7 days.
 
 ## Website mode
 
@@ -22,7 +31,8 @@ Searvex reports what it can observe and labels everything else. Known limits (v0
 - Site-level findings (orphans, duplicates, hreflang returns) cover the crawled subset when the page limit is hit.
 - Some sites serve different HTML to different user agents (e.g. Next.js streaming metadata, bot
   protection). Searvex sees what `SearvexBot` receives; verify critical cases with Search Console URL Inspection.
-- Faceted navigation and pagination patterns are not detected yet beyond tracking/session parameters.
+- Faceted navigation is detected from parameter explosion and paginated canonicals; deeper crawl-budget
+  analysis for very large catalogues is not implemented.
 - Business model and page types are heuristics (schema first, then URL patterns).
 
 ## Repository mode

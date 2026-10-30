@@ -12,6 +12,8 @@ import { crawlOptionsFrom, failOnExit, log, num, UsageError, writeReports, type 
 import { diffReports, findBaseline, renderDiffMarkdown, type MonitorDiff } from './monitor.js';
 import { computeGaps, profile, renderResearchMarkdown, type ResearchReport } from './research.js';
 import { renderPlan } from './optimize.js';
+import { getSitePreference, type SitePreference } from '../integrations/preferences.js';
+import { readCredentials } from '../integrations/google-oauth.js';
 
 /**
  * `searvex run`: the full workflow in a fixed order, sharing one crawl.
@@ -28,6 +30,8 @@ export interface RunSummary {
   research?: ResearchReport;
   repository?: { report: AuditReport; framework: string };
   plan?: FixPlan;
+  /** Optional search performance data: never fetched by `run`; reported as not measured with how to add it. */
+  searchData?: { measured: false; preference: SitePreference | null; googleAuthorized: boolean };
   steps: Array<{ step: number; name: string; status: 'done' | 'skipped'; note: string }>;
 }
 
@@ -48,6 +52,15 @@ export function renderRunSummary(s: RunSummary): string {
     L.push(`- Blocked crawlers: ${blocked.length ? blocked.map((b) => `${b.token} (${b.purpose})`).join(', ') : 'none'}`);
     L.push(`- Content clarity (heuristic): ${r.geo.answerability.average}/100 · AI citations: not measured`);
     for (const f of r.findings.filter((x) => x.category === 'geo' && x.severity !== 'info')) L.push(`- [${f.severity}] ${md(f.title)}`);
+    L.push('');
+  }
+  if (s.website && s.searchData) {
+    const sd = s.searchData;
+    L.push('## Search performance data', '');
+    L.push('- Clicks, impressions, queries and positions: **Not measured** in this run (no Search Console or Bing data). Searvex does not estimate them.');
+    if (sd.preference?.choice === 'skip') L.push(`- Skipped by choice on ${sd.preference.updatedAt.slice(0, 10)}. Change it any time: \`searvex connect ${md(s.website.report.target)}\`.`);
+    else if (sd.googleAuthorized) L.push('- Google authorization available: `searvex gsc report --audit latest` adds verified Search Console data.');
+    else L.push(`- Optional: \`searvex connect ${md(s.website.report.target)}\` — Google ile bağlan · CSV içe aktar · Şimdilik geç.`);
     L.push('');
   }
   if (s.diff) L.push('## 3. Change since previous run', '', renderDiffMarkdown(s.diff).split('\n').slice(2).join('\n'), '');
@@ -94,6 +107,7 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
     const { report, store } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v['check-external'], cruxApiKey: process.env['SEARVEX_CRUX_API_KEY'] });
     const files = writeReports(store, report, kb, ['json', 'md', 'html']);
     summary.website = { report, runId: store.runId, files };
+    summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!readCredentials()['gsc'] || !!process.env['SEARVEX_GSC_TOKEN'] };
     step(1, 'Website audit', 'done', `${report.crawl.crawled} pages, score ${report.scores.overall}/100`);
     step(2, 'GEO / AI search', 'done', `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
     const base = findBaseline(workspace, report.target, store.runId);
@@ -145,6 +159,7 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
   store.writeJson('summary.json', {
     steps: summary.steps,
     websiteRun: summary.website?.runId,
+    searchData: summary.searchData,
     diff: summary.diff,
     research: summary.research,
     repository: summary.repository && { framework: summary.repository.framework, report: summary.repository.report },

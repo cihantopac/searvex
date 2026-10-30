@@ -1,6 +1,6 @@
 # Quality criteria, test results & benchmarks
 
-Last updated: 2026-10-30 (v0.3.0). Environment: macOS (Apple M4), Node 22.23.2; CI: Linux, macOS, Windows × Node 20/22/24 + Playwright job.
+Last updated: 2026-10-30 (v0.7.0). Environment: macOS (Apple M4), Node 22.23.2; CI: Linux, macOS, Windows × Node 20/22/24 + Playwright job.
 
 ## Criteria (definition of done)
 
@@ -19,7 +19,7 @@ Last updated: 2026-10-30 (v0.3.0). Environment: macOS (Apple M4), Node 22.23.2; 
 
 ## Automated tests
 
-`npm test` — 187 tests in 13 files (unit, integration, Playwright rendering, E2E on the bundled CLI).
+`npm test` — automated tests across unit, integration and E2E files (count printed by the run; 274 at v0.7.0) (unit, integration, Playwright rendering, E2E on the bundled CLI).
 
 | Area | What is tested |
 |---|---|
@@ -117,6 +117,23 @@ Seven sites, 40 pages each, 279 pages in total, with probes enabled:
 - The HTML report, `ecosystem.html` and the Templates tab were checked visually in a browser on real data.
 - Source re-verification found a knowledge-base citation that had been replaced by a Yandex captcha URL. Bot
   challenges are now detected and never stored.
+
+### Round 5 — v0.7.0 search-data integrity (2026-10-30)
+
+Two sites of the permitted family (30 and 20 pages) audited into one workspace, then a Search Console export
+was imported. No live Search Console or Bing data is available yet (owner credentials pending), so the export
+was **synthetic**: Turkish headers and number formats, URLs taken from the real crawl, invented metrics.
+- Property-aware join: with the second site's audit being the newest in the workspace, `--audit latest` joined
+  the first site's audit (30/30 pages in scope). v0.6.0 would have joined the other site. An explicit run id of
+  the other site and a `--property` that does not match the export's pages are both rejected with exit 2.
+- Defect found: "pages without impressions" started with policy pages because `/acceptable-use`, `/refund`,
+  `/sla`, `/dpa` were classified as `other`. Legal URL patterns were extended (EN/TR/DE/FR/ES, with segment
+  boundaries so `/slack-integration` or `/dpa-tools` stay unaffected) and low-search-value page types are
+  listed last. After the re-audit the list starts with blog posts. The business-model label did not change.
+- `run` summaries show search metrics as "Not measured" with the `connect` hint; `connect --choice skip` is
+  remembered for `www.` and bare hosts alike.
+- Still unverified against real data: live OAuth, the real Search Console ZIP layout and Turkish UI header
+  wording (synthesised from the published UI terms), Bing totals.
 
 ## Benchmarks
 

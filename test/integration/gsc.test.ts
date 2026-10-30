@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { accessToken, authorize, GSC_SCOPE, readCredentials, saveCredential } from '../../src/integrations/google-oauth.js';
+import { accessToken, authorize, GSC_SCOPE, loadClientFile, readCredentials, saveCredential } from '../../src/integrations/google-oauth.js';
+import { makeZip, writeAudit } from '../helpers/search-data.js';
 import { querySearchConsole } from '../../src/integrations/gsc.js';
 import { analyzeSearchPerformance, type QueryPage } from '../../src/analyze/search-performance.js';
 import { main } from '../../src/cli.js';
@@ -14,12 +15,17 @@ import { main } from '../../src/cli.js';
 async function fakeGoogle() {
   const issued: Record<string, string> = {}; // code -> PKCE challenge
   const requests: Array<{ path: string; body: Record<string, unknown> }> = [];
+  const revoked: string[] = [];
   const allRows = Array.from({ length: 5 }, (_, i) => ({ keys: [`query ${i}`, `https://site.example/p${i}`], clicks: 10 - i, impressions: 100, ctr: (10 - i) / 100, position: 3 + i }));
   const server = http.createServer((req, res) => {
     let raw = '';
     req.on('data', (c) => (raw += c));
     req.on('end', () => {
       const url = new URL(req.url ?? '/', 'http://x');
+      if (url.pathname === '/revoke') {
+        revoked.push(Object.fromEntries(new URLSearchParams(raw))['token'] ?? '');
+        return res.writeHead(200).end('{}');
+      }
       if (url.pathname === '/token') {
         const form = Object.fromEntries(new URLSearchParams(raw));
         if (form['grant_type'] === 'authorization_code') {
@@ -29,10 +35,11 @@ async function fakeGoogle() {
           return res.writeHead(200).end(JSON.stringify({ refresh_token: 'refresh-123', access_token: 'a', scope: GSC_SCOPE }));
         }
         if (form['grant_type'] === 'refresh_token' && form['refresh_token'] === 'refresh-123') return res.writeHead(200).end(JSON.stringify({ access_token: 'access-xyz' }));
+        if (form['grant_type'] === 'refresh_token') return res.writeHead(400).end(JSON.stringify({ error: 'invalid_grant', error_description: 'Token has been expired or revoked.' }));
         return res.writeHead(400).end(JSON.stringify({ error: 'invalid_request' }));
       }
       if (req.headers.authorization !== 'Bearer access-xyz') return res.writeHead(401).end(JSON.stringify({ error: { message: 'unauthenticated' } }));
-      if (url.pathname === '/webmasters/v3/sites') return res.writeHead(200).end(JSON.stringify({ siteEntry: [{ siteUrl: 'sc-domain:site.example', permissionLevel: 'siteOwner' }] }));
+      if (url.pathname === '/webmasters/v3/sites') return res.writeHead(200).end(JSON.stringify({ siteEntry: [{ siteUrl: 'sc-domain:site.example', permissionLevel: 'siteOwner' }, { siteUrl: 'https://other.example/', permissionLevel: 'siteFullUser' }, { siteUrl: 'https://pending.example/', permissionLevel: 'siteUnverifiedUser' }] }));
       if (url.pathname.endsWith('/searchAnalytics/query')) {
         const body = JSON.parse(raw) as { startRow: number; rowLimit: number };
         requests.push({ path: url.pathname, body });
@@ -43,7 +50,7 @@ async function fakeGoogle() {
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { base, issued, requests, close: () => new Promise<void>((r) => server.close(() => r())) };
+  return { base, issued, requests, revoked, close: () => new Promise<void>((r) => server.close(() => r())) };
 }
 
 let g: Awaited<ReturnType<typeof fakeGoogle>>;
@@ -52,6 +59,7 @@ beforeAll(async () => {
   g = await fakeGoogle();
   cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-cfg-'));
   process.env['SEARVEX_GOOGLE_TOKEN_URL'] = `${g.base}/token`;
+  process.env['SEARVEX_GOOGLE_REVOKE_URL'] = `${g.base}/revoke`;
   process.env['SEARVEX_GSC_API_BASE'] = `${g.base}/webmasters/v3`;
   process.env['SEARVEX_CONFIG_DIR'] = cfg;
   delete process.env['SEARVEX_GSC_TOKEN'];
@@ -59,7 +67,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await g.close();
   fs.rmSync(cfg, { recursive: true, force: true });
-  for (const k of ['SEARVEX_GOOGLE_TOKEN_URL', 'SEARVEX_GSC_API_BASE', 'SEARVEX_CONFIG_DIR']) delete process.env[k];
+  for (const k of ['SEARVEX_GOOGLE_TOKEN_URL', 'SEARVEX_GOOGLE_REVOKE_URL', 'SEARVEX_GSC_API_BASE', 'SEARVEX_CONFIG_DIR']) delete process.env[k];
 });
 
 /** Plays the browser: reads the consent URL, then hits the loopback redirect like Google would. */
@@ -148,10 +156,148 @@ describe('CLI gsc', () => {
       const rep = JSON.parse(fs.readFileSync(path.join(ws, '.searvex', 'runs', run, 'search-performance.json'), 'utf8'));
       expect(rep.totals.clicks).toBe(40);
       expect(await main(['gsc', 'logout'])).toBe(0);
+      expect(g.revoked).toContain('refresh-123'); // revoked at Google, not only deleted locally
       expect(await main(['gsc', 'sites'])).toBe(2); // no credential anymore
     } finally {
       log.mockRestore();
       fs.rmSync(ws, { recursive: true, force: true });
     }
+  });
+});
+
+const capture = () => {
+  const out: string[] = [];
+  const log = vi.spyOn(console, 'log').mockImplementation((...a) => void out.push(a.join(' ')));
+  const err = vi.spyOn(console, 'error').mockImplementation((...a) => void out.push(a.join(' ')));
+  return { text: () => out.join('\n'), restore: () => (log.mockRestore(), err.mockRestore()) };
+};
+const storeCred = () => saveCredential('gsc', { clientId: 'cid', refreshToken: 'refresh-123', scope: GSC_SCOPE, createdAt: '2026-10-30T00:00:00Z' });
+
+describe('OAuth hardening', () => {
+  it('rejects "Web application" client files with an actionable message', () => {
+    const f = path.join(cfg, 'web.json');
+    fs.writeFileSync(f, JSON.stringify({ web: { client_id: 'x', client_secret: 'y' } }));
+    expect(() => loadClientFile(f)).toThrow(/Desktop app/);
+  });
+
+  it('explains invalid_grant (revoked, or 7-day expiry of apps in Testing status)', async () => {
+    await expect(accessToken({ clientId: 'c', refreshToken: 'expired', scope: GSC_SCOPE, createdAt: '' })).rejects.toThrow(/7 days.*Testing/);
+  });
+
+  it('gsc auth never waits for a browser in CI and reuses a valid stored authorization', async () => {
+    const c = capture();
+    const ci = process.env['CI'];
+    try {
+      process.env['CI'] = 'true';
+      expect(await main(['gsc', 'auth', '--client', 'x.json'])).toBe(2);
+      expect(c.text()).toMatch(/disabled in CI/);
+      delete process.env['CI'];
+      storeCred();
+      expect(await main(['gsc', 'auth'])).toBe(0);
+      expect(c.text()).toMatch(/Already authorized/);
+      expect(await main(['gsc', 'status'])).toBe(0);
+      expect(c.text()).toMatch(/valid: true/);
+    } finally {
+      if (ci === undefined) delete process.env['CI'];
+      else process.env['CI'] = ci;
+      c.restore();
+    }
+  });
+});
+
+describe('property-aware gsc report', () => {
+  it('verifies the property, joins only an audit of the same site, and rejects mismatches', async () => {
+    storeCred();
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-gsc-multi-'));
+    const c = capture();
+    try {
+      writeAudit(ws, 'run-20260101-000000-aaaaaa', 'https://site.example/', ['https://site.example/p0', 'https://site.example/never']);
+      writeAudit(ws, 'run-20260102-000000-bbbbbb', 'https://other.example/', ['https://other.example/']); // newest audit, other site
+      expect(await main(['gsc', 'report', 'sc-domain:site.example', '--audit', 'latest', '--out', ws, '-q'])).toBe(0);
+      const run = fs.readdirSync(path.join(ws, '.searvex', 'runs')).find((d) => d.startsWith('gsc'))!;
+      const rep = JSON.parse(fs.readFileSync(path.join(ws, '.searvex', 'runs', run, 'search-performance.json'), 'utf8'));
+      expect(rep.audit).toMatchObject({ runId: 'run-20260101-000000-aaaaaa', coverage: 1 });
+      expect(rep.noImpressions).toEqual(['https://site.example/never']);
+      expect(rep.property).toBe('sc-domain:site.example');
+
+      expect(await main(['gsc', 'report', 'sc-domain:site.example', '--audit', 'run-20260102-000000-bbbbbb', '--out', ws, '-q'])).toBe(2);
+      expect(c.text()).toMatch(/does not belong to this property/);
+      expect(await main(['gsc', 'report', 'https://site.example/', '--out', ws, '-q'])).toBe(2);
+      expect(c.text()).toMatch(/Did you mean: sc-domain:site\.example/);
+      expect(await main(['gsc', 'report', 'https://pending.example/', '--out', ws, '-q'])).toBe(2); // unverified = no access
+      // Without a property, the one accessible property covering the newest audit (other.example) is used.
+      expect(await main(['gsc', 'report', '--out', ws, '-q'])).toBe(0);
+    } finally {
+      c.restore();
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('CLI gsc import and connect', () => {
+  it('imports a ZIP export, infers the site from the pages table and joins the matching audit', async () => {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-gsc-import-'));
+    const c = capture();
+    try {
+      writeAudit(ws, 'run-20260101-000000-aaaaaa', 'https://www.site.example/', ['https://www.site.example/', 'https://www.site.example/orphan']);
+      writeAudit(ws, 'run-20260102-000000-bbbbbb', 'https://other.example/', ['https://other.example/']);
+      const zip = path.join(ws, 'export.zip');
+      fs.writeFileSync(zip, makeZip([
+        { name: 'Sorgular.csv', text: 'En çok yapılan sorgular,Tıklamalar,Gösterimler,TO,Konum\nsearvex,"1.200","10.000","%12","1,4"\n' },
+        { name: 'Sayfalar.csv', text: 'Popüler sayfalar,Tıklamalar,Gösterimler,TO,Konum\nhttps://www.site.example/,"1.200","10.000","%12","1,4"\n' },
+      ]));
+      expect(await main(['gsc', 'import', zip, '--audit', 'latest', '--out', ws, '-q'])).toBe(0);
+      const run = fs.readdirSync(path.join(ws, '.searvex', 'runs')).find((d) => d.startsWith('gsc-import'))!;
+      const rep = JSON.parse(fs.readFileSync(path.join(ws, '.searvex', 'runs', run, 'search-performance.json'), 'utf8'));
+      expect(rep.granularity).toBe('separate');
+      expect(rep.totals.clicks).toBe(1200);
+      expect(rep.audit.runId).toBe('run-20260101-000000-aaaaaa');
+      expect(rep.noImpressions).toEqual(['https://www.site.example/orphan']);
+      expect(await main(['gsc', 'import', zip, '--property', 'sc-domain:other.example', '--out', ws, '-q'])).toBe(2);
+      expect(c.text()).toMatch(/do not belong to the domain property other\.example/);
+    } finally {
+      c.restore();
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  it('connect lists the three choices without starting OAuth and remembers "skip" per site', async () => {
+    const c = capture();
+    try {
+      expect(await main(['connect', 'https://www.skip.example/'])).toBe(0);
+      expect(c.text()).toMatch(/1\. Google ile bağlan[\s\S]*2\. CSV içe aktar[\s\S]*3\. Şimdilik geç/);
+      expect(c.text()).toMatch(/not chosen yet/);
+      expect(await main(['connect', 'https://www.skip.example/', '--choice', 'skip'])).toBe(0);
+      expect(await main(['connect', 'https://skip.example/'])).toBe(0);
+      expect(c.text()).toMatch(/skip.example: skip/);
+      expect(await main(['connect', 'https://skip.example/', '--choice', 'maybe'])).toBe(2);
+    } finally {
+      c.restore();
+    }
+  });
+});
+
+describe('queries shared by several pages are classified, not all called cannibalisation', () => {
+  const qp = (query: string, page: string, impressions: number, position: number): QueryPage => ({ query, page, impressions, clicks: 1, ctr: 1 / impressions, position });
+  const audit = { inventory: { pages: [{ url: 'https://s.example/blog/compare', indexable: true, type: 'blog-post', intent: 'informational' }, { url: 'https://s.example/pricing', indexable: true, type: 'pricing', intent: 'transactional' }] }, findings: [] } as never;
+  const r = analyzeSearchPerformance(
+    [
+      qp('acme login', 'https://s.example/', 300, 1), qp('acme login', 'https://s.example/app', 200, 2), // brand → navigational
+      qp('setup guide x', 'https://s.example/docs', 150, 6), qp('setup guide x', 'https://s.example/docs/setup', 150, 7), // parent/child
+      qp('crm export', 'https://s.example/a', 800, 1.5), qp('crm export', 'https://s.example/b', 100, 9), // dominant
+      qp('crm plans', 'https://s.example/blog/compare', 200, 8), qp('crm plans', 'https://s.example/pricing', 200, 9), // mixed intent
+      qp('crm sync', 'https://s.example/c', 200, 7), qp('crm sync', 'https://s.example/d', 180, 8), // no leader
+    ],
+    { days: 28, source: 'test', brands: ['acme'], audit },
+  );
+  const byQuery = Object.fromEntries(r.multiPageQueries.map((q) => [q.query, q]));
+
+  it('marks only mixed-intent and leaderless splits for review, and lists them first', () => {
+    expect(byQuery['acme login']).toMatchObject({ pattern: 'navigational', needsReview: false });
+    expect(byQuery['setup guide x']).toMatchObject({ pattern: 'hierarchy', needsReview: false });
+    expect(byQuery['crm export']).toMatchObject({ pattern: 'dominant', needsReview: false });
+    expect(byQuery['crm plans']).toMatchObject({ pattern: 'mixed-intent', needsReview: true });
+    expect(byQuery['crm sync']).toMatchObject({ pattern: 'possible-competition', needsReview: true });
+    expect(r.multiPageQueries.slice(0, 2).every((q) => q.needsReview)).toBe(true);
   });
 });

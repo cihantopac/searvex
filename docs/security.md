@@ -16,6 +16,19 @@ injection). Defaults are read-only and deny-by-default.
 | Malicious HTML | Static parsing only (parse5/cheerio); no script execution except in opt-in `--render` | — |
 | JS rendering (`--render`) | Every browser request checked against the policy (URL + DNS resolution); service workers and downloads blocked; popups closed; images/media/fonts skipped; max 300 requests per page; bounded waits. **Residual risk:** the browser resolves DNS again, so a rebinding window remains in render mode. Use `--render` only on sites you trust. | `test/integration/render.test.ts` (metadata exfiltration attempt, popups, endless polling) |
 
+## Search data integrations & credentials
+
+| Threat | Control | Test |
+|---|---|---|
+| Data of one site joined with another site's audit | `--audit latest` selects by property scope (Search Console domain vs URL-prefix semantics); explicit run ids of other sites and ambiguous choices are rejected; imported exports must belong to `--property` | `test/unit/property.test.ts`, `test/integration/gsc.test.ts` |
+| OAuth code interception / CSRF | Loopback redirect on 127.0.0.1 with a random port, PKCE S256, `state` check; only "Desktop app" clients accepted | `test/integration/gsc.test.ts` |
+| Over-broad access | Read-only scope `webmasters.readonly` only; Searvex ships no OAuth client | — |
+| Token theft at rest | Refresh token in the user config dir, written atomically with 0600 (POSIX). **Residual risk:** plain JSON file; Windows does not apply POSIX modes (profile ACL only); no OS keychain yet (planned behind `CredentialStore`) | credential store tests |
+| Stale grants | `gsc logout` revokes at Google; `invalid_grant` explains expiry/revocation | revoke test |
+| Blocking CI | `gsc auth` refuses to run when `CI` is set; `connect` never starts OAuth | CLI tests |
+| Hostile export files | ZIP reader in memory only, entry/size limits (zip-bomb guard), no ZIP64/encryption; strict number parsing with an error threshold | `test/unit/gsc-csv.test.ts` |
+| Secrets in logs | Bing API key masked in errors; tokens never printed or written to reports | `test/integration/bing.test.ts` |
+
 ## Crawler etiquette & compliance
 
 - robots.txt per RFC 9309: 4xx → allowed, 5xx/unreachable → full disallow; longest-match rules.

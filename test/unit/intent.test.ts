@@ -48,3 +48,12 @@ describe('page intent and conflicts', () => {
     expect(brandTermsFrom('https://acme.com.tr/')).toEqual(['acme']);
   });
 });
+
+describe('URL-based page types', () => {
+  it('recognises common legal pages (real-world: SaaS policy pages were "other") without catching look-alikes', async () => {
+    const { URL_RULES } = await import('../../src/analyze/inventory.js');
+    const type = (path: string) => URL_RULES.find(([re]) => re.test(path))?.[1] ?? 'other';
+    for (const p of ['/acceptable-use', '/refund', '/refund-policy', '/sla', '/dpa', '/subprocessors', '/gizlilik-politikasi', '/kvkk-aydinlatma-metni', '/agb', '/datenschutz']) expect(type(p), p).toBe('legal');
+    for (const p of ['/slack-integration', '/dpa-tools/x', '/refunded-orders-report', '/security']) expect(type(p), p).not.toBe('legal');
+  });
+});
