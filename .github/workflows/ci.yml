@@ -39,7 +39,9 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Render tests must run (not skip)
-        run: npx vitest run test/integration/render.test.ts --reporter=verbose | tee render.log && ! grep -q "skipped: Playwright" render.log
+        run: |
+          npx vitest run test/integration/render.test.ts --reporter=verbose | tee render.log
+          if grep -q "Playwright/Chromium not installed" render.log; then echo "render tests were skipped"; exit 1; fi
 
   bundle-in-sync:
     runs-on: ubuntu-latest
