@@ -55,6 +55,14 @@ describe('website audit — synthetic e-commerce site', () => {
     expect(Object.keys(report.inventory.languages)).toEqual(expect.arrayContaining(['en', 'tr']));
   });
 
+  it('inventories structured data actually present on pages (not only retired-type findings)', () => {
+    const types = Object.fromEntries(report.inventory.structuredData.types.map((t) => [t.type, t.pages]));
+    expect(types['Organization']).toBe(1);
+    expect(types['Product']).toBe(1); // widget; gadget's JSON-LD is invalid
+    expect(types['FAQPage']).toBe(1);
+    expect(report.inventory.structuredData.invalidJsonLdPages).toBe(1);
+  });
+
   it('distinguishes training and AI-search crawlers', () => {
     const gpt = report.geo.bots.find((b) => b.token === 'GPTBot')!;
     const oai = report.geo.bots.find((b) => b.token === 'OAI-SearchBot')!;

@@ -56,11 +56,16 @@ export interface PageData {
   images: ImageInfo[];
   jsonLd: JsonLdBlock[];
   microdataTypes: string[];
+  /** RDFa `typeof` types (schema.org vocabulary prefixes stripped). */
+  rdfaTypes: string[];
   openGraph: Record<string, string>;
   twitter: Record<string, string>;
   metaRefresh: string | null;
   textContent: string;
   wordCount: number;
+  /** Main content text: <main>/[role=main]/<article>, else body without header/nav/footer/aside. */
+  mainText: string;
+  mainWordCount: number;
   /** Bytes of inline <script> + count of external scripts: a rough JS dependence signal. */
   scriptCount: number;
   hasNoscriptContent: boolean;
@@ -223,9 +228,16 @@ export function extractPage(html: string, pageUrl: string): PageData {
     }
   });
 
+  // itemtype may hold several space-separated type URLs.
   const microdataTypes = $('[itemtype]')
-    .map((_, el) => ($(el).attr('itemtype') ?? '').split('/').pop() ?? '')
+    .map((_, el) => ($(el).attr('itemtype') ?? '').split(/\s+/).map((t) => t.replace(/\/+$/, '').split(/[/#]/).pop() ?? ''))
     .get()
+    .flat()
+    .filter(Boolean);
+  const rdfaTypes = $('[typeof]')
+    .map((_, el) => ($(el).attr('typeof') ?? '').split(/\s+/).map((t) => t.replace(/^(schema|s):/, '').split(/[/#]/).pop() ?? ''))
+    .get()
+    .flat()
     .filter(Boolean);
 
   const openGraph: Record<string, string> = {};
@@ -253,6 +265,14 @@ export function extractPage(html: string, pageUrl: string): PageData {
   body.find('script,style,noscript,svg,iframe').remove();
   body.find('template').not('[shadowrootmode],[shadowroot]').remove();
   const textContent = visibleText(body);
+  // Main content excludes repeated chrome (navigation, header, footer) so duplicate and thin-content
+  // checks compare what is unique to the page.
+  const mainEl = body.find('main, [role="main"]').first();
+  let mainRoot = mainEl.length ? mainEl.clone() : body.find('article').length === 1 ? body.find('article').first().clone() : body.clone();
+  mainRoot.find('nav, header, footer, aside, [role="navigation"], [role="banner"], [role="contentinfo"], form').remove();
+  if (!mainEl.length && !mainRoot.text().trim()) mainRoot = body.clone();
+  const mainText = visibleText(mainRoot);
+  const countWords = (t: string) => (t ? t.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length : 0);
   const wordCount = textContent ? textContent.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length : 0;
   const hasMountNode = $('#root,#app,#__next,#__nuxt,[data-reactroot],app-root').length > 0;
   const likelyClientRendered = wordCount < 50 && scriptCount > 0 && hasMountNode;
@@ -304,17 +324,24 @@ export function extractPage(html: string, pageUrl: string): PageData {
     images,
     jsonLd,
     microdataTypes,
+    rdfaTypes,
     openGraph,
     twitter,
     metaRefresh: $('meta[http-equiv="refresh" i]').attr('content') ?? null,
     textContent: textContent.slice(0, 100000),
+    mainText: mainText.slice(0, 100000),
+    mainWordCount: countWords(mainText),
     wordCount,
     scriptCount,
     hasNoscriptContent,
     likelyClientRendered,
     formsCount,
     iframes,
-    generator: $('script[src*="/_next/static/"]').length || $('#__next').length ? 'next.js' : $('meta[name="generator" i]').attr('content')?.slice(0, 60) ?? null,
+    generator: $('script[src*="/_next/static/"]').length || $('#__next').length
+      ? 'next.js'
+      : $('[data-inertia]').length || $('[data-page][id="app"]').length
+        ? 'inertia'
+        : $('meta[name="generator" i]').attr('content')?.slice(0, 60) ?? null,
     structure,
     subresources,
   };

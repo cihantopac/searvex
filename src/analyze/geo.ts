@@ -1,7 +1,6 @@
 import { botAccessMatrix, type BotAccess } from '../crawl/robots.js';
 import type { FindingSink } from '../rules/engine.js';
 import { factsOf, isNoindex, robotsDirectives, type SiteContext } from './context.js';
-import { typedNodes } from './structured-data.js';
 
 export interface LlmsTxtStatus {
   url: string;
@@ -41,7 +40,7 @@ function answerability(ctx: SiteContext): AnswerabilityScore[] {
       listsOrTables: s.lists + s.tables > 0,
       datedOrAuthored: s.hasPublishedDate || s.hasAuthor,
       structuredData: f.jsonLd.some((b) => !b.error),
-      substantiveText: f.wordCount >= 150,
+      substantiveText: f.mainWordCount >= 150,
     };
     const vals = Object.values(signals);
     out.push({ url: p.url, score: Math.round((vals.filter(Boolean).length / vals.length) * 100), signals });
@@ -82,22 +81,45 @@ export function runGeoChecks(ctx: SiteContext, sink: FindingSink, llms?: LlmsTxt
   if (llms) sink.emit('geo.llms-txt', { url: llms.url, observed: llms.present ? `present (${llms.bytes} bytes) — not used by Google; no scoring impact` : `absent (HTTP ${llms.status}) — no scoring impact` });
 
   // Entity consistency: organisation / site names declared across pages.
+  // Names are compared per role: the site/product name (WebSite.name, og:site_name) and the publishing
+  // organisation (top-level Organization.name). A product site naming its parent company (e.g. via
+  // parentOrganization) is not an inconsistency; nested nodes are therefore ignored.
   const entityNames: Record<string, number> = {};
+  const roles: Record<'site' | 'organization', Map<string, Set<string>>> = { site: new Map(), organization: new Map() };
+  const norm = (n: string) => n.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  const note = (role: 'site' | 'organization', name: string, url: string) => {
+    const k = norm(name);
+    if (!k) return;
+    entityNames[name] = (entityNames[name] ?? 0) + 1;
+    const set = roles[role].get(k) ?? new Set();
+    set.add(`${name}|${url}`);
+    roles[role].set(k, set);
+  };
   for (const p of ctx.htmlPages) {
     const f = factsOf(p)!;
-    const names = new Set<string>();
     for (const b of f.jsonLd) {
-      for (const n of typedNodes(b.data)) {
-        const t = ([] as unknown[]).concat(n['@type'] ?? []);
-        if ((t.includes('Organization') || t.includes('WebSite') || t.includes('Corporation')) && typeof n['name'] === 'string') names.add(n['name'].trim());
+      const data = b.data as Record<string, unknown> | unknown[] | null;
+      const roots = Array.isArray(data) ? data : data && Array.isArray((data as Record<string, unknown>)['@graph']) ? ((data as Record<string, unknown>)['@graph'] as unknown[]) : [data];
+      for (const n of roots) {
+        if (!n || typeof n !== 'object') continue;
+        const node = n as Record<string, unknown>;
+        const t = ([] as unknown[]).concat(node['@type'] ?? []);
+        if (typeof node['name'] !== 'string') continue;
+        if (t.includes('WebSite')) note('site', node['name'].trim(), p.url);
+        else if (t.some((x) => typeof x === 'string' && /Organization|Corporation|LocalBusiness|OnlineStore|OnlineBusiness/.test(x))) note('organization', node['name'].trim(), p.url);
       }
     }
-    if (f.openGraph['og:site_name']) names.add(f.openGraph['og:site_name'].trim());
-    for (const n of names) entityNames[n] = (entityNames[n] ?? 0) + 1;
+    if (f.openGraph['og:site_name']) note('site', f.openGraph['og:site_name'].trim(), p.url);
   }
-  const distinct = Object.keys(entityNames);
-  const normalized = new Set(distinct.map((n) => n.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')));
-  if (normalized.size > 1) sink.emit('geo.entity-inconsistent', { observed: distinct.map((n) => `"${n}" ×${entityNames[n]}`).join(', ') });
+  for (const role of ['site', 'organization'] as const) {
+    if (roles[role].size > 1) {
+      const variants = [...roles[role].values()].map((set) => {
+        const [name, url] = [...set][0]!.split('|');
+        return `"${name}" on ${set.size} page(s), e.g. ${url}`;
+      });
+      sink.emit('geo.entity-inconsistent', { observed: `${role === 'site' ? 'site name (WebSite / og:site_name)' : 'organization name'}: ${variants.join('; ')}` });
+    }
+  }
 
   const pages = answerability(ctx);
   const average = pages.length ? Math.round(pages.reduce((a, p) => a + p.score, 0) / pages.length) : 0;

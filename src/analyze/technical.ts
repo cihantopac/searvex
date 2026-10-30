@@ -102,7 +102,15 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
 
     // Metadata (only for indexable pages: duplicates on noindex pages do not matter)
     if (!f.title) sink.emit('title.missing', ev);
-    if (f.titleCount > 1) sink.emit('title.multiple', { url: p.url, observed: `${f.titleCount} <title> elements` });
+    if (f.titleCount > 1) {
+      // Inertia SSR renders its own <title data-inertia> next to the Blade/root template title; browsers and
+      // crawlers read the first one, so every page can end up with the generic template title.
+      const inertia = p.data?.generator === 'inertia';
+      sink.emit('title.multiple', {
+        url: p.url,
+        observed: `${f.titleCount} <title> elements (first: "${(f.title ?? '').slice(0, 60)}")${inertia ? ' — Inertia.js: mark the root template title with the `inertia` attribute (<title inertia>) so the page title replaces it' : ''}`,
+      });
+    }
     if (f.title && f.title.length > 70) sink.emit('title.truncation-risk', { url: p.url, observed: `${f.title.length} chars: ${f.title.slice(0, 120)}` });
     if (!noindex && selfCanon) {
       if (f.title) push(titleMap, f.title.toLowerCase(), p.url);
@@ -158,7 +166,8 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     if (path.includes('_') && !p.foundOn?.startsWith('sitemap')) sink.emit('url.underscores', { url: p.url });
 
     // hreflang
-    checkHreflang(ctx, p.url, f, sink);
+    // Google ignores hreflang on non-canonical URLs (e.g. ?filter variants canonicalised to the clean URL).
+    if (selfCanon && !noindex) checkHreflang(ctx, p.url, f, sink);
 
     // Structured data
     checkStructuredData(p.url, f, sink, p === ctx.homepage);
@@ -170,6 +179,7 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
   // Broken internal links: every link target we crawled that ended in 4xx.
   for (const [target, sources] of ctx.inlinks) {
     const rec = resolveRecord(ctx, target);
+    if (new URL(target).pathname.startsWith('/cdn-cgi/')) continue;
     if (rec && !rec.blockedByRobots && rec.status >= 400 && rec.status < 500) {
       sink.emit('links.broken-internal', { url: target, observed: `HTTP ${rec.status}, linked from ${sources.size} page(s): ${[...sources].slice(0, 3).join(', ')}` });
     }

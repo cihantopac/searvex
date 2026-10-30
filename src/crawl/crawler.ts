@@ -107,6 +107,8 @@ function inScope(url: string, rootHost: string, opts: CrawlOptions): boolean {
   }
   if (u.hostname.replace(/^www\./, '') !== rootHost) return false;
   if (looksLikeAsset(url)) return false;
+  // Cloudflare service endpoints (email obfuscation, challenges) are not site content.
+  if (u.pathname.startsWith('/cdn-cgi/')) return false;
   if (opts.include?.length && !opts.include.some((r) => r.test(url))) return false;
   if (opts.exclude?.some((r) => r.test(url))) return false;
   return true;
@@ -216,8 +218,11 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
     // Redirect targets are crawled as their own URLs so chains and final status are visible.
     if (res.redirects.length && res.finalUrl !== item.url) enqueue({ url: res.finalUrl, depth: item.depth, foundOn: item.url });
     // Keep stored text bounded for large crawls.
-    if (rec.data) rec.data.textContent = rec.data.textContent.slice(0, 20000);
-    if (rec.rendered) rec.rendered.textContent = rec.rendered.textContent.slice(0, 20000);
+    for (const d of [rec.data, rec.rendered]) {
+      if (!d) continue;
+      d.textContent = d.textContent.slice(0, 20000);
+      d.mainText = d.mainText.slice(0, 20000);
+    }
     pages.push(rec);
     store?.append('pages.jsonl', rec);
     crawledThisRun++;

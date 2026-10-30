@@ -74,7 +74,7 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
     const weighted = [
       ...tokenize(f.title ?? '').flatMap((t) => [t, t, t]),
       ...f.headings.flatMap((h) => tokenize(h.text).flatMap((t) => (h.level === 1 ? [t, t, t] : [t, t]))),
-      ...tokenize(f.textContent.slice(0, 20000)),
+      ...tokenize(f.mainText.slice(0, 20000)),
     ];
     for (const t of weighted) tf.set(t, (tf.get(t) ?? 0) + 1);
     docTerms.set(p.url, tf);
@@ -95,16 +95,16 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
   // Low text (heuristic; excludes utility pages).
   const utility = /\/(contact|login|signin|sign-in|register|signup|cart|checkout|account|search|404|privacy|terms|legal|cookie|impressum|iletisim|giris)(\/|$|\?)/i;
   for (const { p, f } of pages) {
-    if (f.wordCount < 100 && !utility.test(new URL(p.finalUrl).pathname) && p !== ctx.homepage) {
-      sink.emit('content.low-text', { url: p.url, observed: `${f.wordCount} words of visible text` });
+    if (f.mainWordCount < 100 && !utility.test(new URL(p.finalUrl).pathname) && p !== ctx.homepage) {
+      sink.emit('content.low-text', { url: p.url, observed: `${f.mainWordCount} words of main content (${f.wordCount} incl. navigation/footer)` });
     }
   }
 
   // Exact duplicates by normalised body hash.
   const byHash = new Map<string, string[]>();
   for (const { p, f } of pages) {
-    if (f.wordCount < 30) continue;
-    const h = crypto.createHash('sha1').update(f.textContent.toLowerCase()).digest('hex');
+    if (f.mainWordCount < 30) continue;
+    const h = crypto.createHash('sha1').update(f.mainText.toLowerCase()).digest('hex');
     const a = byHash.get(h);
     if (a) a.push(p.url);
     else byHash.set(h, [p.url]);
@@ -116,7 +116,8 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
   const sh = new Map<string, Set<string>>();
   const sigs = new Map<string, Uint32Array>();
   for (const { p, f } of pages) {
-    const words = f.textContent.toLowerCase().split(/\s+/).filter(Boolean);
+    // Compare main content only: shared navigation/footer would make short pages look identical.
+    const words = f.mainText.toLowerCase().split(/\s+/).filter(Boolean);
     if (words.length < 50) continue;
     const s = shingles(words);
     sh.set(p.url, s);

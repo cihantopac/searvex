@@ -32,8 +32,6 @@ export interface ResearchReport {
 }
 
 export function profile(r: AuditReport): SiteProfile {
-  const schema = new Set<string>();
-  for (const f of r.findings) if (f.ruleId === 'sd.retired-type') for (const e of f.evidence) if (e.observed) schema.add(e.observed);
   return {
     url: r.target,
     pages: r.crawl.crawled,
@@ -42,7 +40,8 @@ export function profile(r: AuditReport): SiteProfile {
     languages: Object.keys(r.inventory.languages),
     topTerms: r.content.topTerms.map((t) => t.term),
     sections: r.inventory.sections,
-    schemaTypes: [...schema],
+    // Types actually present on crawled pages (JSON-LD, Microdata, RDFa).
+    schemaTypes: (r.inventory.structuredData?.types ?? []).map((t) => t.type),
     truncated: r.crawl.truncated,
   };
 }
@@ -51,6 +50,9 @@ export function computeGaps(target: SiteProfile, competitors: SiteProfile[], tar
   const half = Math.max(1, Math.ceil(competitors.length / 2));
   const termCount = new Map<string, number>();
   const typeCount = new Map<string, number>();
+  const schemaCount = new Map<string, number>();
+  const targetSchema = new Set(target.schemaTypes);
+  for (const c of competitors) for (const t of new Set(c.schemaTypes)) schemaCount.set(t, (schemaCount.get(t) ?? 0) + 1);
   for (const c of competitors) {
     for (const t of new Set(c.topTerms.slice(0, 40))) termCount.set(t, (termCount.get(t) ?? 0) + 1);
     for (const t of Object.keys(c.byType)) typeCount.set(t, (typeCount.get(t) ?? 0) + 1);
@@ -58,20 +60,22 @@ export function computeGaps(target: SiteProfile, competitors: SiteProfile[], tar
   return {
     topics: [...termCount.entries()].filter(([t, n]) => n >= half && !targetAllTerms.has(t)).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([term, n]) => ({ term, competitors: n })),
     pageTypes: [...typeCount.entries()].filter(([t, n]) => n >= half && !target.byType[t] && t !== 'other').map(([type, n]) => ({ type, competitors: n })),
-    schemaTypes: [],
+    schemaTypes: [...schemaCount.entries()].filter(([t, n]) => n >= half && !targetSchema.has(t)).sort((a, b) => b[1] - a[1]).map(([type, n]) => ({ type, competitors: n })),
   };
 }
 
 export function renderResearchMarkdown(r: ResearchReport): string {
   const L: string[] = [`# Searvex research — ${md(r.target.url)}`, ''];
-  const row = (p: SiteProfile) => `| ${md(p.url)} | ${p.pages}${p.truncated ? '+' : ''} | ${md(p.businessModel)} | ${Object.entries(p.byType).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t, n]) => `${t} ${n}`).join(', ')} | ${p.languages.map(md).join(', ')} |`;
-  L.push('## Site profiles', '', '| Site | Pages | Model (heuristic) | Main page types | Languages |', '|---|---|---|---|---|', row(r.target), ...r.competitors.map(row), '');
+  const row = (p: SiteProfile) => `| ${md(p.url)} | ${p.pages}${p.truncated ? '+' : ''} | ${md(p.businessModel)} | ${Object.entries(p.byType).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t, n]) => `${t} ${n}`).join(', ')} | ${p.languages.map(md).join(', ')} | ${p.schemaTypes.slice(0, 8).map(md).join(', ') || '—'} |`;
+  L.push('## Site profiles', '', '| Site | Pages | Model (heuristic) | Main page types | Languages | Structured data |', '|---|---|---|---|---|---|', row(r.target), ...r.competitors.map(row), '');
   L.push('## Target topics', '', r.target.topTerms.slice(0, 30).map(md).join(', ') || '—', '');
   if (r.competitors.length) {
     L.push('## Content gaps (competitor topics missing on target)', '');
     L.push(r.gaps.topics.length ? r.gaps.topics.map((t) => `- **${md(t.term)}** — prominent on ${t.competitors}/${r.competitors.length} competitors`).join('\n') : '_No consistent topic gaps found._', '');
     L.push('## Page-type gaps', '');
     L.push(r.gaps.pageTypes.length ? r.gaps.pageTypes.map((t) => `- **${t.type}** pages exist on ${t.competitors}/${r.competitors.length} competitors`).join('\n') : '_No page-type gaps._', '');
+    L.push('## Structured data gaps', '');
+    L.push(r.gaps.schemaTypes.length ? r.gaps.schemaTypes.map((t) => `- **${md(t.type)}** markup used by ${t.competitors}/${r.competitors.length} competitors — add only if it describes visible content on your pages`).join('\n') : '_No structured-data gaps._', '');
   }
   L.push('## Limitations', '', ...r.limitations.map((l) => `- ${md(l)}`), '');
   return L.join('\n');

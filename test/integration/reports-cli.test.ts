@@ -72,10 +72,14 @@ describe('report renderers', () => {
 
 describe('research', () => {
   it('computes topic and page-type gaps only from consistent competitor signals', () => {
-    const t = { url: 't', pages: 3, businessModel: 'x', byType: { home: 1, pricing: 1 }, languages: [], topTerms: ['espresso'], sections: [], schemaTypes: [], truncated: false };
+    const t = { url: 't', pages: 3, businessModel: 'x', byType: { home: 1, pricing: 1 }, languages: [], topTerms: ['espresso'], sections: [], schemaTypes: [] as string[], truncated: false };
     const c1 = { ...t, url: 'c1', byType: { home: 1, docs: 2 }, topTerms: ['subscription', 'roastery', 'espresso'] };
     const c2 = { ...t, url: 'c2', byType: { home: 1, docs: 1, blog: 1 }, topTerms: ['subscription', 'delivery'] };
+    c1.schemaTypes = ['Organization', 'FAQPage', 'Product'];
+    c2.schemaTypes = ['Organization', 'Product'];
+    t.schemaTypes = ['Organization'];
     const gaps = computeGaps(t, [c1, c2], new Set(['espresso']));
+    expect(gaps.schemaTypes).toEqual([{ type: 'Product', competitors: 2 }, { type: 'FAQPage', competitors: 1 }]);
     expect(gaps.topics.map((g) => g.term)).toEqual(expect.arrayContaining(['subscription', 'roastery', 'delivery']));
     expect(gaps.topics.find((g) => g.term === 'subscription')!.competitors).toBe(2);
     expect(gaps.pageTypes.map((g) => g.type)).toContain('docs');

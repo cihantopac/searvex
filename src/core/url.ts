@@ -20,6 +20,8 @@ export function normalizeUrl(raw: string, base?: string, opts: { stripTracking?:
     for (const k of [...u.searchParams.keys()]) if (TRACKING_PARAMS.test(k)) u.searchParams.delete(k);
   }
   if (u.pathname === '') u.pathname = '/';
+  // "/blog?" and "/blog" are the same resource for every practical purpose.
+  if (u.search === '?' || u.search === '') u.search = '';
   return u.toString();
 }
 

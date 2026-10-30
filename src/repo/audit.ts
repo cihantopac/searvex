@@ -29,6 +29,7 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
   let inventory: SiteInventory = {
     pages: scan.routes.map((r) => ({ url: r.route, type: 'other', basis: 'default', lang: null, title: null, status: 0, indexable: !r.noindex, depth: r.route.split('/').filter(Boolean).length, inlinks: 0, words: 0 })),
     byType: {}, languages: {}, hreflangLanguages: [], statusCodes: {}, businessModel: { label: 'unknown (repository mode)', evidence: [] }, sections: [],
+    structuredData: { types: [], pagesWithStructuredData: 0, invalidJsonLdPages: 0 },
   };
 
   let first = true;

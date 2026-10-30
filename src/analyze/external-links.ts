@@ -35,7 +35,11 @@ export async function checkExternalLinks(ctx: SiteContext, sink: FindingSink, op
       }
       await limiter.wait(new URL(u).host);
       let res = await safeFetch(u, { ...opts, method: 'HEAD', maxBytes: 1024 });
-      if (res.status === 405 || res.status === 501 || res.status === 403) res = await safeFetch(u, { ...opts, maxBytes: 64 * 1024 });
+      // Many servers/CDNs mishandle HEAD (405, 403, 503…): confirm every non-success with a GET.
+      if (res.error || res.status >= 400) {
+        await limiter.wait(new URL(u).host);
+        res = await safeFetch(u, { ...opts, maxBytes: 64 * 1024 });
+      }
       result.checked++;
       // 401/403/429 often mean bot protection, not a broken link: do not report them as broken.
       if (res.error || res.status === 404 || res.status === 410 || res.status >= 500) {

@@ -58,6 +58,15 @@ export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = 
   L.push('', `Languages (html lang): ${Object.entries(r.inventory.languages).map(([l, c]) => `${md(l)} (${c})`).join(', ') || '—'}`);
   if (r.inventory.hreflangLanguages.length) L.push(`hreflang languages: ${r.inventory.hreflangLanguages.map(md).join(', ')}`);
   L.push(`HTTP status: ${Object.entries(r.inventory.statusCodes).map(([s, c]) => `${s}: ${c}`).join(', ')}`, '');
+  const sd = r.inventory.structuredData;
+  if (sd) {
+    L.push(`Structured data: ${sd.pagesWithStructuredData} of ${r.inventory.pages.length} pages${sd.invalidJsonLdPages ? ` (${sd.invalidJsonLdPages} with invalid JSON-LD)` : ''}`, '');
+    if (sd.types.length) {
+      L.push('| Schema type | Pages | Syntax |', '|---|---|---|');
+      for (const t of sd.types.slice(0, 25)) L.push(`| ${md(t.type)} | ${t.pages} | ${t.formats.join(', ')} |`);
+      L.push('');
+    }
+  }
 
   L.push('## Content intelligence', '');
   if (r.content.topTerms.length) L.push(`Site-wide terms: ${r.content.topTerms.slice(0, 20).map((t) => md(t.term)).join(', ')}`, '');

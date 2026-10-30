@@ -93,6 +93,11 @@ describe('HTML extraction', () => {
     expect(q.canonical).toBeNull();
     expect(q.canonicalOutsideHead).toBe(1);
   });
+  it('extracts schema types from Microdata (multi-type) and RDFa', () => {
+    const q = extractPage('<html><body><div itemscope itemtype="https://schema.org/Product https://schema.org/Thing"></div><div vocab="https://schema.org/" typeof="LocalBusiness"></div><div typeof="schema:Event"></div></body></html>', 'https://e.com/');
+    expect(q.microdataTypes).toEqual(['Product', 'Thing']);
+    expect(q.rdfaTypes).toEqual(['LocalBusiness', 'Event']);
+  });
   it('ignores <title> inside inline SVG (real-world MDN false positive)', () => {
     const q = extractPage('<html><head><title>Doc</title></head><body><svg><title>Icon</title></svg><svg><title>Logo</title></svg></body></html>', 'https://e.com/');
     expect(q.titleCount).toBe(1);

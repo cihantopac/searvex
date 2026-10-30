@@ -74,6 +74,62 @@ describe('monitor diff', () => {
   });
 });
 
+describe('real-world regression fixtures (anonymised)', () => {
+  it('classifies a SaaS product with offers as software (not e-commerce), extracts offerings and brand relations, and avoids known false positives', async () => {
+    const nav = '<header><nav><a href="/">Home</a> <a href="/help">Help</a> <a href="/pricing">Pricing</a> <a href="/login">Log in</a> <a href="/register">Sign up</a> <a href="/cdn-cgi/l/email-protection#abc">[email protected]</a></nav></header>';
+    const footer = `<footer>${'Footer links about the company, legal pages, social profiles and newsletter signup. '.repeat(12)}</footer>`;
+    const ld = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"ACMECHAT","url":"https://chat.example/","parentOrganization":{"@type":"Organization","name":"ACMEGROUP","url":"https://group.example/"}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"ACMECHAT"}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"ACMECHAT","applicationCategory":"CommunicationApplication","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>`;
+    const help = (t: string, body: string) => page({ title: `${t} — ACMECHAT`, head: `<meta name="description" content="${t}"><link rel="canonical" href="__BASE__${t === 'Help' ? '/help' : '/help/' + t.toLowerCase()}">${ld}`, body: `${nav}<main><h1>${t}</h1><p>${body}</p></main>${footer}` });
+    const routes: Record<string, Route> = {};
+    const s = await startServer(routes);
+    const B = s.url;
+    const fill = (h: string) => h.replace(/__BASE__/g, B);
+    Object.assign(routes, {
+      '/': { body: fill(page({ title: 'ACMECHAT — team chat', head: `<link rel="canonical" href="${B}/"><link rel="alternate" hreflang="en" href="${B}/"><link rel="alternate" hreflang="x-default" href="${B}/">${ld}`, body: `${nav}<main><h1>Team chat</h1>${text(150)}<a href="/blog?">Blog</a><a href="/blog?tag=x">Tag</a></main>${footer}` })) },
+      '/help': { body: fill(help('Help', 'Start here to learn the basics of channels and messages.')) },
+      '/help/invites': { body: fill(help('Invites', 'Invite a teammate by sharing a link from the members screen.')) },
+      '/help/reactions': { body: fill(help('Reactions', 'React to any message with an emoji to acknowledge it quickly.')) },
+      '/pricing': { body: fill(page({ title: 'Pricing — ACMECHAT', head: `<link rel="canonical" href="${B}/pricing">`, body: `${nav}<main><h1>Pricing</h1>${text(120)}</main>` })) },
+      '/blog': { body: fill(page({ title: 'Blog', head: `<link rel="canonical" href="${B}/blog"><link rel="alternate" hreflang="en" href="${B}/blog"><link rel="alternate" hreflang="x-default" href="${B}/blog">`, body: `${nav}<main><h1>Blog</h1><p>${'Release notes, product updates and stories from teams that moved their conversations to channels. '.repeat(8)}</p></main>` })) },
+      // Filter variant canonicalised to /blog that points hreflang at /blog: Google ignores it, so must Searvex.
+      '/blog?tag=x': { body: fill(page({ title: 'Blog', head: `<link rel="canonical" href="${B}/blog"><link rel="alternate" hreflang="en" href="${B}/blog">`, body: `${nav}<main>${text(120)}</main>` })) },
+      '/cdn-cgi/l/email-protection': { status: 404, body: 'nope' },
+      '/login': { body: page({ title: 'Log in — ACMECHAT', head: '<meta name="robots" content="noindex">', body: '<form></form>' }) },
+      '/register': { body: page({ title: 'Sign up — ACMECHAT', head: '<meta name="robots" content="noindex">', body: '<form></form>' }) },
+    });
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-saas-'));
+    try {
+      const { report } = await auditWebsite(B + '/', { workspace: ws, crawl: { policy, delayMs: 0 }, probes: false });
+      const ids = report.findings.map((f) => f.ruleId);
+      expect(report.inventory.businessModel.label).toBe('SaaS / software product');
+      expect(report.inventory.offerings?.[0]).toMatchObject({ name: 'ACMECHAT', kind: 'SoftwareApplication', price: '0', currency: 'USD' });
+      expect(report.inventory.relations).toContainEqual(expect.objectContaining({ from: 'ACMECHAT', relation: 'parentOrganization', to: 'ACMEGROUP' }));
+      expect(ids, JSON.stringify(report.findings.find((f) => f.ruleId === 'content.near-duplicate')?.evidence)).not.toContain('content.near-duplicate'); // short help pages sharing a long footer
+      expect(ids).not.toContain('geo.entity-inconsistent'); // product org naming its parent is fine
+      expect(ids, JSON.stringify(report.findings.find((f) => f.ruleId === 'links.broken-internal')?.evidence)).not.toContain('links.broken-internal'); // Cloudflare /cdn-cgi/ endpoint ignored
+      expect(ids).not.toContain('hreflang.missing-return'); // non-canonical variant ignored
+      expect(s.hits.get('/cdn-cgi/l/email-protection')).toBeUndefined();
+      expect(report.inventory.pages.filter((p) => p.url.endsWith('/blog?')).length).toBe(0); // "/blog?" == "/blog"
+    } finally {
+      await s.close();
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  it('explains duplicate titles produced by Inertia SSR', async () => {
+    const s = await startServer({ '/': { body: '<!doctype html><html lang="en"><head><title>ACME</title><title data-inertia="">Home</title><meta name="viewport" content="width=device-width"></head><body><div id="app" data-page="{}"><h1>Home</h1></div></body></html>' } });
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-inertia-'));
+    try {
+      const { report } = await auditWebsite(s.url + '/', { workspace: ws, crawl: { policy, delayMs: 0 }, probes: false });
+      const f = report.findings.find((x) => x.ruleId === 'title.multiple')!;
+      expect(f.evidence[0]!.observed).toContain('<title inertia>');
+    } finally {
+      await s.close();
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('start URL errors', () => {
   it('reports a critical finding when the start URL returns 404 (real-world: a removed demo site)', async () => {
     const s = await startServer({});

@@ -1267,6 +1267,7 @@ function normalizeUrl(raw, base, opts = {}) {
     for (const k of [...u.searchParams.keys()]) if (TRACKING_PARAMS.test(k)) u.searchParams.delete(k);
   }
   if (u.pathname === "") u.pathname = "/";
+  if (u.search === "?" || u.search === "") u.search = "";
   return u.toString();
 }
 function sameSite(a, b) {
@@ -15561,7 +15562,8 @@ function extractPage(html3, pageUrl) {
       jsonLd.push({ raw: raw.slice(0, 2e3), data: null, error: e.message, types: [] });
     }
   });
-  const microdataTypes = $2("[itemtype]").map((_, el) => ($2(el).attr("itemtype") ?? "").split("/").pop() ?? "").get().filter(Boolean);
+  const microdataTypes = $2("[itemtype]").map((_, el) => ($2(el).attr("itemtype") ?? "").split(/\s+/).map((t) => t.replace(/\/+$/, "").split(/[/#]/).pop() ?? "")).get().flat().filter(Boolean);
+  const rdfaTypes = $2("[typeof]").map((_, el) => ($2(el).attr("typeof") ?? "").split(/\s+/).map((t) => t.replace(/^(schema|s):/, "").split(/[/#]/).pop() ?? "")).get().flat().filter(Boolean);
   const openGraph = {};
   $2('meta[property^="og:" i]').each((_, el) => {
     openGraph[($2(el).attr("property") ?? "").toLowerCase()] = $2(el).attr("content") ?? "";
@@ -15581,6 +15583,12 @@ function extractPage(html3, pageUrl) {
   body.find("script,style,noscript,svg,iframe").remove();
   body.find("template").not("[shadowrootmode],[shadowroot]").remove();
   const textContent2 = visibleText(body);
+  const mainEl = body.find('main, [role="main"]').first();
+  let mainRoot = mainEl.length ? mainEl.clone() : body.find("article").length === 1 ? body.find("article").first().clone() : body.clone();
+  mainRoot.find('nav, header, footer, aside, [role="navigation"], [role="banner"], [role="contentinfo"], form').remove();
+  if (!mainEl.length && !mainRoot.text().trim()) mainRoot = body.clone();
+  const mainText = visibleText(mainRoot);
+  const countWords = (t) => t ? t.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length : 0;
   const wordCount = textContent2 ? textContent2.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length : 0;
   const hasMountNode = $2("#root,#app,#__next,#__nuxt,[data-reactroot],app-root").length > 0;
   const likelyClientRendered = wordCount < 50 && scriptCount > 0 && hasMountNode;
@@ -15621,17 +15629,20 @@ function extractPage(html3, pageUrl) {
     images,
     jsonLd,
     microdataTypes,
+    rdfaTypes,
     openGraph,
     twitter,
     metaRefresh: $2('meta[http-equiv="refresh" i]').attr("content") ?? null,
     textContent: textContent2.slice(0, 1e5),
+    mainText: mainText.slice(0, 1e5),
+    mainWordCount: countWords(mainText),
     wordCount,
     scriptCount,
     hasNoscriptContent,
     likelyClientRendered,
     formsCount,
     iframes,
-    generator: $2('script[src*="/_next/static/"]').length || $2("#__next").length ? "next.js" : $2('meta[name="generator" i]').attr("content")?.slice(0, 60) ?? null,
+    generator: $2('script[src*="/_next/static/"]').length || $2("#__next").length ? "next.js" : $2("[data-inertia]").length || $2('[data-page][id="app"]').length ? "inertia" : $2('meta[name="generator" i]').attr("content")?.slice(0, 60) ?? null,
     structure,
     subresources
   };
@@ -19953,6 +19964,7 @@ function inScope(url, rootHost, opts) {
   }
   if (u.hostname.replace(/^www\./, "") !== rootHost) return false;
   if (looksLikeAsset(url)) return false;
+  if (u.pathname.startsWith("/cdn-cgi/")) return false;
   if (opts.include?.length && !opts.include.some((r) => r.test(url))) return false;
   if (opts.exclude?.some((r) => r.test(url))) return false;
   return true;
@@ -20063,8 +20075,11 @@ async function crawl(startUrl, partial = {}, store) {
       }
     }
     if (res.redirects.length && res.finalUrl !== item.url) enqueue({ url: res.finalUrl, depth: item.depth, foundOn: item.url });
-    if (rec.data) rec.data.textContent = rec.data.textContent.slice(0, 2e4);
-    if (rec.rendered) rec.rendered.textContent = rec.rendered.textContent.slice(0, 2e4);
+    for (const d of [rec.data, rec.rendered]) {
+      if (!d) continue;
+      d.textContent = d.textContent.slice(0, 2e4);
+      d.mainText = d.mainText.slice(0, 2e4);
+    }
     pages.push(rec);
     store?.append("pages.jsonl", rec);
     crawledThisRun++;
@@ -20463,7 +20478,7 @@ function runContentChecks(ctx, sink) {
     const weighted = [
       ...tokenize(f.title ?? "").flatMap((t) => [t, t, t]),
       ...f.headings.flatMap((h) => tokenize(h.text).flatMap((t) => h.level === 1 ? [t, t, t] : [t, t])),
-      ...tokenize(f.textContent.slice(0, 2e4))
+      ...tokenize(f.mainText.slice(0, 2e4))
     ];
     for (const t of weighted) tf.set(t, (tf.get(t) ?? 0) + 1);
     docTerms.set(p.url, tf);
@@ -20478,14 +20493,14 @@ function runContentChecks(ctx, sink) {
   const topTerms = [...df.entries()].filter(([, c]) => c >= Math.min(2, N) && c <= Math.max(2, N * 0.8)).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([term, n]) => ({ term, pages: n }));
   const utility = /\/(contact|login|signin|sign-in|register|signup|cart|checkout|account|search|404|privacy|terms|legal|cookie|impressum|iletisim|giris)(\/|$|\?)/i;
   for (const { p, f } of pages) {
-    if (f.wordCount < 100 && !utility.test(new URL(p.finalUrl).pathname) && p !== ctx.homepage) {
-      sink.emit("content.low-text", { url: p.url, observed: `${f.wordCount} words of visible text` });
+    if (f.mainWordCount < 100 && !utility.test(new URL(p.finalUrl).pathname) && p !== ctx.homepage) {
+      sink.emit("content.low-text", { url: p.url, observed: `${f.mainWordCount} words of main content (${f.wordCount} incl. navigation/footer)` });
     }
   }
   const byHash = /* @__PURE__ */ new Map();
   for (const { p, f } of pages) {
-    if (f.wordCount < 30) continue;
-    const h = crypto2.createHash("sha1").update(f.textContent.toLowerCase()).digest("hex");
+    if (f.mainWordCount < 30) continue;
+    const h = crypto2.createHash("sha1").update(f.mainText.toLowerCase()).digest("hex");
     const a = byHash.get(h);
     if (a) a.push(p.url);
     else byHash.set(h, [p.url]);
@@ -20495,7 +20510,7 @@ function runContentChecks(ctx, sink) {
   const sh = /* @__PURE__ */ new Map();
   const sigs = /* @__PURE__ */ new Map();
   for (const { p, f } of pages) {
-    const words = f.textContent.toLowerCase().split(/\s+/).filter(Boolean);
+    const words = f.mainText.toLowerCase().split(/\s+/).filter(Boolean);
     if (words.length < 50) continue;
     const s = shingles(words);
     sh.set(p.url, s);
@@ -20552,6 +20567,110 @@ function runContentChecks(ctx, sink) {
     return { key, pages: urls, terms: [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([t]) => t) };
   }).sort((a, b) => b.pages.length - a.pages.length);
   return { topTerms, pageTerms, clusters, cannibalization, nearDuplicates, exactDuplicates };
+}
+
+// src/analyze/geo.ts
+function answerability(ctx) {
+  const out = [];
+  for (const p of ctx.indexable) {
+    const f = factsOf(p);
+    const s = f.structure;
+    const signals = {
+      descriptiveTitle: !!f.title && f.title.split(/\s+/).length >= 3,
+      hasH1: f.headings.some((h) => h.level === 1),
+      sectioned: f.headings.filter((h) => h.level === 2).length >= 2,
+      questionHeadings: s.questionHeadings > 0,
+      conciseParagraphs: s.paragraphs > 0 && s.avgParagraphWords <= 80,
+      listsOrTables: s.lists + s.tables > 0,
+      datedOrAuthored: s.hasPublishedDate || s.hasAuthor,
+      structuredData: f.jsonLd.some((b) => !b.error),
+      substantiveText: f.mainWordCount >= 150
+    };
+    const vals = Object.values(signals);
+    out.push({ url: p.url, score: Math.round(vals.filter(Boolean).length / vals.length * 100), signals });
+  }
+  return out;
+}
+function runGeoChecks(ctx, sink, llms) {
+  const notes = [];
+  const matrix = ctx.crawl.robots.state === "ok" || ctx.crawl.robots.state === "missing" ? botAccessMatrix(ctx.crawl.robots, ctx.crawl.startUrl) : [];
+  for (const b of matrix) {
+    if (b.homepageAllowed) continue;
+    if (b.bot.token === "Googlebot" || b.bot.token === "Bingbot") sink.emit("geo.search-bot-blocked", { url: ctx.crawl.robots.url, observed: `${b.bot.token} disallowed` });
+    if (b.bot.purpose === "ai-search" && ["OAI-SearchBot", "Claude-SearchBot", "PerplexityBot"].includes(b.bot.token)) {
+      sink.emit("geo.ai-search-bot-blocked", { url: ctx.crawl.robots.url, observed: `${b.bot.token} (${b.bot.operator}) disallowed${b.explicit ? "" : " via * group"}` });
+    }
+  }
+  const training = matrix.filter((b) => b.bot.purpose === "ai-training");
+  if (training.length) {
+    sink.emit("geo.training-bots", {
+      url: ctx.crawl.robots.url,
+      observed: training.map((b) => `${b.bot.token}: ${b.homepageAllowed ? "allowed" : "blocked"}`).join(", ")
+    });
+  }
+  if (ctx.crawl.robots.state === "unreachable") notes.push("robots.txt unreachable: AI crawler access could not be evaluated (RFC 9309 treats this as full disallow).");
+  const snippetRestricted = [];
+  for (const p of ctx.htmlPages) {
+    if (isNoindex(p)) continue;
+    const d = robotsDirectives(p, ["googlebot", "bingbot"]);
+    const restricted = d.filter((x) => x === "nosnippet" || x === "max-snippet:0" || x === "noarchive" || x === "nocache");
+    if (restricted.length) {
+      snippetRestricted.push(p.url);
+      sink.emit("geo.snippet-restricted", { url: p.url, observed: restricted.join(", ") });
+    }
+  }
+  if (llms) sink.emit("geo.llms-txt", { url: llms.url, observed: llms.present ? `present (${llms.bytes} bytes) \u2014 not used by Google; no scoring impact` : `absent (HTTP ${llms.status}) \u2014 no scoring impact` });
+  const entityNames = {};
+  const roles = { site: /* @__PURE__ */ new Map(), organization: /* @__PURE__ */ new Map() };
+  const norm = (n) => n.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const note = (role, name, url) => {
+    const k = norm(name);
+    if (!k) return;
+    entityNames[name] = (entityNames[name] ?? 0) + 1;
+    const set = roles[role].get(k) ?? /* @__PURE__ */ new Set();
+    set.add(`${name}|${url}`);
+    roles[role].set(k, set);
+  };
+  for (const p of ctx.htmlPages) {
+    const f = factsOf(p);
+    for (const b of f.jsonLd) {
+      const data2 = b.data;
+      const roots = Array.isArray(data2) ? data2 : data2 && Array.isArray(data2["@graph"]) ? data2["@graph"] : [data2];
+      for (const n of roots) {
+        if (!n || typeof n !== "object") continue;
+        const node = n;
+        const t = [].concat(node["@type"] ?? []);
+        if (typeof node["name"] !== "string") continue;
+        if (t.includes("WebSite")) note("site", node["name"].trim(), p.url);
+        else if (t.some((x) => typeof x === "string" && /Organization|Corporation|LocalBusiness|OnlineStore|OnlineBusiness/.test(x))) note("organization", node["name"].trim(), p.url);
+      }
+    }
+    if (f.openGraph["og:site_name"]) note("site", f.openGraph["og:site_name"].trim(), p.url);
+  }
+  for (const role of ["site", "organization"]) {
+    if (roles[role].size > 1) {
+      const variants = [...roles[role].values()].map((set) => {
+        const [name, url] = [...set][0].split("|");
+        return `"${name}" on ${set.size} page(s), e.g. ${url}`;
+      });
+      sink.emit("geo.entity-inconsistent", { observed: `${role === "site" ? "site name (WebSite / og:site_name)" : "organization name"}: ${variants.join("; ")}` });
+    }
+  }
+  const pages = answerability(ctx);
+  const average = pages.length ? Math.round(pages.reduce((a, p) => a + p.score, 0) / pages.length) : 0;
+  const weak = pages.filter((p) => p.score < 50);
+  if (weak.length) sink.emit("geo.answerability", weak.slice(0, 50).map((p) => ({ url: p.url, observed: `clarity signals ${p.score}/100; missing: ${Object.entries(p.signals).filter(([, v]) => !v).map(([k]) => k).join(", ")}` })));
+  sink.emit("geo.citations-unmeasured", { observed: "No AI citation data source configured" });
+  notes.push("Answerability is a heuristic clarity signal. Google states AI Overviews/AI Mode require no special optimisation; no citation or ranking prediction is made.");
+  return {
+    bots: matrix.map((b) => ({ token: b.bot.token, operator: b.bot.operator, purpose: b.bot.purpose, allowed: b.homepageAllowed, explicit: b.explicit, docs: b.bot.docs })),
+    llmsTxt: llms,
+    entityNames,
+    answerability: { average, pages: pages.sort((a, b) => a.score - b.score).slice(0, 200) },
+    snippetRestricted,
+    citations: { measured: false, reason: "No AI citation integration configured (Bing AI Performance export or Search Console data can be imported)." },
+    notes
+  };
 }
 
 // src/analyze/structured-data.ts
@@ -20660,91 +20779,19 @@ function checkStructuredData(url, f, sink, isHomepage) {
   }
 }
 
-// src/analyze/geo.ts
-function answerability(ctx) {
-  const out = [];
-  for (const p of ctx.indexable) {
-    const f = factsOf(p);
-    const s = f.structure;
-    const signals = {
-      descriptiveTitle: !!f.title && f.title.split(/\s+/).length >= 3,
-      hasH1: f.headings.some((h) => h.level === 1),
-      sectioned: f.headings.filter((h) => h.level === 2).length >= 2,
-      questionHeadings: s.questionHeadings > 0,
-      conciseParagraphs: s.paragraphs > 0 && s.avgParagraphWords <= 80,
-      listsOrTables: s.lists + s.tables > 0,
-      datedOrAuthored: s.hasPublishedDate || s.hasAuthor,
-      structuredData: f.jsonLd.some((b) => !b.error),
-      substantiveText: f.wordCount >= 150
-    };
-    const vals = Object.values(signals);
-    out.push({ url: p.url, score: Math.round(vals.filter(Boolean).length / vals.length * 100), signals });
-  }
+// src/analyze/inventory.ts
+function pageSchemaTypes(f) {
+  const out = /* @__PURE__ */ new Map();
+  const add2 = (t, fmt) => {
+    const set = out.get(t) ?? /* @__PURE__ */ new Set();
+    set.add(fmt);
+    out.set(t, set);
+  };
+  for (const b of f.jsonLd) for (const n of typedNodes(b.data)) for (const t of [].concat(n["@type"] ?? [])) if (typeof t === "string") add2(t.replace(/^(https?:\/\/schema\.org\/|schema:)/, ""), "json-ld");
+  for (const t of f.microdataTypes) add2(t, "microdata");
+  for (const t of f.rdfaTypes ?? []) add2(t, "rdfa");
   return out;
 }
-function runGeoChecks(ctx, sink, llms) {
-  const notes = [];
-  const matrix = ctx.crawl.robots.state === "ok" || ctx.crawl.robots.state === "missing" ? botAccessMatrix(ctx.crawl.robots, ctx.crawl.startUrl) : [];
-  for (const b of matrix) {
-    if (b.homepageAllowed) continue;
-    if (b.bot.token === "Googlebot" || b.bot.token === "Bingbot") sink.emit("geo.search-bot-blocked", { url: ctx.crawl.robots.url, observed: `${b.bot.token} disallowed` });
-    if (b.bot.purpose === "ai-search" && ["OAI-SearchBot", "Claude-SearchBot", "PerplexityBot"].includes(b.bot.token)) {
-      sink.emit("geo.ai-search-bot-blocked", { url: ctx.crawl.robots.url, observed: `${b.bot.token} (${b.bot.operator}) disallowed${b.explicit ? "" : " via * group"}` });
-    }
-  }
-  const training = matrix.filter((b) => b.bot.purpose === "ai-training");
-  if (training.length) {
-    sink.emit("geo.training-bots", {
-      url: ctx.crawl.robots.url,
-      observed: training.map((b) => `${b.bot.token}: ${b.homepageAllowed ? "allowed" : "blocked"}`).join(", ")
-    });
-  }
-  if (ctx.crawl.robots.state === "unreachable") notes.push("robots.txt unreachable: AI crawler access could not be evaluated (RFC 9309 treats this as full disallow).");
-  const snippetRestricted = [];
-  for (const p of ctx.htmlPages) {
-    if (isNoindex(p)) continue;
-    const d = robotsDirectives(p, ["googlebot", "bingbot"]);
-    const restricted = d.filter((x) => x === "nosnippet" || x === "max-snippet:0" || x === "noarchive" || x === "nocache");
-    if (restricted.length) {
-      snippetRestricted.push(p.url);
-      sink.emit("geo.snippet-restricted", { url: p.url, observed: restricted.join(", ") });
-    }
-  }
-  if (llms) sink.emit("geo.llms-txt", { url: llms.url, observed: llms.present ? `present (${llms.bytes} bytes) \u2014 not used by Google; no scoring impact` : `absent (HTTP ${llms.status}) \u2014 no scoring impact` });
-  const entityNames = {};
-  for (const p of ctx.htmlPages) {
-    const f = factsOf(p);
-    const names = /* @__PURE__ */ new Set();
-    for (const b of f.jsonLd) {
-      for (const n of typedNodes(b.data)) {
-        const t = [].concat(n["@type"] ?? []);
-        if ((t.includes("Organization") || t.includes("WebSite") || t.includes("Corporation")) && typeof n["name"] === "string") names.add(n["name"].trim());
-      }
-    }
-    if (f.openGraph["og:site_name"]) names.add(f.openGraph["og:site_name"].trim());
-    for (const n of names) entityNames[n] = (entityNames[n] ?? 0) + 1;
-  }
-  const distinct = Object.keys(entityNames);
-  const normalized = new Set(distinct.map((n) => n.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "")));
-  if (normalized.size > 1) sink.emit("geo.entity-inconsistent", { observed: distinct.map((n) => `"${n}" \xD7${entityNames[n]}`).join(", ") });
-  const pages = answerability(ctx);
-  const average = pages.length ? Math.round(pages.reduce((a, p) => a + p.score, 0) / pages.length) : 0;
-  const weak = pages.filter((p) => p.score < 50);
-  if (weak.length) sink.emit("geo.answerability", weak.slice(0, 50).map((p) => ({ url: p.url, observed: `clarity signals ${p.score}/100; missing: ${Object.entries(p.signals).filter(([, v]) => !v).map(([k]) => k).join(", ")}` })));
-  sink.emit("geo.citations-unmeasured", { observed: "No AI citation data source configured" });
-  notes.push("Answerability is a heuristic clarity signal. Google states AI Overviews/AI Mode require no special optimisation; no citation or ranking prediction is made.");
-  return {
-    bots: matrix.map((b) => ({ token: b.bot.token, operator: b.bot.operator, purpose: b.bot.purpose, allowed: b.homepageAllowed, explicit: b.explicit, docs: b.bot.docs })),
-    llmsTxt: llms,
-    entityNames,
-    answerability: { average, pages: pages.sort((a, b) => a.score - b.score).slice(0, 200) },
-    snippetRestricted,
-    citations: { measured: false, reason: "No AI citation integration configured (Bing AI Performance export or Search Console data can be imported)." },
-    notes
-  };
-}
-
-// src/analyze/inventory.ts
 var URL_RULES = [
   [/\/(products?|p|shop\/[^/]+|item|urun|urunler)\/[^/]+/i, "product"],
   [/\/(category|categories|collections?|c|kategori|shop)(\/|$)/i, "category"],
@@ -20782,7 +20829,7 @@ function buildInventory(ctx) {
     const f = factsOf(p);
     if (!f || p.status !== 200 || p.redirects.length) continue;
     const types = /* @__PURE__ */ new Set();
-    for (const b of f.jsonLd) for (const n2 of typedNodes(b.data)) for (const t of [].concat(n2["@type"] ?? [])) if (typeof t === "string") types.add(t);
+    for (const b of f.jsonLd) for (const n of typedNodes(b.data)) for (const t of [].concat(n["@type"] ?? [])) if (typeof t === "string") types.add(t);
     const path15 = new URL(p.finalUrl).pathname;
     let type = "other";
     let basis = "default";
@@ -20828,22 +20875,24 @@ function buildInventory(ctx) {
     const seg = "/" + (new URL(p.url).pathname.split("/").filter(Boolean)[0] ?? "");
     sectionsMap.set(seg, (sectionsMap.get(seg) ?? 0) + 1);
   }
-  const evidence = [];
-  let label = "content / corporate site";
-  const n = (t) => byType[t] ?? 0;
-  if (n("product") >= 3 || ctx.htmlPages.some((p) => factsOf(p).jsonLd.some((b) => /"Offer"|"AggregateOffer"/.test(b.raw)))) {
-    label = "e-commerce";
-    evidence.push(`${n("product")} product pages`, `${n("category")} category pages`);
-  } else if (n("pricing") > 0 && (n("docs") > 0 || n("service") > 0)) {
-    label = "SaaS / software product";
-    evidence.push("pricing page present", `${n("docs")} docs pages`, `${n("service")} feature/solution pages`);
-  } else if (n("blog-post") > pages.length * 0.5) {
-    label = "publisher / blog";
-    evidence.push(`${n("blog-post")} of ${pages.length} pages are articles`);
-  } else if (n("service") > 0) {
-    label = "service business";
-    evidence.push(`${n("service")} service pages`);
+  const sdTypes = /* @__PURE__ */ new Map();
+  let pagesWithSd = 0;
+  let invalidJsonLdPages = 0;
+  for (const p of ctx.htmlPages) {
+    const f = factsOf(p);
+    if (f.jsonLd.some((b) => b.error)) invalidJsonLdPages++;
+    const types = pageSchemaTypes(f);
+    if (types.size) pagesWithSd++;
+    for (const [t, fmts] of types) {
+      const e = sdTypes.get(t) ?? { pages: 0, formats: /* @__PURE__ */ new Set(), example: p.url };
+      e.pages++;
+      for (const x of fmts) e.formats.add(x);
+      sdTypes.set(t, e);
+    }
   }
+  const { businessModel, offerings, relations } = classifyBusiness(ctx, byType, sdTypes);
+  const evidence = businessModel.evidence;
+  const label = businessModel.label;
   if (hreflangLanguages.length > 1) evidence.push(`multilingual: ${hreflangLanguages.join(", ")}`);
   return {
     pages,
@@ -20851,8 +20900,81 @@ function buildInventory(ctx) {
     languages,
     hreflangLanguages,
     statusCodes,
-    businessModel: { label, evidence },
+    businessModel: { ...businessModel, label, evidence },
+    offerings,
+    relations,
+    structuredData: {
+      types: [...sdTypes.entries()].map(([type, e]) => ({ type, pages: e.pages, formats: [...e.formats], example: e.example })).sort((a, b) => b.pages - a.pages || a.type.localeCompare(b.type)),
+      pagesWithStructuredData: pagesWithSd,
+      invalidJsonLdPages
+    },
     sections: [...sectionsMap.entries()].map(([path15, c]) => ({ path: path15, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
+  };
+}
+function classifyBusiness(ctx, byType, sd) {
+  const score = {};
+  const why = {};
+  const add2 = (label, pts, reason) => {
+    score[label] = (score[label] ?? 0) + pts;
+    (why[label] ??= []).push(reason);
+  };
+  const has3 = (t) => (sd.get(t)?.pages ?? 0) > 0;
+  const n = (t) => byType[t] ?? 0;
+  const linkPaths = /* @__PURE__ */ new Set();
+  for (const p of ctx.htmlPages) for (const l of factsOf(p).links) if (l.url) linkPaths.add(new URL(l.url).pathname.toLowerCase() + " " + l.text.toLowerCase());
+  const linked = (re) => [...linkPaths].some((x) => re.test(x));
+  if (has3("SoftwareApplication") || has3("WebApplication") || has3("MobileApplication")) add2("SaaS / software product", 5, "SoftwareApplication/WebApplication structured data");
+  if (linked(/\/(login|signin|sign-in|register|signup|sign-up|giris|kayit|app)(\/|\s|$)/)) add2("SaaS / software product", 2, "login/sign-up links");
+  if (n("pricing")) add2("SaaS / software product", 2, "pricing page");
+  if (n("docs") >= 3) add2("SaaS / software product", 1, `${n("docs")} docs/help pages`);
+  if (has3("Product") || has3("ProductGroup")) add2("e-commerce", 4, "Product structured data");
+  if (n("product") >= 3) add2("e-commerce", 3, `${n("product")} product pages`);
+  if (n("category") >= 2) add2("e-commerce", 1, `${n("category")} category pages`);
+  if (linked(/\/(cart|basket|checkout|sepet|odeme)(\/|\s|$)/)) add2("e-commerce", 3, "cart/checkout links");
+  const articles = n("blog-post");
+  const pages = Math.max(1, Object.values(byType).reduce((a, b) => a + b, 0));
+  if (articles / pages > 0.5) add2("publisher / blog", 4, `${articles} of ${pages} pages are articles`);
+  if (has3("NewsArticle") || has3("BlogPosting")) add2("publisher / blog", 1, "Article structured data");
+  if (n("service") >= 2 || has3("Service") || has3("ProfessionalService")) add2("service business", 3, "service pages / Service structured data");
+  if (has3("LocalBusiness") || [...sd.keys()].some((t) => /Restaurant|Store|Dentist|Clinic|Hotel|Agency/.test(t))) add2("local business", 4, "LocalBusiness structured data");
+  if (n("legal") + n("about") + n("careers") + n("contact") >= pages * 0.5) add2("content / corporate site", 2, "mostly company pages (about, careers, legal, contact)");
+  add2("content / corporate site", 1, "default");
+  const ranked = Object.entries(score).sort((a, b) => b[1] - a[1]);
+  const [best, second] = ranked;
+  const confidence = !second || best[1] - second[1] >= 4 ? "high" : best[1] - second[1] >= 2 ? "medium" : "low";
+  const offers = /* @__PURE__ */ new Map();
+  const relations = /* @__PURE__ */ new Map();
+  for (const p of ctx.htmlPages) {
+    const seen = /* @__PURE__ */ new Set();
+    for (const b of factsOf(p).jsonLd) {
+      for (const node of typedNodes(b.data)) {
+        const types = [].concat(node["@type"] ?? []).filter((x) => typeof x === "string");
+        const name = typeof node["name"] === "string" ? node["name"].trim() : "";
+        const kind = types.find((t) => /^(Product|ProductGroup|SoftwareApplication|WebApplication|MobileApplication|Service|Course|Event)$/.test(t));
+        if (kind && name) {
+          const key = `${kind}:${name.toLowerCase()}`;
+          const offer = [].concat(node["offers"] ?? [])[0];
+          const e = offers.get(key) ?? { name, kind, url: typeof node["url"] === "string" ? node["url"] : void 0, price: offer?.["price"] !== void 0 ? String(offer["price"]) : void 0, currency: typeof offer?.["priceCurrency"] === "string" ? offer["priceCurrency"] : void 0, pages: 0 };
+          if (!seen.has(key)) e.pages++;
+          seen.add(key);
+          offers.set(key, e);
+        }
+        if (name && types.some((t) => /Organization|Corporation/.test(t))) {
+          for (const rel2 of ["parentOrganization", "subOrganization", "brand", "owns", "memberOf", "department"]) {
+            for (const target of [].concat(node[rel2] ?? [])) {
+              const t = target;
+              const tn = typeof t === "string" ? t : typeof t?.["name"] === "string" ? t["name"] : "";
+              if (tn) relations.set(`${name}|${rel2}|${tn}`, { from: name, relation: rel2, to: tn, toUrl: typeof t?.["url"] === "string" ? t["url"] : void 0 });
+            }
+          }
+        }
+      }
+    }
+  }
+  return {
+    businessModel: { label: best[0], evidence: why[best[0]].filter((r) => r !== "default"), confidence, alternatives: ranked.slice(1, 3).map(([label, s]) => ({ label, score: s })) },
+    offerings: [...offers.values()].sort((a, b) => b.pages - a.pages).slice(0, 50),
+    relations: [...relations.values()]
   };
 }
 
@@ -20936,7 +21058,13 @@ function runTechnicalChecks(ctx, sink) {
       }
     }
     if (!f.title) sink.emit("title.missing", ev);
-    if (f.titleCount > 1) sink.emit("title.multiple", { url: p.url, observed: `${f.titleCount} <title> elements` });
+    if (f.titleCount > 1) {
+      const inertia = p.data?.generator === "inertia";
+      sink.emit("title.multiple", {
+        url: p.url,
+        observed: `${f.titleCount} <title> elements (first: "${(f.title ?? "").slice(0, 60)}")${inertia ? " \u2014 Inertia.js: mark the root template title with the `inertia` attribute (<title inertia>) so the page title replaces it" : ""}`
+      });
+    }
     if (f.title && f.title.length > 70) sink.emit("title.truncation-risk", { url: p.url, observed: `${f.title.length} chars: ${f.title.slice(0, 120)}` });
     if (!noindex && selfCanon) {
       if (f.title) push(titleMap, f.title.toLowerCase(), p.url);
@@ -20976,13 +21104,14 @@ function runTechnicalChecks(ctx, sink) {
     if (p.bytes > 10 * 1024 && !p.headers["content-encoding"]) sink.emit("perf.no-compression", { url: p.url, observed: `${Math.round(p.bytes / 1024)} KB uncompressed` });
     const path15 = new URL(p.finalUrl).pathname;
     if (path15.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
-    checkHreflang(ctx, p.url, f, sink);
+    if (selfCanon && !noindex) checkHreflang(ctx, p.url, f, sink);
     checkStructuredData(p.url, f, sink, p === ctx.homepage);
   }
   for (const [title, urls] of titleMap) if (urls.length > 1) sink.emit("duplicate.title", { url: urls[0], observed: `"${title.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(", ")}` });
   for (const [desc, urls] of descMap) if (urls.length > 1) sink.emit("duplicate.description", { url: urls[0], observed: `"${desc.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(", ")}` });
   for (const [target, sources] of ctx.inlinks) {
     const rec = resolveRecord(ctx, target);
+    if (new URL(target).pathname.startsWith("/cdn-cgi/")) continue;
     if (rec && !rec.blockedByRobots && rec.status >= 400 && rec.status < 500) {
       sink.emit("links.broken-internal", { url: target, observed: `HTTP ${rec.status}, linked from ${sources.size} page(s): ${[...sources].slice(0, 3).join(", ")}` });
     }
@@ -21058,7 +21187,10 @@ async function checkExternalLinks(ctx, sink, opts = {}) {
       }
       await limiter.wait(new URL(u).host);
       let res = await safeFetch(u, { ...opts, method: "HEAD", maxBytes: 1024 });
-      if (res.status === 405 || res.status === 501 || res.status === 403) res = await safeFetch(u, { ...opts, maxBytes: 64 * 1024 });
+      if (res.error || res.status >= 400) {
+        await limiter.wait(new URL(u).host);
+        res = await safeFetch(u, { ...opts, maxBytes: 64 * 1024 });
+      }
       result.checked++;
       if (res.error || res.status === 404 || res.status === 410 || res.status >= 500) {
         result.broken++;
@@ -21377,6 +21509,15 @@ function renderMarkdown(r, opts = {}) {
   L.push("", `Languages (html lang): ${Object.entries(r.inventory.languages).map(([l, c]) => `${md(l)} (${c})`).join(", ") || "\u2014"}`);
   if (r.inventory.hreflangLanguages.length) L.push(`hreflang languages: ${r.inventory.hreflangLanguages.map(md).join(", ")}`);
   L.push(`HTTP status: ${Object.entries(r.inventory.statusCodes).map(([s, c]) => `${s}: ${c}`).join(", ")}`, "");
+  const sd = r.inventory.structuredData;
+  if (sd) {
+    L.push(`Structured data: ${sd.pagesWithStructuredData} of ${r.inventory.pages.length} pages${sd.invalidJsonLdPages ? ` (${sd.invalidJsonLdPages} with invalid JSON-LD)` : ""}`, "");
+    if (sd.types.length) {
+      L.push("| Schema type | Pages | Syntax |", "|---|---|---|");
+      for (const t of sd.types.slice(0, 25)) L.push(`| ${md(t.type)} | ${t.pages} | ${t.formats.join(", ")} |`);
+      L.push("");
+    }
+  }
   L.push("## Content intelligence", "");
   if (r.content.topTerms.length) L.push(`Site-wide terms: ${r.content.topTerms.slice(0, 20).map((t) => md(t.term)).join(", ")}`, "");
   if (r.content.clusters.length) {
@@ -22100,7 +22241,8 @@ function auditRepository(root2, opts = {}) {
     hreflangLanguages: [],
     statusCodes: {},
     businessModel: { label: "unknown (repository mode)", evidence: [] },
-    sections: []
+    sections: [],
+    structuredData: { types: [], pagesWithStructuredData: 0, invalidJsonLdPages: 0 }
   };
   let first2 = true;
   for (const app of scan.apps) {
@@ -22962,10 +23104,6 @@ function rowsFromCsv(rows) {
 // src/commands/research.ts
 import path12 from "node:path";
 function profile(r) {
-  const schema = /* @__PURE__ */ new Set();
-  for (const f of r.findings) if (f.ruleId === "sd.retired-type") {
-    for (const e of f.evidence) if (e.observed) schema.add(e.observed);
-  }
   return {
     url: r.target,
     pages: r.crawl.crawled,
@@ -22974,7 +23112,8 @@ function profile(r) {
     languages: Object.keys(r.inventory.languages),
     topTerms: r.content.topTerms.map((t) => t.term),
     sections: r.inventory.sections,
-    schemaTypes: [...schema],
+    // Types actually present on crawled pages (JSON-LD, Microdata, RDFa).
+    schemaTypes: (r.inventory.structuredData?.types ?? []).map((t) => t.type),
     truncated: r.crawl.truncated
   };
 }
@@ -22982,6 +23121,9 @@ function computeGaps(target, competitors, targetAllTerms) {
   const half = Math.max(1, Math.ceil(competitors.length / 2));
   const termCount = /* @__PURE__ */ new Map();
   const typeCount = /* @__PURE__ */ new Map();
+  const schemaCount = /* @__PURE__ */ new Map();
+  const targetSchema = new Set(target.schemaTypes);
+  for (const c of competitors) for (const t of new Set(c.schemaTypes)) schemaCount.set(t, (schemaCount.get(t) ?? 0) + 1);
   for (const c of competitors) {
     for (const t of new Set(c.topTerms.slice(0, 40))) termCount.set(t, (termCount.get(t) ?? 0) + 1);
     for (const t of Object.keys(c.byType)) typeCount.set(t, (typeCount.get(t) ?? 0) + 1);
@@ -22989,19 +23131,21 @@ function computeGaps(target, competitors, targetAllTerms) {
   return {
     topics: [...termCount.entries()].filter(([t, n]) => n >= half && !targetAllTerms.has(t)).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([term, n]) => ({ term, competitors: n })),
     pageTypes: [...typeCount.entries()].filter(([t, n]) => n >= half && !target.byType[t] && t !== "other").map(([type, n]) => ({ type, competitors: n })),
-    schemaTypes: []
+    schemaTypes: [...schemaCount.entries()].filter(([t, n]) => n >= half && !targetSchema.has(t)).sort((a, b) => b[1] - a[1]).map(([type, n]) => ({ type, competitors: n }))
   };
 }
 function renderResearchMarkdown(r) {
   const L = [`# Searvex research \u2014 ${md(r.target.url)}`, ""];
-  const row = (p) => `| ${md(p.url)} | ${p.pages}${p.truncated ? "+" : ""} | ${md(p.businessModel)} | ${Object.entries(p.byType).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t, n]) => `${t} ${n}`).join(", ")} | ${p.languages.map(md).join(", ")} |`;
-  L.push("## Site profiles", "", "| Site | Pages | Model (heuristic) | Main page types | Languages |", "|---|---|---|---|---|", row(r.target), ...r.competitors.map(row), "");
+  const row = (p) => `| ${md(p.url)} | ${p.pages}${p.truncated ? "+" : ""} | ${md(p.businessModel)} | ${Object.entries(p.byType).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t, n]) => `${t} ${n}`).join(", ")} | ${p.languages.map(md).join(", ")} | ${p.schemaTypes.slice(0, 8).map(md).join(", ") || "\u2014"} |`;
+  L.push("## Site profiles", "", "| Site | Pages | Model (heuristic) | Main page types | Languages | Structured data |", "|---|---|---|---|---|---|", row(r.target), ...r.competitors.map(row), "");
   L.push("## Target topics", "", r.target.topTerms.slice(0, 30).map(md).join(", ") || "\u2014", "");
   if (r.competitors.length) {
     L.push("## Content gaps (competitor topics missing on target)", "");
     L.push(r.gaps.topics.length ? r.gaps.topics.map((t) => `- **${md(t.term)}** \u2014 prominent on ${t.competitors}/${r.competitors.length} competitors`).join("\n") : "_No consistent topic gaps found._", "");
     L.push("## Page-type gaps", "");
     L.push(r.gaps.pageTypes.length ? r.gaps.pageTypes.map((t) => `- **${t.type}** pages exist on ${t.competitors}/${r.competitors.length} competitors`).join("\n") : "_No page-type gaps._", "");
+    L.push("## Structured data gaps", "");
+    L.push(r.gaps.schemaTypes.length ? r.gaps.schemaTypes.map((t) => `- **${md(t.type)}** markup used by ${t.competitors}/${r.competitors.length} competitors \u2014 add only if it describes visible content on your pages`).join("\n") : "_No structured-data gaps._", "");
   }
   L.push("## Limitations", "", ...r.limitations.map((l) => `- ${md(l)}`), "");
   return L.join("\n");
