@@ -5,6 +5,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-30
+
+### Changed
+- Repository mode reads JS/TS/JSX/TSX sources through an AST (`@babel/parser`, new runtime dependency;
+  bundle 1.10 → 1.68 MB). Next.js `metadata` / `generateMetadata` keys come from the exported object
+  itself, so `title:` in an unrelated object no longer counts. Spreads, variables and helper calls give
+  "unknown" instead of "missing", and `notFound()` / `redirect()` branches are ignored. JSX `<img>`, `<a>`
+  and `<html>` checks no longer stop at the `>` of an arrow function in an attribute. Findings now carry
+  line numbers. Files that fail to parse fall back to the previous regex checks.
+
 ## [0.5.0] - 2026-10-30
 
 ### Added

@@ -9,6 +9,7 @@ The bundled distribution (dist/searvex.mjs) includes the following third-party s
 - htmlparser2, domhandler, domutils, css-select, entities (BSD-2-Clause / MIT) https://github.com/fb55
 - fast-xml-parser (MIT)      https://github.com/NaturalIntelligence/fast-xml-parser
 - robots-parser (MIT)        https://github.com/samclarke/robots-parser
+- @babel/parser (MIT)        https://github.com/babel/babel
 
 Rule descriptions summarise and link to official documentation from Google Search Central, Bing
 Webmaster, Yandex, schema.org, W3C, web.dev, MDN and crawler operators. Those documents remain the

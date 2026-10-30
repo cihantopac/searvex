@@ -1,6 +1,6 @@
 {
   "name": "searvex",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Open-source AI search intelligence & optimization engine: technical SEO, GEO/AEO, sourced rule base, safe code fixes with rollback.",
   "license": "Apache-2.0",
   "type": "module",
@@ -55,6 +55,7 @@
     "url": "https://github.com/cihantopac/searvex/issues"
   },
   "dependencies": {
+    "@babel/parser": "7.29.9",
     "cheerio": "1.2.0",
     "fast-xml-parser": "5.11.2",
     "parse5": "7.3.0",

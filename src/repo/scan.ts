@@ -6,6 +6,7 @@ import { extractPage } from '../extract/html.js';
 import type { FindingSink } from '../rules/engine.js';
 import { detect, type Detection, type Framework } from './detect.js';
 import { lineOf, readText, walk, type WalkedFile } from './fs-safe.js';
+import { attrString, isJsSource, jsxAnchorsWithoutHref, jsxImagesWithoutAlt, jsxTags, nextMetadata, parseSource, type NextMetadata } from './ast.js';
 
 export interface RouteInfo {
   route: string;
@@ -97,20 +98,39 @@ function hasKey(src: string, key: string): boolean {
   return new RegExp(`\\b${key}\\s*:`).test(src);
 }
 
+const META_EXPORT = /export\s+(const\s+metadata|(async\s+)?function\s+generateMetadata)/;
+
+/** Metadata of a Next.js page/layout: AST when the file parses, the older regex heuristics otherwise. */
+function metadataOf(src: string, file: string): NextMetadata {
+  const ast = parseSource(src, file);
+  if (ast) return nextMetadata(ast);
+  const exported = META_EXPORT.test(src);
+  return {
+    exported,
+    title: exported && hasKey(src, 'title'),
+    description: exported && hasKey(src, 'description'),
+    canonical: /alternates\s*:\s*\{[^}]*canonical/s.test(src),
+    noindex: /robots\s*:\s*\{[^}]*index\s*:\s*false/s.test(src) || /robots\s*:\s*['"][^'"]*noindex/.test(src),
+  };
+}
+
+/** Tri-state OR: true if any is true, null if none is true but one is unknown, else false. */
+const anyOf = (...xs: Array<boolean | null>): boolean | null => (xs.includes(true) ? true : xs.includes(null) ? null : false);
+
 /** Scan Next.js (app router) sources. */
 function scanNextApp(appRoot: string, files: WalkedFile[], read: (f: string) => string, sink: FindingSink, scan: AppScan): void {
   const appBase = files.some((f) => f.rel.startsWith(rel(appRoot, 'src/app/'))) ? rel(appRoot, 'src/app/') : rel(appRoot, 'app/');
   const baseRe = new RegExp('^' + appBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const pages = files.filter((f) => f.rel.startsWith(appBase) && /\/page\.(tsx|jsx|ts|js|mdx)$|^page\./.test(f.rel.slice(appBase.length - 1)) && !/\/(@[^/]+|\(\.+\)[^/]*)\//.test(f.rel));
-  const layouts = new Map<string, string>();
-  for (const f of files.filter((f) => f.rel.startsWith(appBase) && /(^|\/)layout\.(tsx|jsx|ts|js)$/.test(f.rel))) layouts.set(path.posix.dirname(f.rel), read(f.rel));
+  const layouts = new Map<string, NextMetadata>();
+  for (const f of files.filter((f) => f.rel.startsWith(appBase) && /(^|\/)layout\.(tsx|jsx|ts|js)$/.test(f.rel))) layouts.set(path.posix.dirname(f.rel), metadataOf(read(f.rel), f.rel));
   const rootLayoutPath = files.find((f) => new RegExp('^' + appBase + 'layout\\.(tsx|jsx|ts|js)$').test(f.rel))?.rel ?? null;
   scan.locations.rootLayout = rootLayoutPath;
   scan.locations.layouts = [...layouts.keys()];
   const titleOwners: Record<string, string[]> = {};
   for (const p of pages) {
     const src = read(p.rel);
-    const chain: string[] = [];
+    const chain: NextMetadata[] = [];
     let dir = path.posix.dirname(p.rel);
     while (dir.length >= appBase.length - 1) {
       const l = layouts.get(dir);
@@ -118,27 +138,26 @@ function scanNextApp(appRoot: string, files: WalkedFile[], read: (f: string) => 
       if (dir + '/' === appBase) break;
       dir = path.posix.dirname(dir);
     }
-    const pageMeta = /export\s+(const\s+metadata|(async\s+)?function\s+generateMetadata)/.test(src);
-    const pageTitle = pageMeta && hasKey(src, 'title');
-    const pageDesc = pageMeta && hasKey(src, 'description');
-    const layoutTitle = chain.some((l) => /export\s+(const\s+metadata|(async\s+)?function\s+generateMetadata)/.test(l) && hasKey(l, 'title'));
-    const layoutDesc = chain.some((l) => /export\s+(const\s+metadata|(async\s+)?function\s+generateMetadata)/.test(l) && hasKey(l, 'description'));
-    const canonical = /alternates\s*:\s*\{[^}]*canonical/s.test(src) || chain.some((l) => /alternates\s*:\s*\{[^}]*canonical/s.test(l));
-    const noindex = /robots\s*:\s*\{[^}]*index\s*:\s*false/s.test(src) || /robots\s*:\s*['"][^'"]*noindex/.test(src);
+    const meta = metadataOf(src, p.rel);
+    const pageTitle = meta.exported ? meta.title : false;
+    const pageDesc = meta.exported ? meta.description : false;
+    const hasTitle = anyOf(pageTitle, ...chain.map((l) => (l.exported ? l.title : false)));
+    const hasDesc = anyOf(pageDesc, ...chain.map((l) => (l.exported ? l.description : false)));
+    const canonical = anyOf(meta.canonical, ...chain.map((l) => l.canonical));
+    const noindex = meta.noindex === true;
     const route = nextRoute(p.rel, baseRe);
-    scan.routes.push({ route, file: p.rel, framework: 'nextjs-app', dynamic: /\[.+\]/.test(route), hasTitle: pageTitle || layoutTitle, hasDescription: pageDesc || layoutDesc, noindex });
-    if (!pageTitle && !layoutTitle) sink.emit('title.missing', { file: p.rel, observed: `route ${route}: no metadata.title in page or ancestor layouts` });
-    else if (!pageTitle && !noindex) (titleOwners['inherited'] ??= []).push(`${route} (${p.rel})`);
-    if (!pageDesc && !layoutDesc && !noindex) sink.emit('description.missing', { file: p.rel, observed: `route ${route}: no metadata.description` });
-    if (!canonical && !noindex) sink.emit('canonical.missing', { file: p.rel, observed: `route ${route}: no metadata.alternates.canonical` });
+    scan.routes.push({ route, file: p.rel, framework: 'nextjs-app', dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: hasDesc, noindex });
+    // `null` = computed at runtime (spread, variable, call): not reported either way.
+    if (hasTitle === false) sink.emit('title.missing', { file: p.rel, observed: `route ${route}: no metadata.title in page or ancestor layouts` });
+    else if (pageTitle === false && hasTitle === true && !noindex) (titleOwners['inherited'] ??= []).push(`${route} (${p.rel})`);
+    if (hasDesc === false && !noindex) sink.emit('description.missing', { file: p.rel, line: meta.line, observed: `route ${route}: no metadata.description` });
+    if (canonical === false && !noindex) sink.emit('canonical.missing', { file: p.rel, line: meta.line, observed: `route ${route}: no metadata.alternates.canonical` });
     if (noindex) sink.emit('index.noindex', { file: p.rel, observed: `route ${route}: robots index:false` });
   }
   const inherited = titleOwners['inherited'] ?? [];
   if (inherited.length > 1) sink.emit('duplicate.title', { file: rootLayoutPath ?? undefined, observed: `${inherited.length} routes inherit the same layout title (unless title.template is combined with page titles): ${inherited.slice(0, 5).join(', ')}` });
   if (rootLayoutPath) {
-    const l = read(rootLayoutPath);
-    const htmlTag = /<html\b[^>]*>/.exec(l);
-    if (htmlTag && !/\blang\s*=/.test(htmlTag[0])) sink.emit('html.lang-missing', { file: rootLayoutPath, line: lineOf(l, htmlTag.index), observed: htmlTag[0] });
+    htmlLangCheck(read(rootLayoutPath), rootLayoutPath, 'html', sink);
   }
   const robotsGen = files.find((f) => new RegExp('^' + appBase + 'robots\\.(ts|js|txt)$').test(f.rel));
   const sitemapGen = files.find((f) => new RegExp('^' + appBase + 'sitemap\\.(ts|js|xml)$').test(f.rel));
@@ -152,24 +171,55 @@ function scanNextPages(appRoot: string, files: WalkedFile[], read: (f: string) =
   const appFile = files.find((f) => f.rel.startsWith(base + '_app.'));
   const docFile = files.find((f) => f.rel.startsWith(base + '_document.'));
   const appSrc = appFile ? read(appFile.rel) : '';
-  const globalTitle = /<title[\s>]/.test(appSrc);
-  const globalDesc = /name=["']description["']/.test(appSrc);
+  const appHead = appFile ? pagesHead(appSrc, appFile.rel) : { title: false, description: false, noindex: false };
+  const globalTitle = appHead.title;
+  const globalDesc = appHead.description;
   scan.locations.rootLayout = docFile?.rel ?? appFile?.rel ?? null;
   for (const p of pages) {
     const src = read(p.rel);
     const route = '/' + p.rel.slice(base.length).replace(/\.(tsx|jsx|ts|js|mdx)$/, '').replace(/(^|\/)index$/, '');
-    const hasTitle = /<title[\s>]/.test(src) || /NextSeo|DefaultSeo|<Seo\b|<SEO\b/.test(src);
-    const hasDesc = /name=["']description["']/.test(src) || /NextSeo|<Seo\b|<SEO\b/.test(src);
-    scan.routes.push({ route, file: p.rel, framework: 'nextjs-pages', dynamic: /\[.+\]/.test(route), hasTitle: hasTitle || globalTitle, hasDescription: hasDesc || globalDesc, noindex: /noindex/.test(src) });
+    const head = pagesHead(src, p.rel);
+    const hasTitle = head.title;
+    const hasDesc = head.description;
+    scan.routes.push({ route, file: p.rel, framework: 'nextjs-pages', dynamic: /\[.+\]/.test(route), hasTitle: hasTitle || globalTitle, hasDescription: hasDesc || globalDesc, noindex: head.noindex });
     if (!hasTitle && !globalTitle) sink.emit('title.missing', { file: p.rel, observed: `route ${route}: no <title> in next/head` });
     if (!hasTitle && globalTitle) sink.emit('duplicate.title', { file: p.rel, observed: `route ${route} only gets the global title from ${appFile?.rel}` });
     if (!hasDesc && !globalDesc) sink.emit('description.missing', { file: p.rel, observed: `route ${route}` });
   }
-  if (docFile) {
-    const d = read(docFile.rel);
-    const m = /<Html\b[^>]*>/.exec(d);
-    if (m && !/\blang\s*=/.test(m[0])) sink.emit('html.lang-missing', { file: docFile.rel, line: lineOf(d, m.index), observed: m[0] });
+  if (docFile) htmlLangCheck(read(docFile.rel), docFile.rel, 'Html', sink);
+}
+
+/** `<html>` (app router layout) / `<Html>` (pages router _document) without lang. */
+function htmlLangCheck(src: string, file: string, tag: 'html' | 'Html', sink: FindingSink): void {
+  const ast = parseSource(src, file);
+  if (ast) {
+    for (const t of jsxTags(ast, new Set([tag]))) if (!t.spread && !t.attrs.has('lang')) sink.emit('html.lang-missing', { file, line: t.line, observed: `<${tag}> without lang` });
+    return;
   }
+  const m = new RegExp(`<${tag}\\b[^>]*>`).exec(src);
+  if (m && !/\blang\s*=/.test(m[0])) sink.emit('html.lang-missing', { file, line: lineOf(src, m.index), observed: m[0] });
+}
+
+const SEO_COMPONENTS = new Set(['NextSeo', 'DefaultSeo', 'Seo', 'SEO']);
+
+/** Pages-router head signals from JSX: <title>, <meta name="description">, SEO components, noindex. */
+function pagesHead(src: string, file: string): { title: boolean; description: boolean; noindex: boolean } {
+  const ast = parseSource(src, file);
+  if (!ast) {
+    return {
+      title: /<title[\s>]/.test(src) || /NextSeo|DefaultSeo|<Seo\b|<SEO\b/.test(src),
+      description: /name=["']description["']/.test(src) || /NextSeo|<Seo\b|<SEO\b/.test(src),
+      noindex: /noindex/.test(src),
+    };
+  }
+  const tags = jsxTags(ast, new Set(['title', 'meta', ...SEO_COMPONENTS]));
+  const seo = tags.filter((t) => SEO_COMPONENTS.has(t.name));
+  const metaName = (t: (typeof tags)[number]) => attrString(t.attrs.get('name'))?.toLowerCase();
+  return {
+    title: tags.some((t) => t.name === 'title') || seo.some((t) => t.spread || t.attrs.has('title') || t.attrs.has('titleTemplate') || t.attrs.has('defaultTitle')),
+    description: tags.some((t) => t.name === 'meta' && (t.spread || metaName(t) === 'description')) || seo.some((t) => t.spread || t.attrs.has('description')),
+    noindex: tags.some((t) => t.name === 'meta' && metaName(t) === 'robots' && /noindex/i.test(attrString(t.attrs.get('content')) ?? '')) || seo.some((t) => t.attrs.has('noindex') && attrString(t.attrs.get('noindex')) !== 'false'),
+  };
 }
 
 /** Shared checks for template-driven frameworks: layouts must carry <title>, description, viewport, lang. */
@@ -195,9 +245,10 @@ function scanSources(files: WalkedFile[], read: (f: string) => string, sink: Fin
   for (const f of files) {
     if (!/\.(tsx|jsx|vue|svelte|astro|php|html?)$/.test(f.rel) || /(^|\/)(dist|build|out|public|_site|static)\//.test(f.rel) || /\.(test|spec|stories)\./.test(f.rel)) continue;
     const src = read(f.rel);
-    const noAlt = imgWithoutAlt(src);
+    const ast = isJsSource(f.rel) ? parseSource(src, f.rel) : null;
+    const noAlt = ast ? jsxImagesWithoutAlt(ast) : imgWithoutAlt(src);
     if (noAlt.length) sink.emit('img.alt-missing', noAlt.slice(0, 5).map((line) => ({ file: f.rel, line, observed: 'image without alt attribute' })));
-    const noHref = anchorsWithoutHref(src);
+    const noHref = ast ? jsxAnchorsWithoutHref(ast) : anchorsWithoutHref(src);
     if (noHref.length) sink.emit('links.uncrawlable', noHref.slice(0, 5).map((line) => ({ file: f.rel, line, observed: '<a> without crawlable href' })));
   }
 }

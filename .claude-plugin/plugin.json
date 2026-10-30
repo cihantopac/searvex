@@ -1,6 +1,6 @@
 {
   "name": "searvex",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Search intelligence & optimization engine: deterministic technical SEO + GEO audits with a sourced rule base, competitor research, and safe, verified code fixes with rollback.",
   "author": { "name": "Cihan Topaç", "url": "https://github.com/cihantopac" },
   "license": "Apache-2.0",

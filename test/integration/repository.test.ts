@@ -77,6 +77,21 @@ describe('repository detection and audit', () => {
     expect(missing.evidence.map((e) => e.file)).toEqual(['src/pages/notes.astro']);
   });
 
+  it('reads Next.js metadata through the AST: unrelated title keys, spreads and generateMetadata', () => {
+    const r = auditRepository(path.join(FIX, 'next-ast')).report;
+    const files = (id: string) => r.findings.filter((f) => f.ruleId === id).flatMap((f) => f.evidence.map((e) => `${e.file}${e.line ? ':' + e.line : ''}`));
+    // Home page: a `title` key exists only in a features array; the root layout title comes from a spread → unknown.
+    expect(files('title.missing')).toEqual([]);
+    // Docs page has no description, but the root layout sets one.
+    expect(files('description.missing')).toEqual([]);
+    expect(files('html.lang-missing')).toEqual([]);
+    // The arrow function inside onClick no longer hides alt="Product"; the href-less anchor is still reported.
+    expect(files('img.alt-missing')).toEqual([]);
+    expect(files('links.uncrawlable')).toEqual(['components/Card.tsx:5']);
+    const routes = auditRepository(path.join(FIX, 'next-ast')).scan.apps[0]!.routes;
+    expect(Object.fromEntries(routes.map((x) => [x.route, x.hasTitle]))).toEqual({ '/': null, '/blog': true, '/docs': true });
+  });
+
   it('accepts a correct Next.js app without false positives on titles', () => {
     const r = auditRepository(path.join(FIX, 'monorepo')).report;
     expect(r.findings.filter((f) => f.ruleId === 'title.missing' && f.evidence.some((e) => e.file?.startsWith('apps/web')))).toEqual([]);

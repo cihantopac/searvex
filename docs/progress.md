@@ -37,7 +37,9 @@ Use this file to resume work after an interrupted session. Newest entries first.
 - K: HTML charts, Templates tab, `monitor.html`, `ecosystem.html` (executed in Chromium in tests).
 - `ecosystem` now runs the per-site probes (Accept-Language etc.); without them the locale-adaptive finding
   was missing from family audits.
-- Not done: I (AST-based framework checks) waits for a decision on the parser dependency size.
+- I (approved, v0.6.0): AST-based checks for JS/TS sources with @babel/parser 7.29.9 (Babel 8 needs Node
+  ≥22.18; Searvex supports Node 20). Bundle 1.10 MB → 1.68 MB. On Vercel Commerce the first version missed
+  3 pages because `return notFound()` was read as an unknown return; such throwing branches are now ignored.
 
 ### 2026-10-30 — backlog round (after v0.3.0)
 - A: `rules check-sources` + weekly workflow; first run caught 14 moved sources (Google crawling docs moved to
@@ -69,7 +71,7 @@ Use this file to resume work after an interrupted session. Newest entries first.
 |---|---|---|---|
 | 2 | Render tests rely on local fixtures; no real-site render validation round yet | rendered-DOM accuracy on complex sites | run `--render` rounds on permitted sites |
 | 3 | Two citations still `url-resolved` (`canonical.target-error`, `sd.invalid-json`); Bing help pages are client-rendered, so the source checker cannot hash them | rule-text accuracy | find pages that state the claims; browser re-read on each review |
-| 4 | Framework source checks use regexes (Next.js metadata, Blade, Astro) | edge-case false positives/negatives | move to AST (TypeScript compiler API) for JS/TS |
+| 4 | Astro, Vue SFC, Blade and PHP checks still use regexes (JS/TS use an AST since v0.6.0) | edge-case false positives/negatives | parse Astro frontmatter and Vue `<script>` with the same parser |
 | 5 | In-memory analysis | >50k pages heavy | streaming / disk indexes |
 | 7 | Research has no demand data | gaps ≠ opportunities | optional data providers, user CSV import |
 | 8 | `npm install` needs `--legacy-peer-deps` (npm 10.9 arborist `edgesOut` crash with vitest 5 peers) | contributor friction | track npm fix; `.npmrc` sets legacy-peer-deps |
