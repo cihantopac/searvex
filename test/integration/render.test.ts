@@ -118,6 +118,3 @@ describe.runIf(available)('JavaScript rendering (Playwright)', () => {
   });
 });
 
-describe.runIf(!available)('JavaScript rendering (Playwright)', () => {
-  it.skip('skipped: Playwright/Chromium not installed', () => {});
-});

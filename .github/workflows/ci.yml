@@ -41,7 +41,8 @@ jobs:
       - name: Render tests must run (not skip)
         run: |
           npx vitest run test/integration/render.test.ts --reporter=verbose | tee render.log
-          if grep -q "Playwright/Chromium not installed" render.log; then echo "render tests were skipped"; exit 1; fi
+          # Without Chromium the suite is skipped; in this job every render test must actually run.
+          if grep -E "Tests .*skipped" render.log; then echo "render tests were skipped"; exit 1; fi
 
   bundle-in-sync:
     runs-on: ubuntu-latest
