@@ -66,6 +66,20 @@ export interface Finding {
   fix?: string;
   /** True when an automated, framework-aware code fix exists. */
   autofixable?: boolean;
+  /** Impact-based priority (see analyze/priority.ts). */
+  priority?: Priority;
+  /** URL-pattern templates the affected pages belong to ("fix once" signal). */
+  templates?: Array<{ pattern: string; pages: number }>;
+}
+
+export interface Priority {
+  /** 0–100; higher = fix first. */
+  score: number;
+  bucket: 'P1' | 'P2' | 'P3';
+  /** Importance-weighted share of indexable pages affected (0–1); 1 for site-wide findings. */
+  reach: number;
+  effort: 'low' | 'medium' | 'high';
+  reasons: string[];
 }
 
 export interface RedirectHop {

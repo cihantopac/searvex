@@ -26,14 +26,23 @@ export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = 
   L.push(`| Evidence quality | ${r.measurement.verified} verified · ${r.measurement.heuristic} heuristic · ${r.measurement.unmeasurable} unmeasurable |`);
   L.push('', `¹ ${r.scores.method}`, '');
 
+  const ranked = r.findings.filter((f) => f.priority && f.priority.score > 0).sort((a, b) => b.priority!.score - a.priority!.score);
+  if (ranked.length) {
+    L.push('## Fix first', '', 'Ranked by impact: severity × confidence × importance-weighted reach ÷ effort (see each rule for sources).', '');
+    L.push('| # | Priority | Issue | Reach | Effort | Why |', '|---|---|---|---|---|---|');
+    ranked.slice(0, 10).forEach((f, i) => L.push(`| ${i + 1} | ${f.priority!.bucket} (${f.priority!.score}) | ${md(f.title)} \`${f.ruleId}\` | ${Math.round(f.priority!.reach * 100)}% | ${f.priority!.effort} | ${f.priority!.reasons.slice(1).map(md).join('; ') || '—'} |`));
+    L.push('');
+  }
+
   const issues = r.findings.filter((f) => f.severity !== 'info');
-  L.push('## Prioritised issues', '');
+  L.push('## Issues by severity', '');
   if (!issues.length) L.push('_No issues found by the active rules._', '');
   for (const f of issues) {
     L.push(`### ${ICON[f.severity]} ${md(f.title)} — ${f.severity}${f.confidence !== 'verified' ? ` (${f.confidence})` : ''}`, '');
     L.push(`\`${f.ruleId}\` · ${f.category} · engines: ${f.engines.join(', ')} · affected: ${f.count}${f.autofixable ? ' · 🔧 auto-fixable with `searvex optimize` (repository mode)' : ' · needs judgement'}`, '');
     L.push(md(f.message).replace(/\\([*_])/g, '$1'), '');
     if (f.fix) L.push(`**Fix:** ${md(f.fix)}`, '');
+    if (f.templates?.length) L.push(`Templates: ${f.templates.map((t) => `\`${md(t.pattern)}\` (${t.pages})`).join(', ')}`, '');
     for (const e of f.evidence.slice(0, max)) L.push(`- ${e.url ? md(e.url) : e.file ? `${md(e.file)}${e.line ? ':' + e.line : ''}` : ''}${e.observed ? ` — ${md(e.observed)}` : ''}`);
     if (f.count > max) L.push(`- … and ${f.count - max} more`);
     L.push('');

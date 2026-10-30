@@ -20380,12 +20380,17 @@ var FindingSink = class {
   maxEvidence;
   byRule = /* @__PURE__ */ new Map();
   used = /* @__PURE__ */ new Set();
+  /** Every affected URL/file per rule (evidence itself is capped for readability). */
+  affectedByRule = /* @__PURE__ */ new Map();
   emit(ruleId, evidence, overrides = {}) {
     const rule = this.kb.rules.get(ruleId);
     if (!rule) throw new Error(`Unknown rule id: ${ruleId}`);
     if (rule.status !== "active") return;
     this.used.add(ruleId);
     const list = Array.isArray(evidence) ? evidence : [evidence];
+    const affected = this.affectedByRule.get(ruleId) ?? /* @__PURE__ */ new Set();
+    for (const e of list) if ((e.url || e.file) && affected.size < 1e5) affected.add(e.url ?? e.file);
+    this.affectedByRule.set(ruleId, affected);
     const existing = this.byRule.get(ruleId);
     if (existing) {
       existing.count += list.length;
@@ -20406,6 +20411,9 @@ var FindingSink = class {
       count: list.length
     };
     this.byRule.set(ruleId, f);
+  }
+  affected(ruleId) {
+    return [...this.affectedByRule.get(ruleId) ?? []];
   }
   findings() {
     const order = (s) => SEVERITIES.indexOf(s);
@@ -21332,6 +21340,74 @@ function checkHreflang(ctx, url, f, sink) {
   if (relative) sink.emit("hreflang.relative", { url, observed: relative });
 }
 
+// src/analyze/priority.ts
+var SEVERITY = { critical: 1, high: 0.7, medium: 0.4, low: 0.15, info: 0 };
+function urlPattern(urlOrPath) {
+  let path17;
+  try {
+    path17 = new URL(urlOrPath).pathname;
+  } catch {
+    path17 = urlOrPath.startsWith("/") ? urlOrPath : "/" + urlOrPath;
+  }
+  const segs = path17.split("/").filter(Boolean);
+  if (!segs.length) return "/";
+  const out = [];
+  if (/^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0])) out.push(segs.shift());
+  if (segs.length) out.push(segs.shift());
+  for (let i = 0; i < segs.length; i++) out.push("*");
+  return "/" + out.join("/");
+}
+function templatesOf(urls) {
+  const m = /* @__PURE__ */ new Map();
+  for (const u of urls) m.set(urlPattern(u), (m.get(urlPattern(u)) ?? 0) + 1);
+  return [...m.entries()].map(([pattern, pages]) => ({ pattern, pages })).sort((a, b) => b.pages - a.pages);
+}
+function pageImportance(ctx) {
+  const imp = /* @__PURE__ */ new Map();
+  for (const p of ctx.indexable) {
+    let w = 1 + Math.log2(1 + (ctx.inlinks.get(p.url)?.size ?? 0));
+    if (ctx.sitemapUrls.has(p.url)) w += 0.5;
+    if (p === ctx.homepage) w += 3;
+    imp.set(p.url, w);
+  }
+  return imp;
+}
+function prioritise(findings, affected, ctx, totalUnits) {
+  const imp = ctx ? pageImportance(ctx) : /* @__PURE__ */ new Map();
+  const totalImp = [...imp.values()].reduce((a, b) => a + b, 0);
+  for (const f of findings) {
+    const urls = affected(f.ruleId);
+    const pageUrls = urls.filter((u) => imp.has(u));
+    let reach;
+    const reasons = [];
+    if (!urls.length || urls.some((u) => /\/robots\.txt$/.test(u))) {
+      reach = 1;
+      reasons.push("site-wide");
+    } else if (ctx && totalImp > 0 && pageUrls.length) {
+      reach = Math.min(1, pageUrls.reduce((a, u) => a + imp.get(u), 0) / totalImp);
+      if (pageUrls.includes(ctx.homepage?.url ?? "")) reasons.push("includes the homepage");
+    } else {
+      reach = Math.min(1, urls.length / Math.max(1, totalUnits ?? ctx?.indexable.length ?? urls.length));
+    }
+    reasons.unshift(`${Math.round(reach * 100)}% importance-weighted reach (${f.count} affected)`);
+    const templates = templatesOf(urls).slice(0, 8);
+    if (urls.length >= 5) f.templates = templates;
+    const content = f.category === "content";
+    const indexableCount = ctx?.indexable.length ?? totalUnits ?? 0;
+    const layoutWide = !content && indexableCount >= 5 && pageUrls.length >= indexableCount * 0.5;
+    const concentrated = !content && urls.length >= 5 && templates.length <= 2;
+    const effort = f.autofixable || layoutWide || concentrated ? "low" : urls.length > 20 ? "high" : "medium";
+    if (f.autofixable) reasons.push("auto-fixable in repository mode");
+    else if (layoutWide) reasons.push("on most pages \u2014 likely one shared layout/template fix");
+    else if (concentrated) reasons.push(`concentrated in ${templates.length} template${templates.length > 1 ? "s" : ""} \u2014 fix once`);
+    const confidence = f.confidence === "verified" ? 1 : f.confidence === "heuristic" ? 0.6 : 0;
+    const effortFactor = effort === "low" ? 1 : effort === "medium" ? 1.25 : 1.6;
+    const score = Math.round(Math.min(1, SEVERITY[f.severity] * confidence * (0.35 + 0.65 * reach) / effortFactor) * 100);
+    const bucket = score >= 45 ? "P1" : score >= 15 ? "P2" : "P3";
+    f.priority = { score, bucket, reach: Math.round(reach * 1e3) / 1e3, effort, reasons };
+  }
+}
+
 // src/analyze/external-links.ts
 init_fetcher();
 async function checkExternalLinks(ctx, sink, opts = {}) {
@@ -21485,6 +21561,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
   } else sink.emit("perf.cwv-unmeasured", { observed: "No CrUX API key configured (SEARVEX_CRUX_API_KEY)" });
   const inventory = buildInventory(ctx);
   const findings = sink.findings();
+  prioritise(findings, (id) => sink.affected(id), ctx);
   const limitations = [
     "Website mode sees only publicly reachable pages; it has no access to real traffic, rankings, Search Console or analytics data unless an integration is configured.",
     "Response times are single-location lab samples, not Core Web Vitals field data."
@@ -21572,6 +21649,7 @@ table{width:100%;border-collapse:collapse;background:var(--panel);border:1px sol
 <section class="panel active" id="p-issues">
  <div class="filters"><select id="fs"><option value="">All severities</option><option>critical</option><option>high</option><option>medium</option><option>low</option><option>info</option></select>
  <select id="fc"><option value="">All categories</option></select><select id="fk"><option value="">Any evidence</option><option>verified</option><option>heuristic</option><option>unmeasurable</option></select>
+ <select id="fo"><option value="priority">Sort: fix first</option><option value="severity">Sort: severity</option></select>
  <input id="fq" type="search" placeholder="Filter by text or URL" aria-label="Filter"></div>
  <div id="list"></div>
 </section>
@@ -21594,11 +21672,13 @@ var tabs=[['issues','Issues'],['geo','GEO / AI'],['inventory','Inventory'],['con
 tabs.forEach(function(t,i){var b=el('button',{role:'tab','aria-selected':i===0?'true':'false',text:t[1]});b.onclick=function(){document.querySelectorAll('nav button').forEach(function(x){x.setAttribute('aria-selected','false')});b.setAttribute('aria-selected','true');document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active')});document.getElementById('p-'+t[0]).classList.add('active')};document.getElementById('tabs').appendChild(b)});
 var cats={};R.findings.forEach(function(f){cats[f.category]=1});Object.keys(cats).sort().forEach(function(c){document.getElementById('fc').appendChild(el('option',{text:c}))});
 function renderList(){var s=fs.value,c=fc.value,k=fk.value,q=fq.value.toLowerCase(),L=document.getElementById('list');L.textContent='';
-R.findings.filter(function(f){return(!s||f.severity===s)&&(!c||f.category===c)&&(!k||f.confidence===k)&&(!q||JSON.stringify(f).toLowerCase().indexOf(q)>=0)}).forEach(function(f){
+var list=R.findings.filter(function(f){return(!s||f.severity===s)&&(!c||f.category===c)&&(!k||f.confidence===k)&&(!q||JSON.stringify(f).toLowerCase().indexOf(q)>=0)});
+if(fo.value==='priority')list=list.slice().sort(function(a,b){return((b.priority&&b.priority.score)||0)-((a.priority&&a.priority.score)||0)});
+list.forEach(function(f){
 var src=(D.sources[f.ruleId]||[]).map(function(x){return el('li',{},[el('a',{href:safeHref(x.url),rel:'noopener noreferrer',target:'_blank',text:x.title}),' (checked '+x.checked+')'])});
 var ev=f.evidence.slice(0,30).map(function(e){return el('div',{class:'ev',text:(e.url||e.file||'')+(e.line?':'+e.line:'')+(e.observed?' \u2014 '+e.observed:'')})});
-L.appendChild(el('details',{class:'finding','data-sev':f.severity},[el('summary',{},[f.title+' ',el('span',{class:'chip',text:f.severity}),el('span',{class:'chip',text:f.confidence}),el('span',{class:'chip',text:f.category}),el('span',{class:'chip',text:'\xD7'+f.count})]),el('p',{text:f.message}),f.fix?el('p',{},[el('b',{text:'Fix: '}),f.fix]):null,el('div',{class:'muted',text:'Rule '+f.ruleId+' \xB7 engines: '+f.engines.join(', ')})].concat(ev).concat(f.count>30?[el('div',{class:'muted',text:'\u2026 '+(f.count-30)+' more'})]:[]).concat([el('div',{class:'muted',text:'Sources:'}),el('ul',{},src)])))})}
-var fs=document.getElementById('fs'),fc=document.getElementById('fc'),fk=document.getElementById('fk'),fq=document.getElementById('fq');[fs,fc,fk].forEach(function(x){x.onchange=renderList});fq.oninput=renderList;renderList();
+L.appendChild(el('details',{class:'finding','data-sev':f.severity},[el('summary',{},[f.title+' ',f.priority?el('span',{class:'chip',text:f.priority.bucket+' \xB7 '+f.priority.score}):null,el('span',{class:'chip',text:f.severity}),el('span',{class:'chip',text:f.confidence}),el('span',{class:'chip',text:f.category}),el('span',{class:'chip',text:'\xD7'+f.count})]),el('p',{text:f.message}),f.fix?el('p',{},[el('b',{text:'Fix: '}),f.fix]):null,el('div',{class:'muted',text:'Rule '+f.ruleId+' \xB7 engines: '+f.engines.join(', ')}),f.priority?el('div',{class:'muted',text:'Priority: '+f.priority.reasons.join('; ')+' \xB7 effort '+f.priority.effort}):null,f.templates?el('div',{class:'muted',text:'Templates: '+f.templates.map(function(t){return t.pattern+' ('+t.pages+')'}).join(', ')}):null].concat(ev).concat(f.count>30?[el('div',{class:'muted',text:'\u2026 '+(f.count-30)+' more'})]:[]).concat([el('div',{class:'muted',text:'Sources:'}),el('ul',{},src)])))})}
+var fs=document.getElementById('fs'),fc=document.getElementById('fc'),fk=document.getElementById('fk'),fo=document.getElementById('fo'),fq=document.getElementById('fq');[fs,fc,fk,fo].forEach(function(x){x.onchange=renderList});fq.oninput=renderList;renderList();
 function table(head,rows){return el('div',{class:'tablewrap'},[el('table',{},[el('thead',{},[el('tr',{},head.map(function(h){return el('th',{text:h})}))]),el('tbody',{},rows.map(function(r){return el('tr',{},r.map(function(c){return c instanceof Node?el('td',{},[c]):el('td',{text:String(c)})}))}))])])}
 var g=document.getElementById('p-geo');
 g.appendChild(el('h2',{text:'Crawler access (robots.txt, homepage)'}));
@@ -21646,14 +21726,22 @@ function renderMarkdown(r, opts = {}) {
   L.push(`| Findings | ${r.findings.filter((f) => f.severity !== "info").length} issues + ${r.findings.filter((f) => f.severity === "info").length} informational |`);
   L.push(`| Evidence quality | ${r.measurement.verified} verified \xB7 ${r.measurement.heuristic} heuristic \xB7 ${r.measurement.unmeasurable} unmeasurable |`);
   L.push("", `\xB9 ${r.scores.method}`, "");
+  const ranked = r.findings.filter((f) => f.priority && f.priority.score > 0).sort((a, b) => b.priority.score - a.priority.score);
+  if (ranked.length) {
+    L.push("## Fix first", "", "Ranked by impact: severity \xD7 confidence \xD7 importance-weighted reach \xF7 effort (see each rule for sources).", "");
+    L.push("| # | Priority | Issue | Reach | Effort | Why |", "|---|---|---|---|---|---|");
+    ranked.slice(0, 10).forEach((f, i) => L.push(`| ${i + 1} | ${f.priority.bucket} (${f.priority.score}) | ${md(f.title)} \`${f.ruleId}\` | ${Math.round(f.priority.reach * 100)}% | ${f.priority.effort} | ${f.priority.reasons.slice(1).map(md).join("; ") || "\u2014"} |`));
+    L.push("");
+  }
   const issues = r.findings.filter((f) => f.severity !== "info");
-  L.push("## Prioritised issues", "");
+  L.push("## Issues by severity", "");
   if (!issues.length) L.push("_No issues found by the active rules._", "");
   for (const f of issues) {
     L.push(`### ${ICON[f.severity]} ${md(f.title)} \u2014 ${f.severity}${f.confidence !== "verified" ? ` (${f.confidence})` : ""}`, "");
     L.push(`\`${f.ruleId}\` \xB7 ${f.category} \xB7 engines: ${f.engines.join(", ")} \xB7 affected: ${f.count}${f.autofixable ? " \xB7 \u{1F527} auto-fixable with `searvex optimize` (repository mode)" : " \xB7 needs judgement"}`, "");
     L.push(md(f.message).replace(/\\([*_])/g, "$1"), "");
     if (f.fix) L.push(`**Fix:** ${md(f.fix)}`, "");
+    if (f.templates?.length) L.push(`Templates: ${f.templates.map((t) => `\`${md(t.pattern)}\` (${t.pages})`).join(", ")}`, "");
     for (const e of f.evidence.slice(0, max)) L.push(`- ${e.url ? md(e.url) : e.file ? `${md(e.file)}${e.line ? ":" + e.line : ""}` : ""}${e.observed ? ` \u2014 ${md(e.observed)}` : ""}`);
     if (f.count > max) L.push(`- \u2026 and ${f.count - max} more`);
     L.push("");
@@ -22523,6 +22611,7 @@ function auditRepository(root2, opts = {}) {
     }
   }
   const findings = sink.findings().filter((f) => !NETWORK_ONLY.has(f.ruleId));
+  prioritise(findings, (id) => sink.affected(id), void 0, Math.max(1, scan.routes.length));
   const limitations = [
     "Repository mode analyses source files statically. Values computed at runtime (CMS data, generateMetadata fetching, i18n) cannot be fully resolved; such cases are reported conservatively.",
     "HTTP behaviour (status codes, redirects, headers, compression, speed) requires website mode against a running deployment."

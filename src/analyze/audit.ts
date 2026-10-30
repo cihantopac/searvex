@@ -9,6 +9,7 @@ import { runContentChecks, type ContentReport } from './content.js';
 import { runGeoChecks, type GeoReport, type LlmsTxtStatus } from './geo.js';
 import { buildInventory, type SiteInventory } from './inventory.js';
 import { runTechnicalChecks } from './technical.js';
+import { prioritise } from './priority.js';
 import { checkExternalLinks, type ExternalLinkResult } from './external-links.js';
 import { failingMetrics, queryCrux, type CruxResult } from '../integrations/crux.js';
 
@@ -132,6 +133,7 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
   } else sink.emit('perf.cwv-unmeasured', { observed: 'No CrUX API key configured (SEARVEX_CRUX_API_KEY)' });
   const inventory = buildInventory(ctx);
   const findings = sink.findings();
+  prioritise(findings, (id) => sink.affected(id), ctx);
   const limitations = [
     'Website mode sees only publicly reachable pages; it has no access to real traffic, rankings, Search Console or analytics data unless an integration is configured.',
     'Response times are single-location lab samples, not Core Web Vitals field data.',

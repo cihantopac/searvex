@@ -33,7 +33,7 @@ Each item lists how it will be verified; nothing is marked done without that ver
 | 8 | Bing Webmaster API (query/page stats) | ⬜ (D) |
 | 9 | GA4 Data API (landing-page sessions / conversions from organic search) | ⬜ |
 | 10 | Yandex Webmaster API | ⬜ |
-| 11 | Impact-based prioritisation (severity × affected share × page importance × traffic when available) | ⬜ (B) |
+| 11 | Impact-based prioritisation (severity × affected share × page importance × traffic when available) | ✅ score/bucket/effort/reasons; "Fix first" table; traffic input pending GSC |
 | 12 | Search-intent classification of pages and queries (rules + agent), separate verified vs inferred | ⬜ |
 | 13 | Internal-linking opportunities (topic-related pages that do not link to each other; orphans by topic) | ⬜ |
 | 14 | Deeper competitor research: per-competitor topic clusters, page-type comparison per intent | ⬜ |
@@ -42,7 +42,7 @@ Each item lists how it will be verified; nothing is marked done without that ver
 ### P2 — Product experience
 | # | Item | Status |
 |---|---|---|
-| 16 | Template-level issue grouping (URL-pattern clusters) in reports | ⬜ (B) |
+| 16 | Template-level issue grouping (URL-pattern clusters) in reports | ✅ URL-pattern templates per finding (DOM-structure clustering still open) |
 | 17 | HTML dashboard: charts, template view, monitor before/after, ecosystem view | ⬜ |
 | 18 | Disk-backed analysis for >50k pages | ⬜ |
 | 19 | GitHub Action wrapper + SARIF upload example tested | ⬜ |

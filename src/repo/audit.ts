@@ -8,6 +8,7 @@ import { runTechnicalChecks } from '../analyze/technical.js';
 import { SEARVEX_VERSION } from '../net/fetcher.js';
 import { FindingSink, loadKnowledge, type KnowledgeBase } from '../rules/engine.js';
 import { PLACEHOLDER_ORIGIN, scanRepository, type RepoScan } from './scan.js';
+import { prioritise } from '../analyze/priority.js';
 
 /** Rules that are meaningless for files on disk (they need a live server). */
 const NETWORK_ONLY = new Set(['perf.slow-ttfb', 'perf.no-compression', 'https.not-used', 'canonical.http-https', 'canonical.www-duplicate', 'http.server-error', 'http.fetch-error', 'robots.unreachable', 'geo.citations-unmeasured', 'perf.cwv-unmeasured']);
@@ -60,6 +61,7 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
     }
   }
   const findings = sink.findings().filter((f) => !NETWORK_ONLY.has(f.ruleId));
+  prioritise(findings, (id) => sink.affected(id), undefined, Math.max(1, scan.routes.length));
   const limitations = [
     'Repository mode analyses source files statically. Values computed at runtime (CMS data, generateMetadata fetching, i18n) cannot be fully resolved; such cases are reported conservatively.',
     'HTTP behaviour (status codes, redirects, headers, compression, speed) requires website mode against a running deployment.',

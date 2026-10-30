@@ -174,6 +174,8 @@ export function validateKnowledge(kb: KnowledgeBase, opts: { implemented?: Set<s
 export class FindingSink {
   private byRule = new Map<string, Finding>();
   readonly used = new Set<string>();
+  /** Every affected URL/file per rule (evidence itself is capped for readability). */
+  private affectedByRule = new Map<string, Set<string>>();
 
   constructor(
     private kb: KnowledgeBase,
@@ -186,6 +188,9 @@ export class FindingSink {
     if (rule.status !== 'active') return;
     this.used.add(ruleId);
     const list = Array.isArray(evidence) ? evidence : [evidence];
+    const affected = this.affectedByRule.get(ruleId) ?? new Set<string>();
+    for (const e of list) if ((e.url || e.file) && affected.size < 100000) affected.add(e.url ?? e.file!);
+    this.affectedByRule.set(ruleId, affected);
     const existing = this.byRule.get(ruleId);
     if (existing) {
       (existing as Finding & { count: number }).count += list.length;
@@ -206,6 +211,10 @@ export class FindingSink {
       count: list.length,
     };
     this.byRule.set(ruleId, f);
+  }
+
+  affected(ruleId: string): string[] {
+    return [...(this.affectedByRule.get(ruleId) ?? [])];
   }
 
   findings(): Array<Finding & { count: number }> {
