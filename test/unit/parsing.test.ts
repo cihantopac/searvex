@@ -84,6 +84,11 @@ describe('HTML extraction', () => {
     expect(p.textContent).toContain('Head One two three');
     expect(p.textContent).not.toContain('do not count');
   });
+  it('follows HTML5 tree construction: a canonical after an invalid head element lands in <body>', () => {
+    const q = extractPage('<html><head><title>T</title><img src="x.png"><link rel="canonical" href="https://e.com/a"></head><body></body></html>', 'https://e.com/a');
+    expect(q.canonical).toBeNull();
+    expect(q.canonicalOutsideHead).toBe(1);
+  });
   it('parses X-Robots-Tag with bot prefixes and unavailable_after', () => {
     const x = parseXRobotsTag('googlebot: noindex, nofollow, unavailable_after: 2027-01-01');
     expect(x.byBot['googlebot']).toContain('noindex');

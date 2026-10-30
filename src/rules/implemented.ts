@@ -13,7 +13,7 @@ export const IMPLEMENTED_RULES = new Set<string>([
   'index.noindex-in-sitemap', 'index.noindex', 'index.noindex-blocked', 'index.sitemap-non200', 'index.sitemap-non-canonical',
   'index.soft-404', 'index.client-rendered', 'index.render-mismatch', 'index.oversized-html',
   // canonicalization / duplicates
-  'canonical.missing', 'canonical.multiple', 'canonical.relative', 'canonical.target-error', 'canonical.target-noindex',
+  'canonical.missing', 'canonical.multiple', 'canonical.in-body', 'canonical.relative', 'canonical.target-error', 'canonical.target-noindex',
   'canonical.cross-domain', 'canonical.noindex-conflict', 'canonical.http-https', 'canonical.www-duplicate',
   'duplicate.title', 'duplicate.description', 'duplicate.content',
   // international

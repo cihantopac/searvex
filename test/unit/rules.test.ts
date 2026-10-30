@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { FindingSink, loadKnowledge, validateKnowledge, type KnowledgeBase } from '../../src/rules/engine.js';
 import { IMPLEMENTED_RULES } from '../../src/rules/implemented.js';
 import { computeScores } from '../../src/analyze/audit.js';
+import { AUTOFIX_RULES } from '../../src/optimize/fixes.js';
 
 const kb = loadKnowledge();
 
@@ -32,6 +33,11 @@ describe('knowledge base', () => {
     const src = sourceTree(path.resolve('src'));
     for (const id of IMPLEMENTED_RULES) expect(src.includes(`'${id}'`), `rule ${id} not referenced in src/`).toBe(true);
     for (const id of kb.rules.keys()) if (src.includes(`'${id}'`)) expect(IMPLEMENTED_RULES.has(id), `${id} used in code but missing from IMPLEMENTED_RULES`).toBe(true);
+  });
+
+  it('autofix flags in the knowledge base match what the optimizer can actually fix', () => {
+    const flagged = new Set([...kb.rules.values()].filter((r) => r.autofix).map((r) => r.id));
+    expect([...flagged].sort()).toEqual([...AUTOFIX_RULES].sort());
   });
 
   it('never encodes known SEO myths as issues', () => {

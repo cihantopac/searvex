@@ -55,7 +55,7 @@ export function shopSite(base: () => string): Record<string, Route> {
       }),
     },
     '/about': {
-      body: page({ title: 'About — Acme Kitchens', head: `<meta name="description" content="About us"><link rel="canonical" href="${B()}/about">`, body: `${nav}<h1>About</h1>${text(200)}` }),
+      body: page({ title: 'About — Acme Kitchens</title><script>alert(1)</script>', head: `<meta name="description" content="About us"><link rel="canonical" href="${B()}/about">`, body: `${nav}<h1>About</h1>${text(200)}` }),
     },
     '/tr/': {
       body: page({

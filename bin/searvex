@@ -1,0 +1,6 @@
+#!/usr/bin/env node
+// Plugin entry point: Claude Code adds this directory to PATH while the plugin is enabled.
+import('../dist/searvex.mjs').catch((e) => {
+  console.error('searvex: failed to load bundle (dist/searvex.mjs):', e.message);
+  process.exit(2);
+});

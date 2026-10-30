@@ -1,4 +1,6 @@
-import * as cheerio from 'cheerio';
+import * as cheerio from 'cheerio/slim';
+import { parse as parseHtml } from 'parse5';
+import { adapter as htmlparser2Adapter } from 'parse5-htmlparser2-tree-adapter';
 import { normalizeUrl } from '../core/url.js';
 
 export interface LinkInfo {
@@ -41,6 +43,8 @@ export interface PageData {
   /** canonical href exactly as written (to detect relative URLs). */
   canonicalRaw: string | null;
   canonicalCount: number;
+  /** rel=canonical links that ended up in <body> after HTML5 parsing (ignored by Google). */
+  canonicalOutsideHead: number;
   hreflang: Array<{ lang: string; href: string }>;
   /** hreflang hrefs exactly as written (to detect relative URLs). */
   hreflangRaw: string[];
@@ -116,8 +120,18 @@ function collectTypes(node: unknown, out: Set<string>, depth = 0): void {
  * Parse an HTML document into the facts every analyzer needs. Parsing never executes scripts
  * (cheerio is a static parser), so hostile pages cannot run code here.
  */
+/**
+ * Parse with parse5 (WHATWG HTML tree construction, like browsers and Googlebot) into an
+ * htmlparser2-compatible DOM, then query it with cheerio. Spec-compliant parsing matters: e.g. an
+ * invalid element inside <head> implicitly closes it, moving a later rel=canonical into <body>.
+ */
+export function loadHtml(html: string): cheerio.CheerioAPI {
+  const doc = parseHtml(html, { treeAdapter: htmlparser2Adapter, scriptingEnabled: false });
+  return cheerio.load(doc as unknown as Parameters<typeof cheerio.load>[0]);
+}
+
 export function extractPage(html: string, pageUrl: string): PageData {
-  const $ = cheerio.load(html);
+  const $ = loadHtml(html);
   const baseHref = $('base[href]').attr('href');
   const base = (baseHref && normalizeUrl(baseHref, pageUrl)) || pageUrl;
   const origin = new URL(pageUrl).hostname.replace(/^www\./, '');
@@ -143,8 +157,10 @@ export function extractPage(html: string, pageUrl: string): PageData {
     }
   });
 
-  const canonicals = $('link[rel~="canonical" i]');
+  // Google only accepts rel=canonical inside <head>; canonicals the HTML5 parser placed in <body> are ignored.
+  const canonicals = $('head link[rel~="canonical" i]');
   const canonicalHref = canonicals.first().attr('href');
+  const canonicalOutsideHead = $('body link[rel~="canonical" i]').length;
 
   const hreflang = $('link[rel~="alternate" i][hreflang]')
     .map((_, el) => ({ lang: ($(el).attr('hreflang') ?? '').trim(), href: normalizeUrl($(el).attr('href') ?? '', base, { stripTracking: false }) ?? '' }))
@@ -257,6 +273,7 @@ export function extractPage(html: string, pageUrl: string): PageData {
     canonical: canonicalHref !== undefined ? normalizeUrl(canonicalHref, base, { stripTracking: false }) : null,
     canonicalRaw: canonicalHref?.trim() ?? null,
     canonicalCount: canonicals.length,
+    canonicalOutsideHead,
     hreflang,
     hreflangRaw: $('link[rel~="alternate" i][hreflang]').map((_, el) => ($(el).attr('href') ?? '').trim()).get(),
     hasMetaKeywords: $('meta[name="keywords" i]').length > 0,

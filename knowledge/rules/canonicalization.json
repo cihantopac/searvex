@@ -79,6 +79,28 @@
       "autofix": true
     },
     {
+      "id": "canonical.in-body",
+      "title": "rel=canonical outside <head> is ignored",
+      "category": "canonicalization",
+      "severity": "high",
+      "confidence": "verified",
+      "engines": [
+        "google"
+      ],
+      "description": "A rel=canonical link appears in the <body> (for example because an invalid element in <head>, such as a <div> or <img>, implicitly closed the head). Google only accepts rel=canonical in the <head> section of the HTML.",
+      "fix": "Move the canonical link into <head> and make sure <head> contains only valid head elements (meta, link, title, script, style, base, noscript, template) before it.",
+      "verify": "Parse the raw HTML with an HTML5 parser and confirm the canonical link is a child of <head>.",
+      "sources": [
+        {
+          "title": "Google: How to specify a canonical URL",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
       "id": "canonical.target-error",
       "title": "Canonical points to a non-200 URL",
       "category": "canonicalization",

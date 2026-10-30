@@ -31,7 +31,7 @@ export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = 
   if (!issues.length) L.push('_No issues found by the active rules._', '');
   for (const f of issues) {
     L.push(`### ${ICON[f.severity]} ${md(f.title)} — ${f.severity}${f.confidence !== 'verified' ? ` (${f.confidence})` : ''}`, '');
-    L.push(`\`${f.ruleId}\` · ${f.category} · engines: ${f.engines.join(', ')} · affected: ${f.count}`, '');
+    L.push(`\`${f.ruleId}\` · ${f.category} · engines: ${f.engines.join(', ')} · affected: ${f.count}${f.autofixable ? ' · 🔧 auto-fixable with `searvex optimize` (repository mode)' : ' · needs judgement'}`, '');
     L.push(md(f.message).replace(/\\([*_])/g, '$1'), '');
     if (f.fix) L.push(`**Fix:** ${md(f.fix)}`, '');
     for (const e of f.evidence.slice(0, max)) L.push(`- ${e.url ? md(e.url) : e.file ? `${md(e.file)}${e.line ? ':' + e.line : ''}` : ''}${e.observed ? ` — ${md(e.observed)}` : ''}`);

@@ -172,8 +172,7 @@
           "level": "url-resolved"
         }
       ],
-      "status": "active",
-      "autofix": true
+      "status": "active"
     }
   ]
 }

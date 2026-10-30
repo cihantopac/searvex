@@ -1,0 +1,12 @@
+{
+  "name": "searvex",
+  "description": "Marketplace for the Searvex search intelligence plugin",
+  "owner": { "name": "Cihan Topaç", "url": "https://github.com/cihantopac" },
+  "plugins": [
+    {
+      "name": "searvex",
+      "source": "./",
+      "description": "Deterministic technical SEO + GEO audits, competitor research and safe code fixes with rollback."
+    }
+  ]
+}

@@ -45,8 +45,7 @@
           "level": "fetched"
         }
       ],
-      "status": "active",
-      "autofix": true
+      "status": "active"
     },
     {
       "id": "title.truncation-risk",
@@ -91,8 +90,7 @@
           "level": "fetched"
         }
       ],
-      "status": "active",
-      "autofix": true
+      "status": "active"
     },
     {
       "id": "description.multiple",
@@ -114,8 +112,7 @@
           "level": "fetched"
         }
       ],
-      "status": "active",
-      "autofix": true
+      "status": "active"
     },
     {
       "id": "h1.missing",
@@ -210,8 +207,7 @@
           "level": "url-resolved"
         }
       ],
-      "status": "active",
-      "autofix": true
+      "status": "active"
     },
     {
       "id": "img.alt-missing",

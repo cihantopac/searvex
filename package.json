@@ -11,22 +11,28 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
+    "bin",
     "knowledge",
+    "skills",
+    "agents",
+    ".claude-plugin",
     "README.md",
     "LICENSE",
-    "NOTICE"
+    "NOTICE",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=20.10"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/bundle.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "rules:validate": "node dist/cli.js rules validate",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm run build && npm test",
+    "bundle": "node scripts/bundle.mjs"
   },
   "keywords": [
     "seo",
@@ -50,13 +56,16 @@
   "dependencies": {
     "cheerio": "1.2.0",
     "fast-xml-parser": "5.11.2",
-    "robots-parser": "3.0.1"
+    "robots-parser": "3.0.1",
+    "parse5": "7.3.0",
+    "parse5-htmlparser2-tree-adapter": "7.1.0"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
+    "@vitest/coverage-v8": "5.0.4",
+    "esbuild": "^0.28.1",
     "typescript": "6.0.3",
-    "vitest": "5.0.4",
     "vite": "8.3.4",
-    "@vitest/coverage-v8": "5.0.4"
+    "vitest": "5.0.4"
   }
 }

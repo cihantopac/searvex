@@ -11,6 +11,15 @@ import type { AppScan, RepoScan } from '../repo/scan.js';
  * URL). Anything requiring judgement — titles, descriptions, alt text, content — becomes an
  * AgentTask with file/line evidence for a human or an AI agent to draft and get approved.
  */
+/**
+ * Rules the planner can fix automatically (in at least one framework/context). Must match the
+ * `autofix` flags in the knowledge base — enforced by test/unit/rules.test.ts.
+ */
+export const AUTOFIX_RULES = new Set([
+  'html.lang-missing', 'mobile.viewport-missing', 'canonical.relative', 'canonical.missing', 'canonical.multiple',
+  'sd.missing-context', 'hreflang.invalid-code', 'title.missing', 'robots.no-sitemap',
+]);
+
 export interface FileChange {
   path: string;
   action: 'modify' | 'create';

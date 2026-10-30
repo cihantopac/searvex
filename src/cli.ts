@@ -254,6 +254,7 @@ function commandRules(flags: GlobalFlags): number {
     console.log(r.description + '\n');
     if (r.appliesWhen) console.log(`Applies when: ${r.appliesWhen}\n`);
     console.log(`Fix: ${r.fix}\nVerify: ${r.verify}`);
+    console.log(`Automatic fix: ${r.autofix ? 'available via "searvex optimize" in repository mode (where the correct value is unambiguous)' : 'no — needs human/agent judgement'}`);
     if (r.exceptions) console.log(`Exceptions: ${r.exceptions}`);
     console.log('\nSources:');
     for (const s of r.sources) console.log(`  - ${s.title}\n    ${s.url} (checked ${s.checked}${s.level ? ', ' + s.level : ''})`);

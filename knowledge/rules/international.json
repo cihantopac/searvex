@@ -74,8 +74,7 @@
           "level": "fetched"
         }
       ],
-      "status": "active",
-      "autofix": true
+      "status": "active"
     },
     {
       "id": "hreflang.target-error",
@@ -125,8 +124,7 @@
           "level": "fetched"
         }
       ],
-      "status": "active",
-      "autofix": true
+      "status": "active"
     },
     {
       "id": "hreflang.no-x-default",

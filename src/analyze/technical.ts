@@ -71,6 +71,7 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     if (p.inSitemap && !selfCanon) sink.emit('index.sitemap-non-canonical', { url: p.url, observed: `canonical → ${f.canonical}` });
 
     // Canonical
+    if (f.canonicalOutsideHead) sink.emit('canonical.in-body', { url: p.url, observed: `${f.canonicalOutsideHead} canonical link(s) parsed into <body>` });
     if (f.canonicalCount > 1) sink.emit('canonical.multiple', { url: p.url, observed: `${f.canonicalCount} canonical links` });
     const rawCanonicalHref = f.canonicalRaw;
     if (rawCanonicalHref && !/^https?:\/\//i.test(rawCanonicalHref)) sink.emit('canonical.relative', { url: p.url, observed: rawCanonicalHref });
