@@ -20,6 +20,7 @@ Exit codes: `0` success · `1` `--fail-on` threshold met, optimize verification 
 | `gsc auth --client <file>` | Authorise read-only Search Console access with **your own** OAuth "Desktop app" client (loopback + PKCE). Refresh token stored in the user config dir (`~/.config/searvex/credentials.json`, `%APPDATA%\searvex` on Windows) with 0600 permissions. `gsc logout` removes it. |
 | `gsc sites` | List the properties the credential can read. |
 | `gsc report <property> [--days 28] [--audit latest\|<runId>] [--max-rows n]` | Query × page analysis: top queries/pages, page → primary query, striking distance (positions 8–20), low CTR vs the site's own median at the same position, queries shared by several pages, indexable pages without impressions, audit issues on pages with traffic. Writes `search-performance.md/json`. |
+| `bing report <siteUrl> [--days 28] [--audit …] [--max-pages 25]` | Same analysis on Bing Webmaster Tools data (`SEARVEX_BING_API_KEY`): page stats select the top pages, `GetPageQueryStats` supplies query × page rows. Read-only; the key is never printed. |
 | `monitor <url>` | Re-audit and diff with the previous run of the same target (`--baseline <runId>` to choose). Regression = new/worsened critical or high issues. |
 | `rules list [--category c]` · `rules show <id>` · `rules validate [--strict]` | Inspect and validate the knowledge base. |
 | `report <runId\|latest> [--format …]` | Re-render a stored report. |

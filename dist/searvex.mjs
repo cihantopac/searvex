@@ -1187,6 +1187,97 @@ var require_robots_parser = __commonJS({
   }
 });
 
+// src/integrations/bing.ts
+var bing_exports = {};
+__export(bing_exports, {
+  aggregate: () => aggregate,
+  bingQueryPageRows: () => bingQueryPageRows,
+  getPageQueryStats: () => getPageQueryStats,
+  getPageStats: () => getPageStats,
+  getQueryStats: () => getQueryStats,
+  parseBingDate: () => parseBingDate
+});
+import http4 from "node:http";
+import https5 from "node:https";
+function parseBingDate(v) {
+  if (typeof v !== "string") return null;
+  const m = /\/Date\((-?\d+)([+-]\d{4})?\)\//.exec(v);
+  if (m) return new Date(Number(m[1])).toISOString().slice(0, 10);
+  const t = Date.parse(v);
+  return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10);
+}
+function get2(method, params, apiKey) {
+  const url = `${BASE2()}/${method}?${new URLSearchParams({ ...params, apikey: apiKey })}`;
+  const mod = url.startsWith("https:") ? https5 : http4;
+  return new Promise((resolve, reject) => {
+    const req = mod.get(url, { headers: { accept: "application/json" }, timeout: 3e4 }, (res) => {
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
+      res.on("end", () => {
+        const text4 = Buffer.concat(chunks).toString("utf8");
+        if ((res.statusCode ?? 0) !== 200) {
+          reject(new Error(`Bing Webmaster API error ${res.statusCode} on ${method}: ${text4.slice(0, 200).replace(apiKey, "***")}`));
+          return;
+        }
+        try {
+          const json = JSON.parse(text4);
+          resolve(Array.isArray(json) ? json : json.d ?? []);
+        } catch {
+          reject(new Error(`Bing Webmaster API returned non-JSON for ${method}`));
+        }
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error("Bing Webmaster API request timed out")));
+    req.on("error", reject);
+  });
+}
+function toStats(items) {
+  return items.map((x) => {
+    const o = x;
+    return {
+      key: String(o["Query"] ?? ""),
+      clicks: Number(o["Clicks"] ?? 0) || 0,
+      impressions: Number(o["Impressions"] ?? 0) || 0,
+      avgImpressionPosition: Number(o["AvgImpressionPosition"] ?? 0) || 0,
+      avgClickPosition: Number(o["AvgClickPosition"] ?? 0) || 0,
+      date: parseBingDate(o["Date"])
+    };
+  });
+}
+function aggregate(stats, sinceIso) {
+  const acc = /* @__PURE__ */ new Map();
+  for (const s of stats) {
+    if (sinceIso && s.date && s.date < sinceIso) continue;
+    const a = acc.get(s.key) ?? { clicks: 0, impressions: 0, posWeighted: 0 };
+    a.clicks += s.clicks;
+    a.impressions += s.impressions;
+    a.posWeighted += s.avgImpressionPosition * s.impressions;
+    acc.set(s.key, a);
+  }
+  return new Map([...acc].map(([k, a]) => [k, { clicks: a.clicks, impressions: a.impressions, position: a.impressions ? a.posWeighted / a.impressions : 0 }]));
+}
+async function bingQueryPageRows(siteUrl, apiKey, opts) {
+  const since = new Date(Date.now() - opts.days * 864e5).toISOString().slice(0, 10);
+  const pages = [...aggregate(await getPageStats(siteUrl, apiKey), since)].sort((a, b) => b[1].clicks - a[1].clicks || b[1].impressions - a[1].impressions).slice(0, opts.maxPages ?? 25);
+  const rows = [];
+  for (const [page] of pages) {
+    for (const [query, s] of aggregate(await getPageQueryStats(siteUrl, page, apiKey), since)) {
+      rows.push({ query, page, clicks: s.clicks, impressions: s.impressions, ctr: s.impressions ? s.clicks / s.impressions : 0, position: s.position });
+    }
+  }
+  return { rows, pages: pages.length };
+}
+var BASE2, getQueryStats, getPageStats, getPageQueryStats;
+var init_bing = __esm({
+  "src/integrations/bing.ts"() {
+    "use strict";
+    BASE2 = () => process.env["SEARVEX_BING_API_BASE"] ?? "https://ssl.bing.com/webmaster/api.svc/json";
+    getQueryStats = async (siteUrl, apiKey) => toStats(await get2("GetQueryStats", { siteUrl }, apiKey));
+    getPageStats = async (siteUrl, apiKey) => toStats(await get2("GetPageStats", { siteUrl }, apiKey));
+    getPageQueryStats = async (siteUrl, page, apiKey) => toStats(await get2("GetPageQueryStats", { siteUrl, page }, apiKey));
+  }
+});
+
 // src/crawl/render.ts
 var render_exports = {};
 __export(render_exports, {
@@ -21516,10 +21607,10 @@ async function probeLlmsTxt(origin, opts) {
 async function probeHostVariants(startUrl, opts, sink) {
   const u = new URL(startUrl);
   if (u.protocol === "https:") {
-    const http4 = new URL(startUrl);
-    http4.protocol = "http:";
-    const res2 = await safeFetch(http4.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
-    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http4.toString(), observed: "HTTP 200 without redirect to HTTPS" });
+    const http5 = new URL(startUrl);
+    http5.protocol = "http:";
+    const res2 = await safeFetch(http5.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
+    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http5.toString(), observed: "HTTP 200 without redirect to HTTPS" });
   }
   if (/^[\d.]+$/.test(u.hostname) || u.hostname === "localhost" || u.hostname.split(".").length < 2) return;
   const alt = new URL(startUrl);
@@ -24208,6 +24299,36 @@ Saved: ${out}`);
   }
   throw new UsageError("gsc subcommands: auth --client <file> | sites | report <property> [--days 28] [--audit latest|<runId>] | logout");
 }
+async function commandBing(flags) {
+  const v = flags.values;
+  const sub = flags.positionals[1];
+  const apiKey = process.env["SEARVEX_BING_API_KEY"];
+  if (sub !== "report") throw new UsageError("bing subcommands: report <siteUrl> [--days 28] [--audit latest|<runId>] [--max-pages 25]");
+  if (!apiKey) throw new UsageError("Set SEARVEX_BING_API_KEY (Bing Webmaster Tools \u2192 Settings \u2192 API access)");
+  const siteUrl = flags.positionals[2];
+  if (!siteUrl || !/^https?:\/\//.test(siteUrl)) throw new UsageError("bing report requires the verified site URL, e.g. https://example.com/");
+  const days = num(v["days"], 28, 1, 480);
+  const workspace = path17.resolve(String(v["out"] ?? process.cwd()));
+  let audit;
+  const auditRef = v["audit"];
+  if (auditRef) {
+    const id = auditRef === "latest" ? RunStore.list(workspace).filter((r) => new RunStore(workspace, r).readJson("report.json")?.mode === "website").at(-1) : auditRef;
+    audit = id ? new RunStore(workspace, id).readJson("report.json") ?? void 0 : void 0;
+    if (!audit) throw new UsageError(`No website audit report found for --audit ${auditRef}`);
+  }
+  const { bingQueryPageRows: bingQueryPageRows2 } = await Promise.resolve().then(() => (init_bing(), bing_exports));
+  const { rows, pages } = await bingQueryPageRows2(siteUrl, apiKey, { days, maxPages: num(v["max-pages"], 25, 1, 200) });
+  const report = analyzeSearchPerformance(rows, { days, source: `Bing Webmaster Tools ${siteUrl}`, audit });
+  report.notes.push(`Query \xD7 page rows come from GetPageQueryStats for the top ${pages} pages by clicks; positions are impression-weighted AvgImpressionPosition.`);
+  const store = new RunStore(workspace, RunStore.newRunId("bing"));
+  store.writeJson("meta.json", { kind: "bing", target: siteUrl, days, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
+  store.writeJson("search-performance.json", report);
+  const out = store.writeText("search-performance.md", renderSearchPerformanceMarkdown(report));
+  if (v["json"]) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+  else if (!v["quiet"]) console.log(renderSearchPerformanceMarkdown(report) + `
+Saved: ${out}`);
+  return 0;
+}
 
 // src/cli.ts
 var HELP = `Searvex ${SEARVEX_VERSION} \u2014 open-source search intelligence & optimization engine
@@ -24226,6 +24347,7 @@ Commands
   rollback <changeId>   Restore files changed by an applied optimization
   gsc <auth|sites|report|logout>   Google Search Console (read-only): OAuth for your own Desktop client
                         (--client file), list properties, query/page analysis with --audit join
+  bing report <siteUrl> Bing Webmaster Tools query/page analysis (SEARVEX_BING_API_KEY, read-only)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and
@@ -24256,6 +24378,7 @@ Common options
 Environment (all optional, read-only integrations)
   SEARVEX_CRUX_API_KEY  Chrome UX Report API key \u2192 real Core Web Vitals field data
   SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
+  SEARVEX_BING_API_KEY  Bing Webmaster Tools API key \u2192 "searvex bing report"
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
 
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
@@ -24544,6 +24667,8 @@ Run "searvex --help" for usage.`);
         return await commandEcosystem(flags);
       case "gsc":
         return await commandGsc(flags);
+      case "bing":
+        return await commandBing(flags);
       case "audit":
         return await commandAudit(flags);
       case "geo":

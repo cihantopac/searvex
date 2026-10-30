@@ -30,7 +30,7 @@ Each item lists how it will be verified; nothing is marked done without that ver
 |---|---|---|
 | 6 | GSC OAuth (loopback, read-only scope, refresh-token storage with 0600 permissions) | ✅ mock-server tested (PKCE, state/CSRF, refresh); **live run pending owner credentials** |
 | 7 | GSC analysis: top queries/pages, CTR vs position outliers, striking distance (pos 8–20), query→page mapping, multi-page queries (data-verified cannibalisation), pages without impressions | ✅ `gsc report` with `--audit` join; traffic-weighted priorities still open |
-| 8 | Bing Webmaster API (query/page stats) | ⬜ (D) |
+| 8 | Bing Webmaster API (query/page stats) | ✅ `bing report`, mock-server tested; **live run pending an API key** |
 | 9 | GA4 Data API (landing-page sessions / conversions from organic search) | ⬜ |
 | 10 | Yandex Webmaster API | ⬜ |
 | 11 | Impact-based prioritisation (severity × affected share × page importance × traffic when available) | ✅ score/bucket/effort/reasons; "Fix first" table; traffic input pending GSC |

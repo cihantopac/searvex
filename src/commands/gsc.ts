@@ -90,3 +90,34 @@ export async function commandGsc(flags: GlobalFlags): Promise<number> {
   }
   throw new UsageError('gsc subcommands: auth --client <file> | sites | report <property> [--days 28] [--audit latest|<runId>] | logout');
 }
+
+/** `searvex bing report <siteUrl>`: same analysis on Bing Webmaster data (API key, read-only). */
+export async function commandBing(flags: GlobalFlags): Promise<number> {
+  const v = flags.values;
+  const sub = flags.positionals[1];
+  const apiKey = process.env['SEARVEX_BING_API_KEY'];
+  if (sub !== 'report') throw new UsageError('bing subcommands: report <siteUrl> [--days 28] [--audit latest|<runId>] [--max-pages 25]');
+  if (!apiKey) throw new UsageError('Set SEARVEX_BING_API_KEY (Bing Webmaster Tools → Settings → API access)');
+  const siteUrl = flags.positionals[2];
+  if (!siteUrl || !/^https?:\/\//.test(siteUrl)) throw new UsageError('bing report requires the verified site URL, e.g. https://example.com/');
+  const days = num(v['days'], 28, 1, 480);
+  const workspace = path.resolve(String(v['out'] ?? process.cwd()));
+  let audit: AuditReport | undefined;
+  const auditRef = v['audit'] as string | undefined;
+  if (auditRef) {
+    const id = auditRef === 'latest' ? RunStore.list(workspace).filter((r) => new RunStore(workspace, r).readJson<AuditReport>('report.json')?.mode === 'website').at(-1) : auditRef;
+    audit = id ? new RunStore(workspace, id).readJson<AuditReport>('report.json') ?? undefined : undefined;
+    if (!audit) throw new UsageError(`No website audit report found for --audit ${auditRef}`);
+  }
+  const { bingQueryPageRows } = await import('../integrations/bing.js');
+  const { rows, pages } = await bingQueryPageRows(siteUrl, apiKey, { days, maxPages: num(v['max-pages'], 25, 1, 200) });
+  const report = analyzeSearchPerformance(rows, { days, source: `Bing Webmaster Tools ${siteUrl}`, audit });
+  report.notes.push(`Query × page rows come from GetPageQueryStats for the top ${pages} pages by clicks; positions are impression-weighted AvgImpressionPosition.`);
+  const store = new RunStore(workspace, RunStore.newRunId('bing'));
+  store.writeJson('meta.json', { kind: 'bing', target: siteUrl, days, startedAt: new Date().toISOString() });
+  store.writeJson('search-performance.json', report);
+  const out = store.writeText('search-performance.md', renderSearchPerformanceMarkdown(report));
+  if (v['json']) process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+  else if (!v['quiet']) console.log(renderSearchPerformanceMarkdown(report) + `\nSaved: ${out}`);
+  return 0;
+}
