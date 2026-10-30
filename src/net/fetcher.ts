@@ -7,7 +7,8 @@ import type { FetchResult, RedirectHop } from '../core/types.js';
 import { assertUrlAllowed, BlockedUrlError, classifyAddress, DEFAULT_POLICY, isAddressAllowed, type NetPolicy } from './ssrf.js';
 
 export const SEARVEX_VERSION = '0.1.0';
-export const DEFAULT_USER_AGENT = `Mozilla/5.0 (compatible; Searvex/${SEARVEX_VERSION}; +https://github.com/cihantopac/searvex)`;
+/** Honest crawler identification. robots.txt rules for "SearvexBot" (or "Searvex") apply. */
+export const DEFAULT_USER_AGENT = `Mozilla/5.0 (compatible; SearvexBot/${SEARVEX_VERSION}; +https://github.com/cihantopac/searvex)`;
 
 export interface FetchOptions {
   policy?: NetPolicy;
@@ -75,6 +76,7 @@ function charsetOf(contentType: string): BufferEncoding {
 }
 
 interface RawResponse {
+  ttfbMs: number;
   status: number;
   headers: Record<string, string>;
   body: Buffer;
@@ -83,6 +85,7 @@ interface RawResponse {
 
 function requestOnce(url: URL, opts: Required<Omit<FetchOptions, 'headers'>> & { headers: Record<string, string> }): Promise<RawResponse> {
   return new Promise((resolve, reject) => {
+    const t0 = Date.now();
     const mod = url.protocol === 'https:' ? https : http;
     const req = mod.request(
       url,
@@ -100,6 +103,7 @@ function requestOnce(url: URL, opts: Required<Omit<FetchOptions, 'headers'>> & {
         agent: false,
       },
       (res) => {
+        const ttfbMs = Date.now() - t0;
         const chunks: Buffer[] = [];
         let size = 0;
         let truncated = false;
@@ -129,7 +133,7 @@ function requestOnce(url: URL, opts: Required<Omit<FetchOptions, 'headers'>> & {
               // Keep raw bytes; analysis will flag undecodable content via empty parse.
             }
           }
-          resolve({ status: res.statusCode ?? 0, headers, body, truncated });
+          resolve({ ttfbMs, status: res.statusCode ?? 0, headers, body, truncated });
         };
         res.on('end', finish);
         res.on('close', () => {
@@ -204,6 +208,7 @@ export async function safeFetch(rawUrl: string, options: FetchOptions = {}): Pro
         bodyBytes: res.body.length,
         truncated: res.truncated,
         timingMs: Date.now() - started,
+        ttfbMs: res.ttfbMs,
         contentType,
       };
     }

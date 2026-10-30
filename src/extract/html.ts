@@ -68,6 +68,8 @@ export interface PageData {
   likelyClientRendered: boolean;
   formsCount: number;
   iframes: number;
+  /** Framework hints from markup (e.g. Next.js), used to explain UA-dependent behaviour. */
+  generator: string | null;
   /** Structure signals used by content/GEO heuristics. */
   structure: {
     paragraphs: number;
@@ -172,11 +174,25 @@ export function extractPage(html: string, pageUrl: string): PageData {
     headings.push({ level: Number(el.tagName.slice(1)), text: collapse($(el).text()).slice(0, 300) });
   });
 
+  /** Accessible name per WAI-ARIA naming order (aria-labelledby → aria-label → content incl. img alt → title). */
+  const accessibleName = (el: Parameters<typeof $>[0]): string => {
+    const $el = $(el);
+    const labelledby = ($el.attr('aria-labelledby') ?? '').split(/\s+/).filter(Boolean);
+    if (labelledby.length) {
+      const t = collapse(labelledby.map((id) => $(`[id="${id.replace(/"/g, '')}"]`).text()).join(' '));
+      if (t) return t;
+    }
+    const aria = collapse($el.attr('aria-label') ?? '');
+    if (aria) return aria;
+    const content = collapse([$el.text(), ...$el.find('img[alt]').map((_, i) => $(i).attr('alt') ?? '').get()].join(' '));
+    if (content) return content;
+    return collapse($el.attr('title') ?? '');
+  };
   const links: LinkInfo[] = [];
   $('a').each((_, el) => {
     const href = ($(el).attr('href') ?? '').trim();
     const rel = ($(el).attr('rel') ?? '').toLowerCase().split(/\s+/).filter(Boolean);
-    const text = collapse($(el).text() || $(el).attr('aria-label') || $(el).find('img').attr('alt') || '').slice(0, 200);
+    const text = accessibleName(el).slice(0, 200);
     const uncrawlable = !href || href.startsWith('javascript:') || href === '#';
     const url = uncrawlable || href.startsWith('#') || /^(mailto|tel|sms|data):/i.test(href) ? null : normalizeUrl(href, base);
     let internal = false;
@@ -226,12 +242,16 @@ export function extractPage(html: string, pageUrl: string): PageData {
   const formsCount = $('form').length;
   const iframes = $('iframe').length;
 
-  const titles = $('head title, title').first();
-  const titleCount = $('title').length;
+  // <title> inside inline SVG labels the graphic, not the document.
+  const docTitles = $('title').filter((_, el) => $(el).closest('svg').length === 0);
+  const titles = docTitles.first();
+  const titleCount = docTitles.length;
 
   // Visible text: drop non-content elements before measuring.
   const body = $('body').clone();
-  body.find('script,style,noscript,template,svg,iframe').remove();
+  // Declarative shadow DOM (<template shadowrootmode>) is rendered content; Google flattens shadow DOM.
+  body.find('script,style,noscript,svg,iframe').remove();
+  body.find('template').not('[shadowrootmode],[shadowroot]').remove();
   const textContent = visibleText(body);
   const wordCount = textContent ? textContent.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length : 0;
   const hasMountNode = $('#root,#app,#__next,#__nuxt,[data-reactroot],app-root').length > 0;
@@ -294,6 +314,7 @@ export function extractPage(html: string, pageUrl: string): PageData {
     likelyClientRendered,
     formsCount,
     iframes,
+    generator: $('script[src*="/_next/static/"]').length || $('#__next').length ? 'next.js' : $('meta[name="generator" i]').attr('content')?.slice(0, 60) ?? null,
     structure,
     subresources,
   };

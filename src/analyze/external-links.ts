@@ -29,7 +29,7 @@ export async function checkExternalLinks(ctx: SiteContext, sink: FindingSink, op
       const origin = new URL(u).origin;
       let robots = robotsCache.get(origin);
       if (!robots) robotsCache.set(origin, (robots = await fetchRobots(origin, opts)));
-      if (robots.state === 'ok' && !robots.isAllowed(u, opts.robotsAgent ?? 'Searvex')) {
+      if (robots.state === 'ok' && !robots.isAllowed(u, opts.robotsAgent ?? 'SearvexBot')) {
         result.skippedByRobots++;
         continue;
       }

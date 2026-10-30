@@ -803,6 +803,7 @@ function charsetOf(contentType) {
 }
 function requestOnce(url, opts) {
   return new Promise((resolve, reject) => {
+    const t0 = Date.now();
     const mod = url.protocol === "https:" ? https : http;
     const req = mod.request(
       url,
@@ -820,6 +821,7 @@ function requestOnce(url, opts) {
         agent: false
       },
       (res) => {
+        const ttfbMs = Date.now() - t0;
         const chunks = [];
         let size = 0;
         let truncated = false;
@@ -847,7 +849,7 @@ function requestOnce(url, opts) {
             } catch {
             }
           }
-          resolve({ status: res.statusCode ?? 0, headers, body, truncated });
+          resolve({ ttfbMs, status: res.statusCode ?? 0, headers, body, truncated });
         };
         res.on("end", finish);
         res.on("close", () => {
@@ -914,6 +916,7 @@ async function safeFetch(rawUrl, options = {}) {
         bodyBytes: res.body.length,
         truncated: res.truncated,
         timingMs: Date.now() - started,
+        ttfbMs: res.ttfbMs,
         contentType
       };
     }
@@ -928,7 +931,7 @@ var init_fetcher = __esm({
     "use strict";
     init_ssrf();
     SEARVEX_VERSION = "0.1.0";
-    DEFAULT_USER_AGENT = `Mozilla/5.0 (compatible; Searvex/${SEARVEX_VERSION}; +https://github.com/cihantopac/searvex)`;
+    DEFAULT_USER_AGENT = `Mozilla/5.0 (compatible; SearvexBot/${SEARVEX_VERSION}; +https://github.com/cihantopac/searvex)`;
     DEFAULTS = {
       timeoutMs: 15e3,
       maxBytes: 5 * 1024 * 1024,
@@ -15515,11 +15518,24 @@ function extractPage(html3, pageUrl) {
   $2("h1,h2,h3,h4,h5,h6").each((_, el) => {
     headings.push({ level: Number(el.tagName.slice(1)), text: collapse($2(el).text()).slice(0, 300) });
   });
+  const accessibleName = (el) => {
+    const $el = $2(el);
+    const labelledby = ($el.attr("aria-labelledby") ?? "").split(/\s+/).filter(Boolean);
+    if (labelledby.length) {
+      const t = collapse(labelledby.map((id) => $2(`[id="${id.replace(/"/g, "")}"]`).text()).join(" "));
+      if (t) return t;
+    }
+    const aria = collapse($el.attr("aria-label") ?? "");
+    if (aria) return aria;
+    const content = collapse([$el.text(), ...$el.find("img[alt]").map((_, i) => $2(i).attr("alt") ?? "").get()].join(" "));
+    if (content) return content;
+    return collapse($el.attr("title") ?? "");
+  };
   const links = [];
   $2("a").each((_, el) => {
     const href = ($2(el).attr("href") ?? "").trim();
     const rel2 = ($2(el).attr("rel") ?? "").toLowerCase().split(/\s+/).filter(Boolean);
-    const text4 = collapse($2(el).text() || $2(el).attr("aria-label") || $2(el).find("img").attr("alt") || "").slice(0, 200);
+    const text4 = accessibleName(el).slice(0, 200);
     const uncrawlable = !href || href.startsWith("javascript:") || href === "#";
     const url = uncrawlable || href.startsWith("#") || /^(mailto|tel|sms|data):/i.test(href) ? null : normalizeUrl(href, base);
     let internal = false;
@@ -15558,10 +15574,12 @@ function extractPage(html3, pageUrl) {
   const hasNoscriptContent = collapse($2("noscript").text()).length > 20;
   const formsCount = $2("form").length;
   const iframes = $2("iframe").length;
-  const titles = $2("head title, title").first();
-  const titleCount = $2("title").length;
+  const docTitles = $2("title").filter((_, el) => $2(el).closest("svg").length === 0);
+  const titles = docTitles.first();
+  const titleCount = docTitles.length;
   const body = $2("body").clone();
-  body.find("script,style,noscript,template,svg,iframe").remove();
+  body.find("script,style,noscript,svg,iframe").remove();
+  body.find("template").not("[shadowrootmode],[shadowroot]").remove();
   const textContent2 = visibleText(body);
   const wordCount = textContent2 ? textContent2.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length : 0;
   const hasMountNode = $2("#root,#app,#__next,#__nuxt,[data-reactroot],app-root").length > 0;
@@ -15613,6 +15631,7 @@ function extractPage(html3, pageUrl) {
     likelyClientRendered,
     formsCount,
     iframes,
+    generator: $2('script[src*="/_next/static/"]').length || $2("#__next").length ? "next.js" : $2('meta[name="generator" i]').attr("content")?.slice(0, 60) ?? null,
     structure,
     subresources
   };
@@ -19816,6 +19835,10 @@ async function collectSitemaps(seeds, opts = {}) {
     const sm = queue.shift();
     if (seen.has(sm)) continue;
     seen.add(sm);
+    try {
+      await opts.limiter?.wait(new URL(sm).host);
+    } catch {
+    }
     const res = await safeFetch(sm, { ...opts, maxBytes: SITEMAP_MAX_BYTES });
     if (res.error || res.status !== 200) {
       result.issues.push({ sitemap: sm, message: res.error ?? `HTTP ${res.status}` });
@@ -19912,7 +19935,7 @@ var DEFAULT_CRAWL = {
   useSitemaps: true,
   policy: DEFAULT_POLICY,
   userAgent: DEFAULT_USER_AGENT,
-  robotsAgent: "Searvex",
+  robotsAgent: "SearvexBot",
   checkpointEvery: 25
 };
 var KEPT_HEADERS = ["content-type", "x-robots-tag", "content-language", "last-modified", "cache-control", "link", "location", "retry-after", "strict-transport-security", "vary", "content-encoding"];
@@ -19948,7 +19971,7 @@ async function crawl(startUrl, partial = {}, store) {
   const delay = robots.crawlDelay(opts.robotsAgent);
   if (delay && delay > 0) limiter.setDelay(new URL(origin).host, Math.min(delay, 30) * 1e3);
   const sitemapSeeds = robots.sitemaps.length ? robots.sitemaps : [new URL("/sitemap.xml", origin).toString()];
-  const sitemap = opts.useSitemaps ? await collectSitemaps(sitemapSeeds, fetchOpts) : { sitemaps: [], urls: [], issues: [] };
+  const sitemap = opts.useSitemaps ? await collectSitemaps(sitemapSeeds, { ...fetchOpts, limiter }) : { sitemaps: [], urls: [], issues: [] };
   const sitemapSet = new Set(sitemap.urls.map((u) => normalizeUrl(u.loc)).filter((x) => !!x));
   const existing = store?.readLines("pages.jsonl") ?? [];
   const checkpoint = store?.readJson("checkpoint.json");
@@ -20009,6 +20032,7 @@ async function crawl(startUrl, partial = {}, store) {
       redirects: res.redirects,
       contentType: res.contentType,
       timingMs: res.timingMs,
+      ttfbMs: res.ttfbMs,
       bytes: res.bodyBytes,
       truncated: res.truncated,
       headers: pickHeaders(res.headers),
@@ -20380,7 +20404,8 @@ function buildContext(crawl2) {
   const htmlPages = crawl2.pages.filter((p) => p.status === 200 && p.data && !p.redirects.length);
   const indexable = htmlPages.filter((p) => !isNoindex(p) && isSelfCanonical(p));
   const sitemapUrls = new Set(crawl2.sitemap.urls.map((u) => normalizeUrl(u.loc)).filter((x) => !!x));
-  const homepage = byUrl.get(crawl2.startUrl);
+  const startPath = new URL(crawl2.startUrl).pathname;
+  const homepage = byUrl.get(new URL("/", crawl2.origin).toString()) ?? (/^\/([a-z]{2}(-[a-z]{2})?\/?)?$/i.test(startPath) ? byUrl.get(crawl2.startUrl) : void 0);
   return { crawl: crawl2, pages: crawl2.pages, byUrl, inlinks, htmlPages, indexable, sitemapUrls, homepage };
 }
 function resolveRecord(ctx, url) {
@@ -20847,6 +20872,10 @@ function runTechnicalChecks(ctx, sink) {
     if (/^\s*crawl-delay\s*:/im.test(crawl2.robots.raw)) sink.emit("robots.crawl-delay-ignored", { url: crawl2.robots.url, observed: (/^\s*crawl-delay\s*:.*$/im.exec(crawl2.robots.raw) ?? [""])[0].trim() });
   }
   if (!crawl2.sitemap.sitemaps.length) sink.emit("robots.no-sitemap", { url: crawl2.robots.url, observed: crawl2.robots.sitemaps.length ? `Declared sitemap(s) failed: ${crawl2.sitemap.issues.map((i) => i.message).join("; ")}` : "No Sitemap directive; /sitemap.xml not available" });
+  const start = ctx.byUrl.get(crawl2.startUrl);
+  if (start && !start.blockedByRobots && (start.error || start.status >= 400)) {
+    sink.emit("http.start-url-error", { url: crawl2.startUrl, observed: start.error ?? `HTTP ${start.status}` });
+  }
   const titleMap = /* @__PURE__ */ new Map();
   const descMap = /* @__PURE__ */ new Map();
   for (const p of ctx.pages) {
@@ -20878,7 +20907,14 @@ function runTechnicalChecks(ctx, sink) {
       if (f.canonical && !selfCanon) sink.emit("canonical.noindex-conflict", { url: p.url, observed: `noindex + canonical \u2192 ${f.canonical}` });
     }
     if (p.inSitemap && !selfCanon) sink.emit("index.sitemap-non-canonical", { url: p.url, observed: `canonical \u2192 ${f.canonical}` });
-    if (f.canonicalOutsideHead) sink.emit("canonical.in-body", { url: p.url, observed: `${f.canonicalOutsideHead} canonical link(s) parsed into <body>` });
+    if (f.canonicalOutsideHead) {
+      const next2 = (p.data?.generator ?? "") === "next.js";
+      sink.emit(
+        "canonical.in-body",
+        { url: p.url, observed: `${f.canonicalOutsideHead} canonical link(s) parsed into <body>${next2 ? " \u2014 Next.js streaming metadata: verify with URL Inspection what Googlebot receives" : ""}` },
+        next2 ? { confidence: "heuristic" } : {}
+      );
+    }
     if (f.canonicalCount > 1) sink.emit("canonical.multiple", { url: p.url, observed: `${f.canonicalCount} canonical links` });
     const rawCanonicalHref = f.canonicalRaw;
     if (rawCanonicalHref && !/^https?:\/\//i.test(rawCanonicalHref)) sink.emit("canonical.relative", { url: p.url, observed: rawCanonicalHref });
@@ -20911,12 +20947,13 @@ function runTechnicalChecks(ctx, sink) {
     if (noDim.length) sink.emit("img.dimensions-missing", { url: p.url, observed: `${noDim.length} image(s) without width/height attributes` });
     const uncrawlable = f.links.filter((l) => l.uncrawlable && l.text);
     if (uncrawlable.length) sink.emit("links.uncrawlable", { url: p.url, observed: `${uncrawlable.length} link(s), e.g. "${uncrawlable[0].text}" href="${uncrawlable[0].href}"` });
-    const empty2 = f.links.filter((l) => l.internal && l.url && !l.text);
+    const named = new Set(f.links.filter((l) => l.text && l.url).map((l) => l.url));
+    const empty2 = f.links.filter((l) => l.internal && l.url && !l.text && !named.has(l.url));
     if (empty2.length) sink.emit("links.empty-anchor", { url: p.url, observed: `${empty2.length} link(s), e.g. ${empty2[0].href}` });
     const sessionLinks = f.links.filter((l) => l.internal && SESSION_PARAM.test(l.href));
     if (sessionLinks.length) sink.emit("url.session-params", { url: p.url, observed: sessionLinks[0].href });
     const errorish = /\b(404|not found|page not found|sayfa bulunamadı|nicht gefunden|introuvable|no encontrada)\b/i;
-    if (f.title && errorish.test(f.title) || f.headings.some((h) => h.level === 1 && errorish.test(h.text))) {
+    if (!noindex && (f.title && errorish.test(f.title) || f.headings.some((h) => h.level === 1 && errorish.test(h.text)))) {
       sink.emit("index.soft-404", { url: p.url, observed: f.title ?? "" });
     }
     if (p.data?.likelyClientRendered && !p.rendered) sink.emit("index.client-rendered", { url: p.url, observed: `${p.data.wordCount} words in raw HTML, ${p.data.scriptCount} scripts` });
@@ -20926,7 +20963,8 @@ function runTechnicalChecks(ctx, sink) {
       const mixed = f.subresources.filter((s) => /^http:\/\//i.test(s));
       if (mixed.length) sink.emit("https.mixed-content", { url: p.url, observed: `${mixed.length} resource(s), e.g. ${mixed[0]}` });
     }
-    if (p.timingMs > 800 && !p.redirects.length) sink.emit("perf.slow-ttfb", { url: p.url, observed: `${p.timingMs} ms (full response, single sample)` });
+    const ttfb = p.ttfbMs ?? p.timingMs;
+    if (ttfb > 800 && !p.redirects.length) sink.emit("perf.slow-ttfb", { url: p.url, observed: `TTFB ${ttfb} ms (single sample from the crawler's location; full response ${p.timingMs} ms)` });
     if (p.bytes > 10 * 1024 && !p.headers["content-encoding"]) sink.emit("perf.no-compression", { url: p.url, observed: `${Math.round(p.bytes / 1024)} KB uncompressed` });
     const path14 = new URL(p.finalUrl).pathname;
     if (path14.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
@@ -21006,7 +21044,7 @@ async function checkExternalLinks(ctx, sink, opts = {}) {
       const origin = new URL(u).origin;
       let robots = robotsCache.get(origin);
       if (!robots) robotsCache.set(origin, robots = await fetchRobots(origin, opts));
-      if (robots.state === "ok" && !robots.isAllowed(u, opts.robotsAgent ?? "Searvex")) {
+      if (robots.state === "ok" && !robots.isAllowed(u, opts.robotsAgent ?? "SearvexBot")) {
         result.skippedByRobots++;
         continue;
       }
@@ -21399,6 +21437,7 @@ Sources: ${rule.sources.map((s) => s.url).join(" ")}` },
 // src/rules/implemented.ts
 var IMPLEMENTED_RULES = /* @__PURE__ */ new Set([
   // crawlability / links / redirects
+  "http.start-url-error",
   "robots.unreachable",
   "robots.too-large",
   "robots.disallow-all",

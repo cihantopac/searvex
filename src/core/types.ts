@@ -84,6 +84,8 @@ export interface FetchResult {
   bodyBytes: number;
   truncated: boolean;
   timingMs: number;
+  /** Time to response headers of the final request (server responsiveness). */
+  ttfbMs?: number;
   contentType: string;
   error?: string;
 }

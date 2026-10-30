@@ -3,6 +3,28 @@
   "updated": "2026-10-30",
   "rules": [
     {
+      "id": "http.start-url-error",
+      "title": "Start URL is not reachable (4xx/5xx or network error)",
+      "category": "crawlability",
+      "severity": "critical",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "The URL the audit started from does not return a successful response. 4xx pages are not indexed and 5xx/network errors slow crawling and eventually drop URLs from the index. Almost every other result in this report is incomplete as a consequence.",
+      "fix": "Check that the URL is correct and publicly reachable (DNS, TLS, firewall/WAF rules for crawlers, deployment status). If the content moved, redirect permanently (301/308).",
+      "verify": "Fetch the URL and confirm a 200 response.",
+      "sources": [
+        {
+          "title": "Google: HTTP status codes, network and DNS errors",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/http-network-errors",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
       "id": "robots.unreachable",
       "title": "robots.txt returns a server error or is unreachable",
       "category": "crawlability",

@@ -74,6 +74,22 @@ describe('monitor diff', () => {
   });
 });
 
+describe('start URL errors', () => {
+  it('reports a critical finding when the start URL returns 404 (real-world: a removed demo site)', async () => {
+    const s = await startServer({});
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-404-'));
+    try {
+      const { report } = await auditWebsite(s.url + '/', { workspace: ws, crawl: { policy, delayMs: 0 }, probes: false });
+      const f = report.findings.find((x) => x.ruleId === 'http.start-url-error');
+      expect(f?.severity).toBe('critical');
+      expect(report.scores.overall).toBeLessThanOrEqual(75);
+    } finally {
+      await s.close();
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('crawler resilience', () => {
   it('resumes an interrupted crawl from its checkpoint without refetching', async () => {
     const routes: Record<string, Route> = {};

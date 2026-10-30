@@ -41,7 +41,7 @@ describe('website audit — synthetic e-commerce site', () => {
   });
 
   it('identifies itself with the Searvex user agent', () => {
-    expect(server.userAgents.every((ua) => ua.includes('Searvex/'))).toBe(true);
+    expect(server.userAgents.every((ua) => ua.includes('SearvexBot/'))).toBe(true);
   });
 
   it('attaches evidence and an official source to every finding', () => {

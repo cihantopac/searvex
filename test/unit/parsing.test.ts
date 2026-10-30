@@ -35,6 +35,10 @@ describe('robots.txt', () => {
     expect(robots.isAllowed('https://e.com/doc.pdf', 'Googlebot')).toBe(false);
     expect(robots.isAllowed('https://e.com/private/x', 'Googlebot')).toBe(true); // specific group replaces *
   });
+  it('applies a "Searvex" or "SearvexBot" group to the SearvexBot crawler', () => {
+    const r1 = parseRobots('https://e.com/robots.txt', 'User-agent: SearvexBot\nDisallow: /', 200);
+    expect(r1.isAllowed('https://e.com/', 'SearvexBot')).toBe(false);
+  });
   it('builds a bot matrix marking explicit groups', () => {
     const m = botAccessMatrix(robots, 'https://e.com/');
     expect(m.find((b) => b.bot.token === 'GPTBot')).toMatchObject({ homepageAllowed: false, explicit: true });
@@ -88,6 +92,19 @@ describe('HTML extraction', () => {
     const q = extractPage('<html><head><title>T</title><img src="x.png"><link rel="canonical" href="https://e.com/a"></head><body></body></html>', 'https://e.com/a');
     expect(q.canonical).toBeNull();
     expect(q.canonicalOutsideHead).toBe(1);
+  });
+  it('ignores <title> inside inline SVG (real-world MDN false positive)', () => {
+    const q = extractPage('<html><head><title>Doc</title></head><body><svg><title>Icon</title></svg><svg><title>Logo</title></svg></body></html>', 'https://e.com/');
+    expect(q.titleCount).toBe(1);
+    expect(q.title).toBe('Doc');
+  });
+  it('computes link names from aria-labelledby, img alt and declarative shadow DOM', () => {
+    const q = extractPage(
+      '<html><body><span id="l1">Read the post</span><a href="/a" aria-labelledby="l1"></a><a href="/b"><img src="x" alt="Logo"></a><my-card><template shadowrootmode="open"><p>Shadow text here</p></template></my-card></body></html>',
+      'https://e.com/',
+    );
+    expect(q.links.map((l) => l.text)).toEqual(['Read the post', 'Logo']);
+    expect(q.textContent).toContain('Shadow text here');
   });
   it('parses X-Robots-Tag with bot prefixes and unavailable_after', () => {
     const x = parseXRobotsTag('googlebot: noindex, nofollow, unavailable_after: 2027-01-01');

@@ -34,6 +34,12 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
   }
   if (!crawl.sitemap.sitemaps.length) sink.emit('robots.no-sitemap', { url: crawl.robots.url, observed: crawl.robots.sitemaps.length ? `Declared sitemap(s) failed: ${crawl.sitemap.issues.map((i) => i.message).join('; ')}` : 'No Sitemap directive; /sitemap.xml not available' });
 
+  // ---- start URL ----
+  const start = ctx.byUrl.get(crawl.startUrl);
+  if (start && !start.blockedByRobots && (start.error || start.status >= 400)) {
+    sink.emit('http.start-url-error', { url: crawl.startUrl, observed: start.error ?? `HTTP ${start.status}` });
+  }
+
   // ---- per page ----
   const titleMap = new Map<string, string[]>();
   const descMap = new Map<string, string[]>();
@@ -71,7 +77,16 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     if (p.inSitemap && !selfCanon) sink.emit('index.sitemap-non-canonical', { url: p.url, observed: `canonical → ${f.canonical}` });
 
     // Canonical
-    if (f.canonicalOutsideHead) sink.emit('canonical.in-body', { url: p.url, observed: `${f.canonicalOutsideHead} canonical link(s) parsed into <body>` });
+    if (f.canonicalOutsideHead) {
+      // Next.js (15.2+) streams metadata into <body> for user agents it does not classify as bots and
+      // serves it in <head> to known crawlers such as Googlebot, so Google may see a different result.
+      const next = (p.data?.generator ?? '') === 'next.js';
+      sink.emit(
+        'canonical.in-body',
+        { url: p.url, observed: `${f.canonicalOutsideHead} canonical link(s) parsed into <body>${next ? ' — Next.js streaming metadata: verify with URL Inspection what Googlebot receives' : ''}` },
+        next ? { confidence: 'heuristic' } : {},
+      );
+    }
     if (f.canonicalCount > 1) sink.emit('canonical.multiple', { url: p.url, observed: `${f.canonicalCount} canonical links` });
     const rawCanonicalHref = f.canonicalRaw;
     if (rawCanonicalHref && !/^https?:\/\//i.test(rawCanonicalHref)) sink.emit('canonical.relative', { url: p.url, observed: rawCanonicalHref });
@@ -110,14 +125,17 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     // Links
     const uncrawlable = f.links.filter((l) => l.uncrawlable && l.text);
     if (uncrawlable.length) sink.emit('links.uncrawlable', { url: p.url, observed: `${uncrawlable.length} link(s), e.g. "${uncrawlable[0]!.text}" href="${uncrawlable[0]!.href}"` });
-    const empty = f.links.filter((l) => l.internal && l.url && !l.text);
+    // Card pattern: an image link with empty alt next to a text link to the same URL is fine.
+    const named = new Set(f.links.filter((l) => l.text && l.url).map((l) => l.url));
+    const empty = f.links.filter((l) => l.internal && l.url && !l.text && !named.has(l.url));
     if (empty.length) sink.emit('links.empty-anchor', { url: p.url, observed: `${empty.length} link(s), e.g. ${empty[0]!.href}` });
     const sessionLinks = f.links.filter((l) => l.internal && SESSION_PARAM.test(l.href));
     if (sessionLinks.length) sink.emit('url.session-params', { url: p.url, observed: sessionLinks[0]!.href });
 
     // Soft 404 heuristic
     const errorish = /\b(404|not found|page not found|sayfa bulunamadı|nicht gefunden|introuvable|no encontrada)\b/i;
-    if ((f.title && errorish.test(f.title)) || f.headings.some((h) => h.level === 1 && errorish.test(h.text))) {
+    // A noindexed error page is already excluded from the index, so the soft-404 label adds nothing.
+    if (!noindex && ((f.title && errorish.test(f.title)) || f.headings.some((h) => h.level === 1 && errorish.test(h.text)))) {
       sink.emit('index.soft-404', { url: p.url, observed: f.title ?? '' });
     }
     if (p.data?.likelyClientRendered && !p.rendered) sink.emit('index.client-rendered', { url: p.url, observed: `${p.data.wordCount} words in raw HTML, ${p.data.scriptCount} scripts` });
@@ -131,7 +149,8 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     }
 
     // Performance (lab, single location)
-    if (p.timingMs > 800 && !p.redirects.length) sink.emit('perf.slow-ttfb', { url: p.url, observed: `${p.timingMs} ms (full response, single sample)` });
+    const ttfb = p.ttfbMs ?? p.timingMs;
+    if (ttfb > 800 && !p.redirects.length) sink.emit('perf.slow-ttfb', { url: p.url, observed: `TTFB ${ttfb} ms (single sample from the crawler's location; full response ${p.timingMs} ms)` });
     if (p.bytes > 10 * 1024 && !p.headers['content-encoding']) sink.emit('perf.no-compression', { url: p.url, observed: `${Math.round(p.bytes / 1024)} KB uncompressed` });
 
     // URL structure

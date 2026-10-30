@@ -1,5 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
-import { safeFetch, type FetchOptions } from '../net/fetcher.js';
+import { safeFetch, type FetchOptions, type HostRateLimiter } from '../net/fetcher.js';
 
 export interface SitemapUrl {
   loc: string;
@@ -78,7 +78,7 @@ export function parseSitemapXml(xml: string, source: string): { urls: SitemapUrl
 
 export async function collectSitemaps(
   seeds: string[],
-  opts: FetchOptions & { maxSitemaps?: number; maxUrls?: number } = {},
+  opts: FetchOptions & { maxSitemaps?: number; maxUrls?: number; limiter?: HostRateLimiter } = {},
 ): Promise<SitemapResult> {
   const maxSitemaps = opts.maxSitemaps ?? 50;
   const maxUrls = opts.maxUrls ?? 100000;
@@ -89,6 +89,11 @@ export async function collectSitemaps(
     const sm = queue.shift()!;
     if (seen.has(sm)) continue;
     seen.add(sm);
+    try {
+      await opts.limiter?.wait(new URL(sm).host);
+    } catch {
+      /* invalid URL: safeFetch reports it */
+    }
     const res = await safeFetch(sm, { ...opts, maxBytes: SITEMAP_MAX_BYTES });
     if (res.error || res.status !== 200) {
       result.issues.push({ sitemap: sm, message: res.error ?? `HTTP ${res.status}` });

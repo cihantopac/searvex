@@ -37,7 +37,7 @@ export const DEFAULT_CRAWL: CrawlOptions = {
   useSitemaps: true,
   policy: DEFAULT_POLICY,
   userAgent: DEFAULT_USER_AGENT,
-  robotsAgent: 'Searvex',
+  robotsAgent: 'SearvexBot',
   checkpointEvery: 25,
 };
 
@@ -49,6 +49,7 @@ export interface PageRecord {
   redirects: RedirectHop[];
   contentType: string;
   timingMs: number;
+  ttfbMs?: number;
   bytes: number;
   truncated: boolean;
   headers: Record<string, string>;
@@ -127,7 +128,8 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
   if (delay && delay > 0) limiter.setDelay(new URL(origin).host, Math.min(delay, 30) * 1000);
 
   const sitemapSeeds = robots.sitemaps.length ? robots.sitemaps : [new URL('/sitemap.xml', origin).toString()];
-  const sitemap: SitemapResult = opts.useSitemaps ? await collectSitemaps(sitemapSeeds, fetchOpts) : { sitemaps: [], urls: [], issues: [] };
+  // Sitemap downloads share the per-host politeness limiter with page fetches.
+  const sitemap: SitemapResult = opts.useSitemaps ? await collectSitemaps(sitemapSeeds, { ...fetchOpts, limiter }) : { sitemaps: [], urls: [], issues: [] };
   const sitemapSet = new Set(sitemap.urls.map((u) => normalizeUrl(u.loc)).filter((x): x is string => !!x));
 
   // Resume support
@@ -179,6 +181,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
       redirects: res.redirects,
       contentType: res.contentType,
       timingMs: res.timingMs,
+      ttfbMs: res.ttfbMs,
       bytes: res.bodyBytes,
       truncated: res.truncated,
       headers: pickHeaders(res.headers),

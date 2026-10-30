@@ -62,7 +62,9 @@ export function buildContext(crawl: CrawlResult): SiteContext {
   const htmlPages = crawl.pages.filter((p) => p.status === 200 && p.data && !p.redirects.length);
   const indexable = htmlPages.filter((p) => !isNoindex(p) && isSelfCanonical(p));
   const sitemapUrls = new Set(crawl.sitemap.urls.map((u) => normalizeUrl(u.loc)).filter((x): x is string => !!x));
-  const homepage = byUrl.get(crawl.startUrl);
+  // The site homepage (origin root), or the start URL when it is a root / locale root such as /en/.
+  const startPath = new URL(crawl.startUrl).pathname;
+  const homepage = byUrl.get(new URL('/', crawl.origin).toString()) ?? (/^\/([a-z]{2}(-[a-z]{2})?\/?)?$/i.test(startPath) ? byUrl.get(crawl.startUrl) : undefined);
   return { crawl, pages: crawl.pages, byUrl, inlinks, htmlPages, indexable, sitemapUrls, homepage };
 }
 
