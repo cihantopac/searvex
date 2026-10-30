@@ -55,6 +55,14 @@ describe('assertUrlAllowed', () => {
     expect(() => assertUrlAllowed(u, DEFAULT_POLICY)).toThrow();
   });
 
+  it('keeps link-local / cloud metadata blocked even with allowPrivate', () => {
+    const p = { ...DEFAULT_POLICY, allowPrivate: true };
+    expect(() => assertUrlAllowed('http://169.254.169.254/latest/meta-data/', p)).toThrow();
+    expect(() => assertUrlAllowed('http://[fe80::1]/', p)).toThrow();
+    expect(() => assertUrlAllowed('http://[::ffff:169.254.169.254]/', p)).toThrow();
+    expect(assertUrlAllowed('http://10.0.0.5/', p).hostname).toBe('10.0.0.5');
+  });
+
   it('allows public URLs and opt-in private targets', () => {
     expect(assertUrlAllowed('https://example.com/a', DEFAULT_POLICY).hostname).toBe('example.com');
     expect(assertUrlAllowed('http://127.0.0.1:3000/', { ...DEFAULT_POLICY, allowPrivate: true }).port).toBe('3000');
@@ -71,9 +79,9 @@ describe('safeFetch network guards', () => {
     const s = await startServer({ '/': { redirect: 'http://169.254.169.254/latest/meta-data/' } });
     try {
       const res = await safeFetch(s.url + '/', { policy: { ...DEFAULT_POLICY, allowPrivate: true } });
-      // allowPrivate permits loopback but link-local metadata is still private → allowed only with opt-in,
-      // so verify the hop was recorded and the second request was attempted under the same policy.
+      // allowPrivate permits the loopback test server, but the metadata hop stays blocked.
       expect(res.redirects[0]?.location).toBe('http://169.254.169.254/latest/meta-data/');
+      expect(res.error).toMatch(/Blocked/);
       const strict = await safeFetch(s.url + '/');
       expect(strict.error).toMatch(/Blocked/);
     } finally {

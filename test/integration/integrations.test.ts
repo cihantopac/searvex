@@ -116,6 +116,36 @@ describe('real-world regression fixtures (anonymised)', () => {
     }
   });
 
+  it('ignores template blocks inside <main> for near-duplicates but still finds real duplicates', async () => {
+    const sidebar = `<ul class="categories">${['Getting started', 'Rooms', 'Joining', 'Audio and video', 'Guest book', 'Chat', 'Accounts', 'Billing'].map((c) => `<li><a href="/help">${c}</a> 2 topics: open a room, share the link, approve guests</li>`).join('')}</ul>`;
+    const article = (t: string, body: string) => page({ title: t, head: '', body: `<main>${sidebar}<article><h1>${t}</h1><p>${body}</p></article></main>` });
+    // A realistic duplicated article: ~150 distinct words (not a repeated sentence).
+    const long = Array.from({ length: 150 }, (_, i) => `step${i} ${['open', 'share', 'copy', 'invite', 'approve', 'join'][i % 6]}`).join(' ');
+    const routes: Record<string, Route> = {
+      '/': { body: page({ title: 'Help', body: `<main>${sidebar}${['a', 'b', 'c', 'd', 'e', 'f'].map((x) => `<a href="/help/${x}">${x}</a>`).join(' ')}</main>` }) },
+      '/help/a': { body: article('Camera not working', 'Check browser permissions for the camera and reload the page; close other apps that use the camera.') },
+      '/help/b': { body: article('Screen sharing', 'Use the share button in the toolbar and choose a window or the entire screen to present.') },
+      '/help/c': { body: article('Guest approval', 'Guests wait in the lobby until the host approves them from the participants panel.') },
+      '/help/d': { body: article('Closed rooms', 'If a room is closed the link shows a notice; ask the host to reopen the room.') },
+      '/help/e': { body: article('Share a room', long) },
+      '/help/f': { body: article('Sharing rooms', long) },
+    };
+    const s = await startServer(routes);
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-tmpl-'));
+    try {
+      const { report } = await auditWebsite(s.url + '/', { workspace: ws, crawl: { policy, delayMs: 0, useSitemaps: false }, probes: false });
+      const nd = report.findings.find((f) => f.ruleId === 'content.near-duplicate' || f.ruleId === 'duplicate.content');
+      const pairs = (nd?.evidence ?? []).map((e) => `${new URL(e.url!).pathname} ${e.observed}`);
+      expect(pairs.length, JSON.stringify({ pairs, ids: report.findings.map((f) => f.ruleId), pages: report.inventory.pages.map((p) => [p.url, p.words, p.indexable]) })).toBe(1);
+      expect(pairs[0]).toMatch(/\/help\/e.*\/help\/f/);
+      // The hub page is mostly links: not reported as thin content.
+      expect(report.findings.find((f) => f.ruleId === 'content.low-text')?.evidence.map((e) => new URL(e.url!).pathname) ?? []).not.toContain('/');
+    } finally {
+      await s.close();
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
   it('explains duplicate titles produced by Inertia SSR', async () => {
     const s = await startServer({ '/': { body: '<!doctype html><html lang="en"><head><title>ACME</title><title data-inertia="">Home</title><meta name="viewport" content="width=device-width"></head><body><div id="app" data-page="{}"><h1>Home</h1></div></body></html>' } });
     const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-inertia-'));

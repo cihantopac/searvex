@@ -681,7 +681,7 @@ function classifyAddress(ip) {
 function isAddressAllowed(ip, policy) {
   const c = classifyAddress(ip);
   if (c === "public") return true;
-  if (c === "invalid" || c === "reserved") return false;
+  if (c === "invalid" || c === "reserved" || c === "link-local") return false;
   return policy.allowPrivate;
 }
 function assertUrlAllowed(raw, policy) {
@@ -1210,20 +1210,38 @@ async function createRenderer(policy, timeoutMs = 3e4) {
   }
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ userAgent: DEFAULT_USER_AGENT, serviceWorkers: "block", acceptDownloads: false, javaScriptEnabled: true });
+  const stats = { pages: 0, blockedRequests: 0, skippedResources: 0 };
   return {
+    stats,
     async render(url) {
       const page = await context.newPage();
+      page.on("popup", (p) => void p.close().catch(() => {
+      }));
+      stats.pages++;
+      let requests = 0;
       try {
         await page.route("**/*", async (route) => {
+          const req = route.request();
+          if (SKIPPED_RESOURCE_TYPES.has(req.resourceType())) {
+            stats.skippedResources++;
+            return route.abort();
+          }
+          if (++requests > MAX_REQUESTS_PER_PAGE) {
+            stats.blockedRequests++;
+            return route.abort();
+          }
           try {
-            const u = assertUrlAllowed(route.request().url(), policy);
+            const u = assertUrlAllowed(req.url(), policy);
             await assertResolvable(u.hostname, policy);
             return route.continue();
           } catch {
+            stats.blockedRequests++;
             return route.abort();
           }
         });
-        await page.goto(url, { waitUntil: "networkidle", timeout: timeoutMs });
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+        await page.waitForLoadState("networkidle", { timeout: 5e3 }).catch(() => {
+        });
         return { html: await page.content() };
       } catch (e) {
         return { html: "", error: e.message.split("\n")[0] };
@@ -1237,11 +1255,14 @@ async function createRenderer(policy, timeoutMs = 3e4) {
     }
   };
 }
+var SKIPPED_RESOURCE_TYPES, MAX_REQUESTS_PER_PAGE;
 var init_render = __esm({
   "src/crawl/render.ts"() {
     "use strict";
     init_ssrf();
     init_fetcher();
+    SKIPPED_RESOURCE_TYPES = /* @__PURE__ */ new Set(["image", "media", "font"]);
+    MAX_REQUESTS_PER_PAGE = 300;
   }
 });
 
@@ -15636,6 +15657,7 @@ function extractPage(html3, pageUrl) {
     textContent: textContent2.slice(0, 1e5),
     mainText: mainText.slice(0, 1e5),
     mainWordCount: countWords(mainText),
+    mainLinkWordCount: countWords(collapse(mainRoot.find("a").map((_, a) => $2(a).text()).get().join(" "))),
     wordCount,
     scriptCount,
     hasNoscriptContent,
@@ -20493,7 +20515,8 @@ function runContentChecks(ctx, sink) {
   const topTerms = [...df.entries()].filter(([, c]) => c >= Math.min(2, N) && c <= Math.max(2, N * 0.8)).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([term, n]) => ({ term, pages: n }));
   const utility = /\/(contact|login|signin|sign-in|register|signup|cart|checkout|account|search|404|privacy|terms|legal|cookie|impressum|iletisim|giris)(\/|$|\?)/i;
   for (const { p, f } of pages) {
-    if (f.mainWordCount < 100 && !utility.test(new URL(p.finalUrl).pathname) && p !== ctx.homepage) {
+    const linkDensity = f.mainWordCount ? (f.mainLinkWordCount ?? 0) / f.mainWordCount : 0;
+    if (f.mainWordCount < 100 && linkDensity < 0.5 && !utility.test(new URL(p.finalUrl).pathname) && p !== ctx.homepage) {
       sink.emit("content.low-text", { url: p.url, observed: `${f.mainWordCount} words of main content (${f.wordCount} incl. navigation/footer)` });
     }
   }
@@ -20507,14 +20530,42 @@ function runContentChecks(ctx, sink) {
   }
   const exactDuplicates = [...byHash.values()].filter((g) => g.length > 1);
   for (const g of exactDuplicates) sink.emit("duplicate.content", { url: g[0], observed: `identical text on ${g.length} URLs: ${g.slice(0, 5).join(", ")}` });
-  const sh = /* @__PURE__ */ new Map();
-  const sigs = /* @__PURE__ */ new Map();
+  const allSh = /* @__PURE__ */ new Map();
   for (const { p, f } of pages) {
     const words = f.mainText.toLowerCase().split(/\s+/).filter(Boolean);
-    if (words.length < 50) continue;
-    const s = shingles(words);
-    sh.set(p.url, s);
-    sigs.set(p.url, minhash(s));
+    if (words.length >= 50) allSh.set(p.url, shingles(words));
+  }
+  const groupOf = (url) => {
+    const segs = new URL(url).pathname.split("/").filter(Boolean);
+    const locale = segs[0] && /^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0]) ? segs.shift() : "";
+    return `${locale}/${segs[0] ?? ""}`;
+  };
+  const siteDf = /* @__PURE__ */ new Map();
+  const groupDf = /* @__PURE__ */ new Map();
+  const groupSize = /* @__PURE__ */ new Map();
+  for (const [url, s] of allSh) {
+    const g = groupOf(url);
+    groupSize.set(g, (groupSize.get(g) ?? 0) + 1);
+    const gm = groupDf.get(g) ?? /* @__PURE__ */ new Map();
+    groupDf.set(g, gm);
+    for (const x of s) {
+      siteDf.set(x, (siteDf.get(x) ?? 0) + 1);
+      gm.set(x, (gm.get(x) ?? 0) + 1);
+    }
+  }
+  const siteMin = Math.max(3, Math.ceil(allSh.size * 0.3));
+  const sh = /* @__PURE__ */ new Map();
+  const sigs = /* @__PURE__ */ new Map();
+  for (const [url, s] of allSh) {
+    const g = groupOf(url);
+    const gSize = groupSize.get(g) ?? 0;
+    const gMin = Math.max(3, Math.ceil(gSize * 0.3));
+    const gm = groupDf.get(g);
+    const isBoilerplate = (x) => allSh.size >= 5 && (siteDf.get(x) ?? 0) >= siteMin || gSize >= 5 && (gm.get(x) ?? 0) >= gMin;
+    const unique = new Set([...s].filter((x) => !isBoilerplate(x)));
+    if (unique.size < 20) continue;
+    sh.set(url, unique);
+    sigs.set(url, minhash(unique));
   }
   const buckets = /* @__PURE__ */ new Map();
   for (const [url, sig] of sigs) {
@@ -20926,7 +20977,7 @@ function classifyBusiness(ctx, byType, sd) {
   if (has3("SoftwareApplication") || has3("WebApplication") || has3("MobileApplication")) add2("SaaS / software product", 5, "SoftwareApplication/WebApplication structured data");
   if (linked(/\/(login|signin|sign-in|register|signup|sign-up|giris|kayit|app)(\/|\s|$)/)) add2("SaaS / software product", 2, "login/sign-up links");
   if (n("pricing")) add2("SaaS / software product", 2, "pricing page");
-  if (n("docs") >= 3) add2("SaaS / software product", 1, `${n("docs")} docs/help pages`);
+  if (n("docs") >= 3 && score["SaaS / software product"]) add2("SaaS / software product", 1, `${n("docs")} docs/help pages`);
   if (has3("Product") || has3("ProductGroup")) add2("e-commerce", 4, "Product structured data");
   if (n("product") >= 3) add2("e-commerce", 3, `${n("product")} product pages`);
   if (n("category") >= 2) add2("e-commerce", 1, `${n("category")} category pages`);
@@ -20934,6 +20985,8 @@ function classifyBusiness(ctx, byType, sd) {
   const articles = n("blog-post");
   const pages = Math.max(1, Object.values(byType).reduce((a, b) => a + b, 0));
   if (articles / pages > 0.5) add2("publisher / blog", 4, `${articles} of ${pages} pages are articles`);
+  const articleSd = Math.max(sd.get("Article")?.pages ?? 0, sd.get("BlogPosting")?.pages ?? 0, sd.get("NewsArticle")?.pages ?? 0);
+  if (articles / pages > 0.2 || articleSd / pages > 0.2) add2("publisher / blog", 2, `${Math.max(articles, articleSd)} article pages (${Math.round(Math.max(articles, articleSd) / pages * 100)}%)`);
   if (has3("NewsArticle") || has3("BlogPosting")) add2("publisher / blog", 1, "Article structured data");
   if (n("service") >= 2 || has3("Service") || has3("ProfessionalService")) add2("service business", 3, "service pages / Service structured data");
   if (has3("LocalBusiness") || [...sd.keys()].some((t) => /Restaurant|Store|Dentist|Clinic|Hotel|Agency/.test(t))) add2("local business", 4, "LocalBusiness structured data");

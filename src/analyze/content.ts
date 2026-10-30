@@ -95,7 +95,9 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
   // Low text (heuristic; excludes utility pages).
   const utility = /\/(contact|login|signin|sign-in|register|signup|cart|checkout|account|search|404|privacy|terms|legal|cookie|impressum|iletisim|giris)(\/|$|\?)/i;
   for (const { p, f } of pages) {
-    if (f.mainWordCount < 100 && !utility.test(new URL(p.finalUrl).pathname) && p !== ctx.homepage) {
+    // Hub pages (indexes, category lists) are mostly links by design: not "thin content".
+    const linkDensity = f.mainWordCount ? (f.mainLinkWordCount ?? 0) / f.mainWordCount : 0;
+    if (f.mainWordCount < 100 && linkDensity < 0.5 && !utility.test(new URL(p.finalUrl).pathname) && p !== ctx.homepage) {
       sink.emit('content.low-text', { url: p.url, observed: `${f.mainWordCount} words of main content (${f.wordCount} incl. navigation/footer)` });
     }
   }
@@ -113,15 +115,48 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
   for (const g of exactDuplicates) sink.emit('duplicate.content', { url: g[0], observed: `identical text on ${g.length} URLs: ${g.slice(0, 5).join(', ')}` });
 
   // Near-duplicates: MinHash + LSH banding (16 bands × 4 rows), then exact Jaccard on candidates.
-  const sh = new Map<string, Set<string>>();
-  const sigs = new Map<string, Uint32Array>();
+  // Template (boilerplate) removal: shingles that recur on a large share of pages — sidebars, category
+  // lists, CTAs inside <main> — are dropped before comparing, so pages are judged on unique content.
+  const allSh = new Map<string, Set<string>>();
   for (const { p, f } of pages) {
     // Compare main content only: shared navigation/footer would make short pages look identical.
     const words = f.mainText.toLowerCase().split(/\s+/).filter(Boolean);
-    if (words.length < 50) continue;
-    const s = shingles(words);
-    sh.set(p.url, s);
-    sigs.set(p.url, minhash(s));
+    if (words.length >= 50) allSh.set(p.url, shingles(words));
+  }
+  // Templates live per section and language (e.g. a help-centre sidebar on /help/* and another on /en/help/*),
+  // so boilerplate frequency is counted within each locale+section group as well as site-wide.
+  const groupOf = (url: string) => {
+    const segs = new URL(url).pathname.split('/').filter(Boolean);
+    const locale = segs[0] && /^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0]) ? segs.shift()! : '';
+    return `${locale}/${segs[0] ?? ''}`;
+  };
+  const siteDf = new Map<string, number>();
+  const groupDf = new Map<string, Map<string, number>>();
+  const groupSize = new Map<string, number>();
+  for (const [url, s] of allSh) {
+    const g = groupOf(url);
+    groupSize.set(g, (groupSize.get(g) ?? 0) + 1);
+    const gm = groupDf.get(g) ?? new Map<string, number>();
+    groupDf.set(g, gm);
+    for (const x of s) {
+      siteDf.set(x, (siteDf.get(x) ?? 0) + 1);
+      gm.set(x, (gm.get(x) ?? 0) + 1);
+    }
+  }
+  const siteMin = Math.max(3, Math.ceil(allSh.size * 0.3));
+  const sh = new Map<string, Set<string>>();
+  const sigs = new Map<string, Uint32Array>();
+  for (const [url, s] of allSh) {
+    const g = groupOf(url);
+    const gSize = groupSize.get(g) ?? 0;
+    const gMin = Math.max(3, Math.ceil(gSize * 0.3));
+    const gm = groupDf.get(g)!;
+    const isBoilerplate = (x: string) => (allSh.size >= 5 && (siteDf.get(x) ?? 0) >= siteMin) || (gSize >= 5 && (gm.get(x) ?? 0) >= gMin);
+    const unique = new Set([...s].filter((x) => !isBoilerplate(x)));
+    // Too little unique text left to compare meaningfully (thin pages are covered by content.low-text).
+    if (unique.size < 20) continue;
+    sh.set(url, unique);
+    sigs.set(url, minhash(unique));
   }
   const buckets = new Map<string, string[]>();
   for (const [url, sig] of sigs) {

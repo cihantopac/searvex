@@ -191,7 +191,9 @@ export function classifyBusiness(ctx: SiteContext, byType: Record<string, number
   if (has('SoftwareApplication') || has('WebApplication') || has('MobileApplication')) add('SaaS / software product', 5, 'SoftwareApplication/WebApplication structured data');
   if (linked(/\/(login|signin|sign-in|register|signup|sign-up|giris|kayit|app)(\/|\s|$)/)) add('SaaS / software product', 2, 'login/sign-up links');
   if (n('pricing')) add('SaaS / software product', 2, 'pricing page');
-  if (n('docs') >= 3) add('SaaS / software product', 1, `${n('docs')} docs/help pages`);
+  // Docs/help pages support a software classification but are not evidence on their own (publishers
+  // and agencies have help sections too).
+  if (n('docs') >= 3 && score['SaaS / software product']) add('SaaS / software product', 1, `${n('docs')} docs/help pages`);
 
   if (has('Product') || has('ProductGroup')) add('e-commerce', 4, 'Product structured data');
   if (n('product') >= 3) add('e-commerce', 3, `${n('product')} product pages`);
@@ -201,6 +203,8 @@ export function classifyBusiness(ctx: SiteContext, byType: Record<string, number
   const articles = n('blog-post');
   const pages = Math.max(1, Object.values(byType).reduce((a, b) => a + b, 0));
   if (articles / pages > 0.5) add('publisher / blog', 4, `${articles} of ${pages} pages are articles`);
+  const articleSd = Math.max(sd.get('Article')?.pages ?? 0, sd.get('BlogPosting')?.pages ?? 0, sd.get('NewsArticle')?.pages ?? 0);
+  if (articles / pages > 0.2 || articleSd / pages > 0.2) add('publisher / blog', 2, `${Math.max(articles, articleSd)} article pages (${Math.round((Math.max(articles, articleSd) / pages) * 100)}%)`);
   if (has('NewsArticle') || has('BlogPosting')) add('publisher / blog', 1, 'Article structured data');
 
   if (n('service') >= 2 || has('Service') || has('ProfessionalService')) add('service business', 3, 'service pages / Service structured data');

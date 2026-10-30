@@ -66,6 +66,8 @@ export interface PageData {
   /** Main content text: <main>/[role=main]/<article>, else body without header/nav/footer/aside. */
   mainText: string;
   mainWordCount: number;
+  /** Words inside links within the main content (link density = mainLinkWordCount / mainWordCount). */
+  mainLinkWordCount: number;
   /** Bytes of inline <script> + count of external scripts: a rough JS dependence signal. */
   scriptCount: number;
   hasNoscriptContent: boolean;
@@ -331,6 +333,7 @@ export function extractPage(html: string, pageUrl: string): PageData {
     textContent: textContent.slice(0, 100000),
     mainText: mainText.slice(0, 100000),
     mainWordCount: countWords(mainText),
+    mainLinkWordCount: countWords(collapse(mainRoot.find('a').map((_, a) => $(a).text()).get().join(' '))),
     wordCount,
     scriptCount,
     hasNoscriptContent,

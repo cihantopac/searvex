@@ -19,11 +19,13 @@ export interface Renderer {
 interface PwPage {
   route: (pattern: string, handler: (route: PwRoute) => unknown) => Promise<void>;
   goto: (url: string, o: object) => Promise<unknown>;
+  waitForLoadState: (state: string, o: object) => Promise<void>;
   content: () => Promise<string>;
   close: () => Promise<void>;
+  on: (ev: 'popup', fn: (p: PwPage) => void) => void;
 }
 interface PwRoute {
-  request: () => { url: () => string };
+  request: () => { url: () => string; resourceType: () => string };
   abort: () => Promise<void>;
   continue: () => Promise<void>;
 }
@@ -43,7 +45,17 @@ async function assertResolvable(host: string, policy: NetPolicy): Promise<void> 
   if (addrs.some((a) => !isAddressAllowed(a.address, policy))) throw new Error(`Blocked address for ${h}`);
 }
 
-export async function createRenderer(policy: NetPolicy, timeoutMs = 30000): Promise<Renderer> {
+export interface RenderStats {
+  pages: number;
+  blockedRequests: number;
+  skippedResources: number;
+}
+
+/** Resource types that never affect the indexable DOM; skipping them saves bandwidth and time. */
+const SKIPPED_RESOURCE_TYPES = new Set(['image', 'media', 'font']);
+const MAX_REQUESTS_PER_PAGE = 300;
+
+export async function createRenderer(policy: NetPolicy, timeoutMs = 30000): Promise<Renderer & { stats: RenderStats }> {
   let chromium: { launch: (o: object) => Promise<PwBrowser> };
   try {
     const modName = 'playwright';
@@ -53,20 +65,39 @@ export async function createRenderer(policy: NetPolicy, timeoutMs = 30000): Prom
   }
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ userAgent: DEFAULT_USER_AGENT, serviceWorkers: 'block', acceptDownloads: false, javaScriptEnabled: true });
+  const stats: RenderStats = { pages: 0, blockedRequests: 0, skippedResources: 0 };
   return {
+    stats,
     async render(url: string) {
       const page = await context.newPage();
+      // Scripts may open popups/new windows; close them immediately (only this page's popups).
+      page.on('popup', (p) => void p.close().catch(() => {}));
+      stats.pages++;
+      let requests = 0;
       try {
         await page.route('**/*', async (route) => {
+          const req = route.request();
+          if (SKIPPED_RESOURCE_TYPES.has(req.resourceType())) {
+            stats.skippedResources++;
+            return route.abort();
+          }
+          if (++requests > MAX_REQUESTS_PER_PAGE) {
+            stats.blockedRequests++;
+            return route.abort();
+          }
           try {
-            const u = assertUrlAllowed(route.request().url(), policy);
+            const u = assertUrlAllowed(req.url(), policy);
             await assertResolvable(u.hostname, policy);
             return route.continue();
           } catch {
+            stats.blockedRequests++;
             return route.abort();
           }
         });
-        await page.goto(url, { waitUntil: 'networkidle', timeout: timeoutMs });
+        // Wait for the DOM, then give scripts a bounded window to settle: sites with long-polling or
+        // streaming connections never reach "networkidle".
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+        await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
         return { html: await page.content() };
       } catch (e) {
         return { html: '', error: (e as Error).message.split('\n')[0] };

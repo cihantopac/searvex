@@ -9,7 +9,7 @@ import { isIP } from 'node:net';
  */
 
 export interface NetPolicy {
-  /** Allow loopback / private / link-local targets. Off by default; tests and local dev servers opt in. */
+  /** Allow loopback and private (RFC 1918, CGNAT, ULA) targets. Off by default; local dev servers opt in. Link-local is never allowed. */
   allowPrivate: boolean;
   /** Allowed URL schemes. */
   schemes: ReadonlyArray<string>;
@@ -115,7 +115,9 @@ export function classifyAddress(ip: string): AddressClass {
 export function isAddressAllowed(ip: string, policy: NetPolicy): boolean {
   const c = classifyAddress(ip);
   if (c === 'public') return true;
-  if (c === 'invalid' || c === 'reserved') return false;
+  // Link-local (169.254.0.0/16, fe80::/10) hosts cloud metadata services (e.g. 169.254.169.254); auditing a
+  // local dev server never needs it, so it stays blocked even with allowPrivate.
+  if (c === 'invalid' || c === 'reserved' || c === 'link-local') return false;
   return policy.allowPrivate;
 }
 
