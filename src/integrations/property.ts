@@ -128,15 +128,52 @@ export function propertyForExport(raw: string | undefined, pageUrls: string[] | 
   if (raw) {
     const p = parseProperty(raw);
     if (urls.length) {
-      const inside = urls.filter((u) => urlInProperty(u, p)).length;
-      if (inside / urls.length < MIN_COVERAGE) throw new PropertyError(`The export's pages (${hosts.slice(0, 3).map((h) => h.host).join(', ')}) do not belong to the ${describeProperty(p)}. Check that you exported the right property.`);
+      // Search Console exports contain only URLs of their own property, so a single page outside the stated
+      // property means the export comes from another (usually broader) property and its totals would be
+      // attributed to the wrong scope.
+      const outside = urls.filter((u) => !urlInProperty(u, p));
+      if (outside.length === urls.length) throw new PropertyError(`The export's pages (${hosts.slice(0, 3).map((h) => h.host).join(', ')}) do not belong to the ${describeProperty(p)}. Check that you exported the right property.`);
+      if (outside.length) {
+        let hint = '';
+        try {
+          hint = ` It looks like an export of ${propertyForExport(undefined, urls)?.raw ?? 'another property'}.`;
+        } catch {
+          /* several sites: no hint */
+        }
+        throw new PropertyError(`${outside.length} of ${urls.length} pages in the export are outside the ${describeProperty(p)} (e.g. ${outside[0]}), so it was not exported from that property.${hint}`);
+      }
     }
     return p;
   }
   if (!hosts.length) return undefined;
-  const total = hosts.reduce((a, h) => a + h.pages, 0);
-  if (hosts.length > 1 && hosts[0]!.pages / total < 0.9) throw new PropertyError(`The export contains pages from several hosts (${hosts.slice(0, 5).map((h) => h.host).join(', ')}): pass --property (e.g. sc-domain:example.com).`);
-  return parseProperty(`https://${hosts[0]!.host}/`, { anyProtocol: true });
+  if (hosts.length === 1) return parseProperty(`https://${hosts[0]!.host}/`, { anyProtocol: true });
+  // A URL-prefix property covers exactly one host, so pages of several hosts can only come from a domain
+  // property: its totals include every subdomain, and the scope must say so.
+  const domain = commonDomain(hosts.map((h) => h.host));
+  if (!domain) throw new PropertyError(`The export contains pages from several sites (${hosts.slice(0, 5).map((h) => h.host).join(', ')}): pass --property (e.g. sc-domain:example.com).`);
+  return parseProperty(`sc-domain:${domain}`);
+}
+
+/** Second-level labels under country-code TLDs that are registries, not sites (com.tr, co.uk, org.au …). */
+const REGISTRY_SLD = new Set(['ac', 'av', 'bbs', 'bel', 'biz', 'co', 'com', 'dr', 'edu', 'gen', 'gov', 'info', 'k12', 'ltd', 'mil', 'name', 'ne', 'net', 'nom', 'or', 'org', 'plc', 'pol', 'sch', 'tel', 'tv', 'web']);
+
+/**
+ * Longest common DNS suffix of `hosts` that is a registrable domain (`shop.example.com` + `example.com` →
+ * `example.com`), or null when the hosts only share a public suffix (`a.com.tr` + `b.com.tr`). Without a full
+ * public-suffix list this is conservative: ambiguous cases return null and ask for --property.
+ */
+export function commonDomain(hosts: string[]): string | null {
+  const split = hosts.map((h) => h.toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '').split('.').reverse());
+  const common: string[] = [];
+  for (let i = 0; ; i++) {
+    const label = split[0]![i];
+    if (label === undefined || !split.every((s) => s[i] === label)) break;
+    common.push(label);
+  }
+  if (common.length < 2) return null;
+  const [tld, sld] = common;
+  if (common.length === 2 && tld!.length === 2 && REGISTRY_SLD.has(sld!)) return null;
+  return common.reverse().join('.');
 }
 
 function safeHost(url: string): string | null {

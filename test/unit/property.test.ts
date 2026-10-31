@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { matchAuditToProperty, parseProperty, selectAuditForProperty, urlInProperty } from '../../src/integrations/property.js';
+import { commonDomain, matchAuditToProperty, parseProperty, propertyForExport, selectAuditForProperty, urlInProperty } from '../../src/integrations/property.js';
 import { writeAudit } from '../helpers/search-data.js';
 
 describe('search property scope', () => {
@@ -67,5 +67,23 @@ describe('selectAuditForProperty (multi-site workspace)', () => {
     expect(() => selectAuditForProperty(ws, 'latest', parseProperty('sc-domain:alpha.example'))).toThrow(/Ambiguous/);
     // An explicit run id resolves the ambiguity.
     expect(selectAuditForProperty(ws, 'run-20260103-000000-cccccc', parseProperty('sc-domain:alpha.example')).runId).toBe('run-20260103-000000-cccccc');
+  });
+});
+
+describe('property of an export with several hosts (real Turkish domain-property export, 2026-11-01)', () => {
+  it('pages of several subdomains mean a domain property, not the most common host', () => {
+    const pages = ['https://example.com.tr/', 'https://example.com.tr/a', 'https://www.example.com.tr/', 'https://crm.example.com.tr/login', 'https://dut.example.com.tr/'];
+    const p = propertyForExport(undefined, pages)!;
+    expect(p.kind).toBe('domain');
+    expect(p.raw).toBe('sc-domain:example.com.tr');
+    expect(propertyForExport(undefined, ['https://example.com/', 'http://example.com/x'])).toMatchObject({ kind: 'url-prefix', host: 'example.com' });
+  });
+
+  it('never merges sites that only share a public suffix', () => {
+    expect(commonDomain(['a.com.tr', 'b.com.tr'])).toBeNull();
+    expect(commonDomain(['shop.a.co.uk', 'a.co.uk'])).toBe('a.co.uk');
+    expect(commonDomain(['a.example', 'b.other'])).toBeNull();
+    expect(commonDomain(['blog.example.com', 'example.com:8443'])).toBe('example.com');
+    expect(() => propertyForExport(undefined, ['https://a.com.tr/', 'https://b.com.tr/'])).toThrow(/several sites/);
   });
 });

@@ -84,7 +84,7 @@ describe('monitor --import property isolation', () => {
   it('rejects a pages table from several hosts without --property', async () => {
     const f = csv('mixed.csv', pagesCsv([`${server.url}/`, 'https://other.example/', 'https://third.example/']));
     expect(await run('--import', f)).toBe(2);
-    expect(stderr.join('\n')).toMatch(/several hosts/);
+    expect(stderr.join('\n')).toMatch(/several sites/);
   });
 
   it('rejects an explicit baseline that is an audit of another website', async () => {

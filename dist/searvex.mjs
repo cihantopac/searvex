@@ -39695,15 +39695,38 @@ function propertyForExport(raw, pageUrls) {
   if (raw) {
     const p = parseProperty(raw);
     if (urls.length) {
-      const inside = urls.filter((u) => urlInProperty(u, p)).length;
-      if (inside / urls.length < MIN_COVERAGE) throw new PropertyError(`The export's pages (${hosts.slice(0, 3).map((h) => h.host).join(", ")}) do not belong to the ${describeProperty(p)}. Check that you exported the right property.`);
+      const outside = urls.filter((u) => !urlInProperty(u, p));
+      if (outside.length === urls.length) throw new PropertyError(`The export's pages (${hosts.slice(0, 3).map((h) => h.host).join(", ")}) do not belong to the ${describeProperty(p)}. Check that you exported the right property.`);
+      if (outside.length) {
+        let hint = "";
+        try {
+          hint = ` It looks like an export of ${propertyForExport(void 0, urls)?.raw ?? "another property"}.`;
+        } catch {
+        }
+        throw new PropertyError(`${outside.length} of ${urls.length} pages in the export are outside the ${describeProperty(p)} (e.g. ${outside[0]}), so it was not exported from that property.${hint}`);
+      }
     }
     return p;
   }
   if (!hosts.length) return void 0;
-  const total = hosts.reduce((a, h) => a + h.pages, 0);
-  if (hosts.length > 1 && hosts[0].pages / total < 0.9) throw new PropertyError(`The export contains pages from several hosts (${hosts.slice(0, 5).map((h) => h.host).join(", ")}): pass --property (e.g. sc-domain:example.com).`);
-  return parseProperty(`https://${hosts[0].host}/`, { anyProtocol: true });
+  if (hosts.length === 1) return parseProperty(`https://${hosts[0].host}/`, { anyProtocol: true });
+  const domain = commonDomain(hosts.map((h) => h.host));
+  if (!domain) throw new PropertyError(`The export contains pages from several sites (${hosts.slice(0, 5).map((h) => h.host).join(", ")}): pass --property (e.g. sc-domain:example.com).`);
+  return parseProperty(`sc-domain:${domain}`);
+}
+var REGISTRY_SLD = /* @__PURE__ */ new Set(["ac", "av", "bbs", "bel", "biz", "co", "com", "dr", "edu", "gen", "gov", "info", "k12", "ltd", "mil", "name", "ne", "net", "nom", "or", "org", "plc", "pol", "sch", "tel", "tv", "web"]);
+function commonDomain(hosts) {
+  const split = hosts.map((h) => h.toLowerCase().replace(/:\d+$/, "").replace(/\.$/, "").split(".").reverse());
+  const common = [];
+  for (let i = 0; ; i++) {
+    const label = split[0][i];
+    if (label === void 0 || !split.every((s) => s[i] === label)) break;
+    common.push(label);
+  }
+  if (common.length < 2) return null;
+  const [tld, sld] = common;
+  if (common.length === 2 && tld.length === 2 && REGISTRY_SLD.has(sld)) return null;
+  return common.reverse().join(".");
 }
 function safeHost(url) {
   try {
