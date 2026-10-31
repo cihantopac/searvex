@@ -55,10 +55,10 @@ Competitor research and differentiation notes: [docs/research/competitors-2026-1
 
 ## Install
 
-Requires **Node.js ≥ 20.10** (Windows, macOS, Linux).
+Requires **Node.js ≥ 20.10** (Windows, macOS, Linux). The npm package is `searvex-seo`; the command it installs is `searvex`.
 
 ```bash
-npm install -g searvex
+npm install -g searvex-seo
 ```
 
 ```bash
