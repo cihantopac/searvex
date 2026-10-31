@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Searvex 0.7.0 — Apache-2.0 — https://github.com/cihantopac/searvex
+// Searvex 1.0.0 — Apache-2.0 — https://github.com/cihantopac/searvex
 import { createRequire as __searvexCreateRequire } from 'node:module';
 const require = __searvexCreateRequire(import.meta.url);
 var __create = Object.create;
@@ -930,7 +930,7 @@ var init_fetcher = __esm({
   "src/net/fetcher.ts"() {
     "use strict";
     init_ssrf();
-    SEARVEX_VERSION = "0.7.0";
+    SEARVEX_VERSION = "1.0.0";
     DEFAULT_USER_AGENT = `Mozilla/5.0 (compatible; SearvexBot/${SEARVEX_VERSION}; +https://github.com/cihantopac/searvex)`;
     DEFAULTS = {
       timeoutMs: 15e3,
@@ -40811,7 +40811,7 @@ function renderResearchMarkdown(r) {
   L.push("## Site profiles", "", "| Site | Pages | Model (heuristic) | Main page types | Languages | Structured data |", "|---|---|---|---|---|---|", row(r.target), ...r.competitors.map(row), "");
   L.push("## Target topics", "", r.target.topTerms.slice(0, 30).map(md).join(", ") || "\u2014", "");
   if (r.competitors.length) {
-    L.push("## Content gaps (competitor topics missing on target)", "");
+    L.push("## Content gaps (competitor topics missing on target)", "", "_Hypotheses from competitor coverage, not verified demand: confirm with Search Console data (`searvex gsc report` / `gsc import`) or your own market knowledge before investing._", "");
     L.push(r.gaps.topics.length ? r.gaps.topics.map((t) => `- **${md(t.term)}** \u2014 prominent on ${t.competitors}/${r.competitors.length} competitors`).join("\n") : "_No consistent topic gaps found._", "");
     L.push("## Page-type gaps", "");
     L.push(r.gaps.pageTypes.length ? r.gaps.pageTypes.map((t) => `- **${t.type}** pages exist on ${t.competitors}/${r.competitors.length} competitors`).join("\n") : "_No page-type gaps._", "");

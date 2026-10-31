@@ -70,7 +70,7 @@ export function renderResearchMarkdown(r: ResearchReport): string {
   L.push('## Site profiles', '', '| Site | Pages | Model (heuristic) | Main page types | Languages | Structured data |', '|---|---|---|---|---|---|', row(r.target), ...r.competitors.map(row), '');
   L.push('## Target topics', '', r.target.topTerms.slice(0, 30).map(md).join(', ') || '—', '');
   if (r.competitors.length) {
-    L.push('## Content gaps (competitor topics missing on target)', '');
+    L.push('## Content gaps (competitor topics missing on target)', '', '_Hypotheses from competitor coverage, not verified demand: confirm with Search Console data (`searvex gsc report` / `gsc import`) or your own market knowledge before investing._', '');
     L.push(r.gaps.topics.length ? r.gaps.topics.map((t) => `- **${md(t.term)}** — prominent on ${t.competitors}/${r.competitors.length} competitors`).join('\n') : '_No consistent topic gaps found._', '');
     L.push('## Page-type gaps', '');
     L.push(r.gaps.pageTypes.length ? r.gaps.pageTypes.map((t) => `- **${t.type}** pages exist on ${t.competitors}/${r.competitors.length} competitors`).join('\n') : '_No page-type gaps._', '');

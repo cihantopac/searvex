@@ -1,6 +1,6 @@
 # Quality criteria, test results & benchmarks
 
-Last updated: 2026-10-30 (v0.7.0). Environment: macOS (Apple M4), Node 22.23.2; CI: Linux, macOS, Windows × Node 20/22/24 + Playwright job.
+Last updated: 2026-11-01 (v1.0.0). Environment: macOS (Apple M4), Node 22.23.2; CI: Linux, macOS, Windows × Node 20/22/24 + Playwright job.
 
 ## Criteria (definition of done)
 
@@ -19,7 +19,7 @@ Last updated: 2026-10-30 (v0.7.0). Environment: macOS (Apple M4), Node 22.23.2; 
 
 ## Automated tests
 
-`npm test` — automated tests across unit, integration and E2E files (count printed by the run; 282 at v0.7.0) (unit, integration, Playwright rendering, E2E on the bundled CLI).
+`npm test` — automated tests across unit, integration and E2E files (count printed by the run; 282 at v0.7.0, 351 at v1.0.0) (unit, integration, Playwright rendering, E2E on the bundled CLI).
 
 | Area | What is tested |
 |---|---|

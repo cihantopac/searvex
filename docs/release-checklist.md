@@ -40,8 +40,8 @@ supported) rather than delaying the release — owner decision 2026-10-31. Marke
 | S9 | Optimizer: line endings and file modes preserved | ✅ | CRLF and permission-bit tests |
 | S10 | Credentials never appear in logs, reports or run directories | ✅ | `gsc.test.ts` leak scan: all console output + every run file of an authorised session; 0 occurrences |
 | S11 | Credential storage reviewed (file 0600 + OS keychain option) | ✅ | opt-in keychain via OS tools, no new dependencies; `credentials.test.ts`; real macOS Keychain run locally; real DPAPI in Windows CI |
-| S12 | Rule base re-verified against current official sources; heuristics labelled | 🔄 | `rules check-sources` run + manual review of changed sources |
-| S13 | Dependency audit and licence check clean | ⬜ | `npm audit --omit=dev`, licence list in the release notes |
+| S12 | Rule base re-verified against current official sources; heuristics labelled | ✅ | `rules check-sources` 2026-11-01: 64 sources, 0 need review (one bot challenge, previous verified snapshot kept); Google's hreflang language-code wording re-read and the rule adjusted (quality.md round 8); 90 rules, 0 validation errors |
+| S13 | Dependency audit and licence check clean | ✅ | `npm audit` (runtime and dev): 0 vulnerabilities; 36 bundled runtime packages, all MIT/ISC/BSD-2-Clause; licence texts in `THIRD_PARTY_NOTICES.md` (CI checks it is current) |
 
 ## P1 — product completeness
 
@@ -49,28 +49,41 @@ supported) rather than delaying the release — owner decision 2026-10-31. Marke
 |---|---|---|---|
 | P1 | Real-world audit round on the permitted 7-site product family (raw + render) | ✅ | quality.md round 7: raw (4 defects fixed, before/after) and `--render` (3 defects fixed; client-side locale switch confirmed in a real browser) |
 | P2 | Independent sites (not the product family) audited and reviewed for false positives | ✅ | 6 sites of different types (quality.md round 8); 2 defects fixed |
-| P3 | Local repositories audited (Laravel, React, Next.js, monorepo) | 🔄 | 5 local repositories (Next.js, Laravel + static monorepo, 3 CLI tools): 11 defects fixed, quality.md round 6. The product-family repositories are on another machine (Windows) |
+| P3 | Local repositories audited (Laravel, React, Next.js, monorepo) | ✅ | 5 local repositories (Next.js, Laravel + static monorepo, 3 CLI tools): 11 defects fixed, quality.md round 6; plus 4 open-source repositories in earlier rounds. Not covered: the product-family repositories (on the owner's Windows PC) |
 | P4 | Facet / pagination / parameter-explosion detection documented with its limits | ✅ | `crawl.facet-explosion`, `pagination.canonical-to-first` |
-| P5 | Research distinguishes market hypotheses from verified demand | 🔄 | labels in research output; review in this round |
-| P6 | GEO: no score is presented as a prediction of AI citations | 🔄 | wording review of reports and skills |
+| P5 | Research distinguishes market hypotheses from verified demand | ✅ | research report marks content gaps as hypotheses (coverage, not demand); the research skill labels each opportunity Hypothesis / Verified demand and ranks connected search data first |
+| P6 | GEO: no score is presented as a prediction of AI citations | ✅ | wording scan of sources, reports, skills, agents and rules: the clarity score is labelled "heuristic, not a citation predictor"; AI citations are "not measured" |
 | P7 | Onboarding: Google / CSV / skip offered exactly; non-interactive defaults to skip | ✅ | `connect` tests; plugin skill text |
 
 ## Distribution & release engineering
 
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
-| D1 | Clean install of the packed tarball on Linux, macOS, Windows | ✅ (CI) | `clean-install` job; extend to all three OSes |
+| D1 | Clean install of the packed tarball on Linux, macOS, Windows | ✅ | local clean install (37 packages, CLI driven end to end); `clean-install` CI job on all three OSes |
 | D2 | Bundled plugin CLI equals the sources | ✅ | `bundle-in-sync` CI job |
-| D3 | `claude plugin validate .` passes; plugin icon and marketplace metadata complete | 🔄 | icon missing |
+| D3 | `claude plugin validate .` passes; plugin icon and marketplace metadata complete | ⛔ | validation passes; the only warning is the missing icon. The directory takes the icon only on first submission, so it must be the owner's final brand mark (brand work in progress). Not blocking for npm; blocking for directory submission |
 | D4 | Versions and claims consistent across package, plugin, README, CHANGELOG, docs | ✅ (automated) | `docs-consistency.test.ts`, `version.test.ts` |
-| D5 | Performance and memory measured for small / medium / large sites | ⬜ | `npm run benchmark` results in quality.md |
-| D6 | Reproducible package: two builds produce the same tarball contents | ⬜ | hash comparison script |
-| D7 | Release notes, changelog, security assessment, final readiness report | ⬜ | `docs/release-notes-1.0.0.md` |
+| D5 | Performance and memory measured for small / medium / large sites | ✅ | 500 / 5,000 / 20,000 / 50,000 pages (1.1 GB at 50k); no regression vs v0.7.0 under identical load; real sites 13–111 s at polite settings (quality.md) |
+| D6 | Reproducible package: two builds produce the same tarball contents | ✅ | two clean builds + `npm pack`: 202 files, identical SHA-256; no private files in the package |
+| D7 | Release notes, changelog, security assessment, final readiness report | ✅ | [release-notes-1.0.0.md](release-notes-1.0.0.md), CHANGELOG 1.0.0, [security.md](security.md), readiness report below |
 | D8 | Owner approval for npm publish and GitHub release | ⛔ | never done without explicit approval |
 
-## Blocked on the owner
+## Readiness report (2026-11-01)
 
-See the private owner guide (`.searvex/setup/OWNER_ACTION_PLAN_TR.md`, not in the repository). Live runs
-need: a Desktop OAuth client and verified Search Console properties, real Search Console CSV exports
-(Turkish and English UI), a Bing Webmaster API key, a CrUX API key, and the parent directory of the local
-repositories to audit.
+**Recommendation: ready for a 1.0.0 release once the owner approves publishing** (D8). Every blocking
+criterion above is ✅ with evidence. Open items and why they do not block 1.0.0:
+
+| Item | Status | Why not blocking |
+|---|---|---|
+| Bing Webmaster | experimental | works end to end live; real non-empty data not yet available on the owner's sites. Documented as experimental everywhere |
+| `gsc logout` revocation | mock-tested | the owner kept the live grant; the CLI explains manual removal if Google does not confirm |
+| Plugin directory icon | owner's brand decision | npm and marketplace installs work without it; required only for directory submission |
+| Product-family repositories | not audited | on another machine; the same frameworks were validated on other repositories |
+| Login-protected routes in repository mode | limitation | documented; affects low-severity metadata findings only |
+
+Security assessment: no known release-blocking defect. Residual risks (documented in security.md): browser
+zero-days in `--render` (mitigated by the OS sandbox and the policy proxy), a page can use one CPU core until its
+deadline, the default credential file is plain JSON readable by the same user (the keychain store is opt-in).
+
+Release steps that need the owner: merge the readiness PR, approve `npm publish` of `searvex-seo@1.0.0` and the
+GitHub release `v1.0.0` (tag + these release notes).

@@ -5,6 +5,59 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-01
+
+First stable release. Every capability advertised as supported has been verified end to end; Bing Webmaster
+is the one integration shipped as experimental. Evidence: [docs/release-checklist.md](docs/release-checklist.md)
+and [docs/quality.md](docs/quality.md).
+
+### Security and data integrity
+- `monitor` no longer attaches search data of another website: `--import`, `--site-url`, `SEARVEX_GSC_SITE`
+  and `--baseline` are checked against the monitored site; an export without a pages table needs `--property`.
+- Search Console exports whose pages span several subdomains are scoped as domain properties (their totals
+  include every subdomain); an explicit `--property` that does not contain every exported page is refused.
+- `--render`: a hard per-page deadline stops pages whose scripts never yield or allocate without bound; a
+  stuck browser is replaced. Local host names with a trailing dot are blocked.
+- Optimizer: backups and the manifest are written before the first file (an interrupted apply is recoverable
+  with `rollback`, and new applies are refused until then); a failed verification never overwrites files
+  edited meanwhile; CRLF line endings and file modes are preserved.
+- Credentials: opt-in OS keychain store (`SEARVEX_CREDENTIAL_STORE=keychain`: macOS Keychain, Secret Service,
+  Windows DPAPI) using the OS's own tools with secrets on stdin; entries are isolated per config directory.
+  Automated scans confirm that no token, key or client secret reaches output or run files.
+
+### Added
+- `searvex bing auth|status|sites|logout` and `searvex crux auth|status|logout`: keys are entered without echo,
+  checked against the API and kept in the credential store instead of environment variables.
+- `gsc auth` opens the browser for consent (`--no-browser` to only print the URL).
+- `THIRD_PARTY_NOTICES.md` with the licence texts of all bundled runtime packages.
+
+### Changed
+- Search Console API reports show property totals from the daily series (anonymised queries included), equal
+  to the CSV export of the same period. Bing reports use the daily site series for totals and explain empty
+  data. `bing report` requires a verified site of the account.
+- "Fix first" names the likely root cause of dependent findings (e.g. a client-side language switch that
+  changes titles, canonicals and hreflang for renderers) and ranks it first.
+- 3-letter hreflang codes without an ISO 639-1 equivalent (`ast`, `ceb`) are reported at low severity with an
+  explanation instead of as high-severity mistakes; a finding's severity is its most severe occurrence.
+- Status commands (`gsc|bing|crux status`) exit 0 only when the integration is usable.
+
+### Fixed
+- Repository mode: test/fixture/benchmark/example folders, HTML fragments and server template folders are not
+  treated as the site (a repository without a website now scores n/a); static sites in workspace folders and
+  locale sub-folders are found; clean URLs; sitemap URLs without a file (unless another app routes them); all
+  Laravel route files; Blade/PHP expressions no longer hide attributes; admin views and tests skipped; error
+  pages modelled as 404/500; Next.js fill images and aspect-ratio utility classes are sized; personal sites
+  are not asked for Organization markup.
+- Website mode: pages linked only through internal redirects are not orphans; orphans are not reported on
+  crawls stopped at the page limit; cannibalisation candidates must share a language and exclude legal pages;
+  Turkish soft-404 wording is detected (Unicode-aware boundaries).
+
+### Verified
+- Live: Search Console API (authorization, refresh, properties, pagination, reports), Search Console CSV
+  (real Turkish and English exports), CrUX (values identical to the raw API), Bing Webmaster (mechanics; no
+  site data yet). Real-world rounds on 13 public sites and 9 repositories; benchmarks to 50,000 pages;
+  reproducible package; clean installs on Linux, macOS and Windows.
+
 ## [0.7.0] - 2026-10-30
 
 ### Added

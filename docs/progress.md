@@ -2,7 +2,16 @@
 
 Use this file to resume work after an interrupted session. Newest entries first.
 
-## Current state — 2026-10-30
+## Current state — 2026-11-01
+
+- Version **1.0.0 release candidate** on branch `release/v1.0-readiness` (PR #4). All blocking criteria in
+  [release-checklist.md](release-checklist.md) are ✅; readiness report at its end. Waiting for the owner to
+  merge and to approve `npm publish` and the GitHub release. Bing is experimental; the plugin directory icon
+  waits for the owner's brand decision.
+- Live integrations configured on the owner's machine (macOS Keychain): Search Console OAuth, Bing API key,
+  CrUX API key. Private exports and captures in `.searvex/` (git-ignored).
+
+## State — 2026-10-30
 
 - Version 0.7.0 (branch `feat/v0.7-data-integrity`, PR pending owner merge): property-aware search-data
   joins, Search Console CSV/ZIP import, `connect` onboarding (Google ile bağlan / CSV içe aktar / Şimdilik
