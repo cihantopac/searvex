@@ -87,7 +87,7 @@ Change backups live in `.searvex/changes/<changeId>/` (manifest with hashes + or
 ## CI example
 
 ```yaml
-- run: npx -y github:cihantopac/searvex audit https://staging.example.com --max-pages 200 --format sarif,md --fail-on high
+- run: npx -y searvex audit https://staging.example.com --max-pages 200 --format sarif,md --fail-on high
 - uses: github/codeql-action/upload-sarif@v3
   with: { sarif_file: .searvex/runs }
 ```
