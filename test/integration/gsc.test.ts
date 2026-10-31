@@ -337,3 +337,19 @@ describe('credentials never reach output, logs or run files', () => {
     }
   });
 });
+
+describe('gsc auth opens the browser', () => {
+  it('uses the platform opener without a shell and refuses anything but an https URL', async () => {
+    const { openBrowser } = await import('../../src/commands/gsc.js');
+    const calls: string[][] = [];
+    const run = (cmd: string, args: string[]) => (calls.push([cmd, ...args]), true);
+    const url = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=x&scope=y&state=z';
+    expect(openBrowser(url, 'darwin', run)).toBe(true);
+    expect(openBrowser(url, 'win32', run)).toBe(true);
+    expect(openBrowser(url, 'linux', run)).toBe(true);
+    expect(calls).toEqual([['open', url], ['rundll32', 'url.dll,FileProtocolHandler', url], ['xdg-open', url]]);
+    expect(openBrowser('file:///etc/passwd', 'darwin', run)).toBe(false);
+    expect(openBrowser('https://x.example/"; rm -rf ~', 'linux', run)).toBe(false);
+    expect(calls).toHaveLength(3);
+  });
+});

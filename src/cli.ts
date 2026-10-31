@@ -38,7 +38,8 @@ Commands
   connect <url>         Optional search data for a site: shows the three choices (Google / CSV / skip)
                         and records one with --choice google|csv|skip; never starts OAuth by itself
   gsc <auth|status|sites|report|import|logout>
-                        Google Search Console (read-only): OAuth with your own Desktop client (--client),
+                        Google Search Console (read-only): OAuth with your own Desktop client (--client;
+                        opens your browser, --no-browser to only print the URL),
                         property check, query/page analysis with a property-matched --audit join;
                         "gsc import <export.zip>" reads a Performance CSV export without any account access
   bing report <siteUrl> Bing Webmaster Tools query/page analysis (SEARVEX_BING_API_KEY, read-only)
@@ -133,6 +134,7 @@ function parse(argv: string[]): GlobalFlags {
       force: { type: 'boolean' },
       property: { type: 'string' },
       choice: { type: 'string' },
+      'no-browser': { type: 'boolean' },
     },
   });
   return { values, positionals };

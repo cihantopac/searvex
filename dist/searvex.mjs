@@ -15871,14 +15871,14 @@ var init_bing = __esm({
 });
 
 // src/net/policy-proxy.ts
-import crypto6 from "node:crypto";
+import crypto7 from "node:crypto";
 import http5 from "node:http";
 import net from "node:net";
 async function startPolicyProxy(policy, opts = {}) {
   const maxBytes = opts.maxBytesPerWindow ?? 64 * 1024 * 1024;
   const idle = opts.idleTimeoutMs ?? 3e4;
   const username = "searvex";
-  const password = crypto6.randomBytes(18).toString("base64url");
+  const password = crypto7.randomBytes(18).toString("base64url");
   const expectedAuth = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
   const stats = { requests: 0, tunnels: 0, blocked: 0, blockedTargets: [], bytes: 0, budgetExceeded: 0 };
   const sockets = /* @__PURE__ */ new Set();
@@ -39035,18 +39035,22 @@ async function querySearchConsole(q) {
 }
 
 // src/integrations/google-oauth.ts
-import crypto5 from "node:crypto";
+import crypto6 from "node:crypto";
 import fs9 from "node:fs";
 import http3 from "node:http";
 import https4 from "node:https";
 
 // src/integrations/credentials.ts
 import { spawnSync } from "node:child_process";
+import crypto5 from "node:crypto";
 import fs8 from "node:fs";
 import os from "node:os";
 import path12 from "node:path";
 function configDir() {
   if (process.env["SEARVEX_CONFIG_DIR"]) return process.env["SEARVEX_CONFIG_DIR"];
+  return defaultConfigDir();
+}
+function defaultConfigDir() {
   if (process.platform === "win32") return path12.join(process.env["APPDATA"] ?? path12.join(os.homedir(), "AppData", "Roaming"), "searvex");
   return path12.join(process.env["XDG_CONFIG_HOME"] ?? path12.join(os.homedir(), ".config"), "searvex");
 }
@@ -39102,7 +39106,11 @@ function keychainKind(platform = process.platform) {
   if (platform === "linux" || platform === "freebsd" || platform === "openbsd") return "secret-service";
   return null;
 }
-var SERVICE = "searvex";
+function keychainService(dir) {
+  const resolved = path12.resolve(dir);
+  if (resolved === path12.resolve(defaultConfigDir())) return "searvex";
+  return `searvex-${crypto5.createHash("sha256").update(resolved).digest("hex").slice(0, 12)}`;
+}
 var PS_PROTECT = "$ErrorActionPreference='Stop';Add-Type -AssemblyName System.Security;$s=[Console]::In.ReadToEnd();[Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($s),$null,'CurrentUser'))";
 var PS_UNPROTECT = "$ErrorActionPreference='Stop';Add-Type -AssemblyName System.Security;$s=[Console]::In.ReadToEnd().Trim();[Console]::Out.Write([Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($s),$null,'CurrentUser')))";
 var KeychainCredentialStore = class {
@@ -39111,18 +39119,20 @@ var KeychainCredentialStore = class {
     this.run = run;
     this.dir = dir;
     this.legacy = new FileCredentialStore(dir);
+    this.service = keychainService(dir);
   }
   kind;
   run;
   dir;
   legacy;
+  service;
   get(name) {
     const raw = this.read(checkName(name));
     if (raw === null) return this.legacy.get(name);
     try {
       return JSON.parse(raw);
     } catch {
-      throw new CredentialStoreError(`The ${this.label()} entry "${SERVICE}/${name}" is not a Searvex credential; remove it and authorize again.`);
+      throw new CredentialStoreError(`The ${this.label()} entry "${this.service}/${name}" is not a Searvex credential; remove it and authorize again.`);
     }
   }
   set(name, cred) {
@@ -39136,7 +39146,7 @@ var KeychainCredentialStore = class {
     return this.legacy.delete(name) || removed;
   }
   describe() {
-    return `${this.label()} (service "${SERVICE}")`;
+    return `${this.label()} (service "${this.service}")`;
   }
   label() {
     return { macos: "macOS Keychain", "secret-service": "Secret Service keyring (libsecret)", "windows-dpapi": "Windows DPAPI (current user)" }[this.kind];
@@ -39157,7 +39167,7 @@ var KeychainCredentialStore = class {
       if (r2.status !== 0) this.fail("read", r2);
       return r2.stdout;
     }
-    const r = this.kind === "macos" ? this.run("security", ["find-generic-password", "-s", SERVICE, "-a", name, "-w"]) : this.run("secret-tool", ["lookup", "service", SERVICE, "account", name]);
+    const r = this.kind === "macos" ? this.run("security", ["find-generic-password", "-s", this.service, "-a", name, "-w"]) : this.run("secret-tool", ["lookup", "service", this.service, "account", name]);
     if (r.status === null) this.fail("read", r);
     if (r.status !== 0) return null;
     const out = r.stdout.replace(/\n$/, "");
@@ -39175,8 +39185,8 @@ var KeychainCredentialStore = class {
       fs8.renameSync(tmp, f);
       return;
     }
-    const r = this.kind === "macos" ? this.run("security", ["-i"], `add-generic-password -U -s ${SERVICE} -a ${name} -l Searvex-${name} -X ${Buffer.from(json, "utf8").toString("hex")}
-`) : this.run("secret-tool", ["store", `--label=Searvex ${name}`, "service", SERVICE, "account", name], json);
+    const r = this.kind === "macos" ? this.run("security", ["-i"], `add-generic-password -U -s ${this.service} -a ${name} -l Searvex-${name} -X ${Buffer.from(json, "utf8").toString("hex")}
+`) : this.run("secret-tool", ["store", `--label=Searvex ${name}`, "service", this.service, "account", name], json);
     if (r.status !== 0) this.fail("store", r);
   }
   remove(name) {
@@ -39187,7 +39197,7 @@ var KeychainCredentialStore = class {
       return true;
     }
     if (this.read(name) === null) return false;
-    const r = this.kind === "macos" ? this.run("security", ["delete-generic-password", "-s", SERVICE, "-a", name]) : this.run("secret-tool", ["clear", "service", SERVICE, "account", name]);
+    const r = this.kind === "macos" ? this.run("security", ["delete-generic-password", "-s", this.service, "-a", name]) : this.run("secret-tool", ["clear", "service", this.service, "account", name]);
     if (r.status !== 0) this.fail("delete", r);
     return true;
   }
@@ -39244,8 +39254,8 @@ async function revokeToken(token) {
 }
 var b64url = (b) => b.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 function pkcePair() {
-  const verifier = b64url(crypto5.randomBytes(48));
-  return { verifier, challenge: b64url(crypto5.createHash("sha256").update(verifier).digest()) };
+  const verifier = b64url(crypto6.randomBytes(48));
+  return { verifier, challenge: b64url(crypto6.createHash("sha256").update(verifier).digest()) };
 }
 function postForm(url, form) {
   const body = new URLSearchParams(form).toString();
@@ -39272,7 +39282,7 @@ function postForm(url, form) {
 }
 async function authorize(client, scope, onUrl, timeoutMs = 5 * 60 * 1e3) {
   const { verifier, challenge } = pkcePair();
-  const state = b64url(crypto5.randomBytes(16));
+  const state = b64url(crypto6.randomBytes(16));
   const server = http3.createServer();
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const redirectUri = `http://127.0.0.1:${server.address().port}`;
@@ -40405,6 +40415,7 @@ Saved: ${out}`);
 }
 
 // src/commands/gsc.ts
+import { spawn } from "node:child_process";
 import path19 from "node:path";
 
 // src/analyze/search-performance.ts
@@ -40731,6 +40742,22 @@ async function verifyProperty(token, raw, workspace) {
   if (matches.length === 1) return matches[0];
   throw new UsageError(matches.length ? `Several properties cover ${start}: ${matches.join(", ")}. Pass one explicitly.` : `No accessible property covers ${start}. Available: ${names.join(", ") || "(none)"}`);
 }
+function openBrowser(url, platform = process.platform, run = spawnDetached) {
+  if (!/^https:\/\/[^\s"'<>]+$/.test(url)) return false;
+  const [cmd, args] = platform === "darwin" ? ["open", [url]] : platform === "win32" ? ["rundll32", ["url.dll,FileProtocolHandler", url]] : ["xdg-open", [url]];
+  return run(cmd, args);
+}
+function spawnDetached(cmd, args) {
+  try {
+    const child = spawn(cmd, args, { stdio: "ignore", detached: true, windowsHide: true });
+    child.on("error", () => {
+    });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
 async function commandGsc(flags) {
   const v = flags.values;
   const sub = flags.positionals[1];
@@ -40757,7 +40784,8 @@ async function commandGsc(flags) {
       throw e;
     }
     const cred = await authorize(client, GSC_SCOPE, (url) => {
-      console.log("\nOpen this URL in your browser and approve read-only Search Console access:\n");
+      const opened = !v["no-browser"] && process.stdout.isTTY && openBrowser(url);
+      console.log(opened ? "\nOpened your browser. If it did not open, visit this URL and approve read-only Search Console access:\n" : "\nOpen this URL in your browser and approve read-only Search Console access:\n");
       console.log(url + "\n");
       console.log("Waiting for Google to redirect back to http://127.0.0.1 \u2026 (Ctrl+C to cancel; times out after 5 minutes)");
     });
@@ -40842,7 +40870,9 @@ async function commandGsc(flags) {
     const days = num(v["days"], 28, 1, 480);
     const sel = resolveAudit(flags, workspace, property);
     const rows = await querySearchConsole({ token, siteUrl, days, dimensions: ["query", "page"], maxRows: num(v["max-rows"], 25e3, 1, 1e5) });
-    const report = analyzeSearchPerformance(rowsToQueryPage(rows), { days, source: `Search Console ${siteUrl}`, audit: sel?.audit, property });
+    const daily = await querySearchConsole({ token, siteUrl, days, dimensions: ["date"], maxRows: 1e3 });
+    const dates = daily.map((r) => ({ key: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
+    const report = analyzeSearchPerformance({ queryPage: rowsToQueryPage(rows), dates }, { days, source: `Search Console ${siteUrl}`, audit: sel?.audit, property });
     attachAudit(report, sel);
     saveReport(flags, workspace, "gsc", { target: siteUrl, days }, report);
     setSitePreference(property.kind === "domain" ? property.domain : property.host, { choice: "google", property: siteUrl });
@@ -40929,7 +40959,8 @@ Commands
   connect <url>         Optional search data for a site: shows the three choices (Google / CSV / skip)
                         and records one with --choice google|csv|skip; never starts OAuth by itself
   gsc <auth|status|sites|report|import|logout>
-                        Google Search Console (read-only): OAuth with your own Desktop client (--client),
+                        Google Search Console (read-only): OAuth with your own Desktop client (--client;
+                        opens your browser, --no-browser to only print the URL),
                         property check, query/page analysis with a property-matched --audit join;
                         "gsc import <export.zip>" reads a Performance CSV export without any account access
   bing report <siteUrl> Bing Webmaster Tools query/page analysis (SEARVEX_BING_API_KEY, read-only)
@@ -41016,7 +41047,8 @@ function parse8(argv) {
       import: { type: "string", multiple: true },
       force: { type: "boolean" },
       property: { type: "string" },
-      choice: { type: "string" }
+      choice: { type: "string" },
+      "no-browser": { type: "boolean" }
     }
   });
   return { values, positionals };

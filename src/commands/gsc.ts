@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import type { AuditReport } from '../analyze/audit.js';
 import { analyzeSearchPerformance, rowsToQueryPage, type SearchPerformanceReport } from '../analyze/search-performance.js';
@@ -158,6 +159,28 @@ async function verifyProperty(token: string, raw: string | undefined, workspace:
   throw new UsageError(matches.length ? `Several properties cover ${start}: ${matches.join(', ')}. Pass one explicitly.` : `No accessible property covers ${start}. Available: ${names.join(', ') || '(none)'}`);
 }
 
+/**
+ * Open `url` (always the Google consent URL Searvex built) in the default browser, as Google recommends for
+ * installed apps. Arguments are passed without a shell; failures fall back to the printed URL.
+ */
+export function openBrowser(url: string, platform: NodeJS.Platform = process.platform, run = spawnDetached): boolean {
+  if (!/^https:\/\/[^\s"'<>]+$/.test(url)) return false;
+  // Windows: rundll32 avoids cmd.exe, which would treat "&" in the URL as a command separator.
+  const [cmd, args] = platform === 'darwin' ? ['open', [url]] : platform === 'win32' ? ['rundll32', ['url.dll,FileProtocolHandler', url]] : ['xdg-open', [url]];
+  return run(cmd as string, args as string[]);
+}
+
+function spawnDetached(cmd: string, args: string[]): boolean {
+  try {
+    const child = spawn(cmd, args, { stdio: 'ignore', detached: true, windowsHide: true });
+    child.on('error', () => {});
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function commandGsc(flags: GlobalFlags): Promise<number> {
   const v = flags.values;
   const sub = flags.positionals[1];
@@ -184,7 +207,8 @@ export async function commandGsc(flags: GlobalFlags): Promise<number> {
       throw e;
     }
     const cred = await authorize(client, GSC_SCOPE, (url) => {
-      console.log('\nOpen this URL in your browser and approve read-only Search Console access:\n');
+      const opened = !v['no-browser'] && process.stdout.isTTY && openBrowser(url);
+      console.log(opened ? '\nOpened your browser. If it did not open, visit this URL and approve read-only Search Console access:\n' : '\nOpen this URL in your browser and approve read-only Search Console access:\n');
       console.log(url + '\n');
       console.log('Waiting for Google to redirect back to http://127.0.0.1 … (Ctrl+C to cancel; times out after 5 minutes)');
     });
@@ -269,7 +293,11 @@ export async function commandGsc(flags: GlobalFlags): Promise<number> {
     const days = num(v['days'], 28, 1, 480);
     const sel = resolveAudit(flags, workspace, property);
     const rows = await querySearchConsole({ token, siteUrl, days, dimensions: ['query', 'page'], maxRows: num(v['max-rows'], 25000, 1, 100000) });
-    const report = analyzeSearchPerformance(rowsToQueryPage(rows), { days, source: `Search Console ${siteUrl}`, audit: sel?.audit, property });
+    // Query × page rows leave out anonymised queries; the daily series gives the property's real totals,
+    // so API and CSV reports of the same property show the same totals.
+    const daily = await querySearchConsole({ token, siteUrl, days, dimensions: ['date'], maxRows: 1000 });
+    const dates = daily.map((r) => ({ key: r.keys[0]!, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
+    const report = analyzeSearchPerformance({ queryPage: rowsToQueryPage(rows), dates }, { days, source: `Search Console ${siteUrl}`, audit: sel?.audit, property });
     attachAudit(report, sel);
     saveReport(flags, workspace, 'gsc', { target: siteUrl, days }, report);
     setSitePreference(property.kind === 'domain' ? property.domain : property.host, { choice: 'google', property: siteUrl });
