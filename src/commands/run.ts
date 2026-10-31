@@ -13,7 +13,7 @@ import { diffReports, findBaseline, renderDiffMarkdown, type MonitorDiff } from 
 import { computeGaps, profile, renderResearchMarkdown, type ResearchReport } from './research.js';
 import { renderPlan } from './optimize.js';
 import { getSitePreference, type SitePreference } from '../integrations/preferences.js';
-import { readCredentials } from '../integrations/google-oauth.js';
+import { getCredential } from '../integrations/google-oauth.js';
 
 /**
  * `searvex run`: the full workflow in a fixed order, sharing one crawl.
@@ -107,7 +107,7 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
     const { report, store } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v['check-external'], cruxApiKey: process.env['SEARVEX_CRUX_API_KEY'] });
     const files = writeReports(store, report, kb, ['json', 'md', 'html']);
     summary.website = { report, runId: store.runId, files };
-    summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!readCredentials()['gsc'] || !!process.env['SEARVEX_GSC_TOKEN'] };
+    summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!getCredential('gsc') || !!process.env['SEARVEX_GSC_TOKEN'] };
     step(1, 'Website audit', 'done', `${report.crawl.crawled} pages, score ${report.scores.overall}/100`);
     step(2, 'GEO / AI search', 'done', `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
     const base = findBaseline(workspace, report.target, store.runId);

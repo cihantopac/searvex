@@ -2,7 +2,7 @@ import path from 'node:path';
 import type { AuditReport } from '../analyze/audit.js';
 import { analyzeSearchPerformance, rowsToQueryPage, type SearchPerformanceReport } from '../analyze/search-performance.js';
 import { RunStore } from '../crawl/store.js';
-import { authorize, accessToken, deleteCredential, gscAccessToken, GSC_SCOPE, loadClientFile, OAuthClientFileError, readCredentials, revokeToken, saveCredential } from '../integrations/google-oauth.js';
+import { authorize, accessToken, deleteCredential, gscAccessToken, GSC_SCOPE, loadClientFile, OAuthClientFileError, getCredential, revokeToken, saveCredential } from '../integrations/google-oauth.js';
 import { defaultCredentialStore } from '../integrations/credentials.js';
 import { listSites, querySearchConsole } from '../integrations/gsc.js';
 import { GscImportError, importGscFiles, type GscExport } from '../integrations/gsc-csv.js';
@@ -164,7 +164,7 @@ export async function commandGsc(flags: GlobalFlags): Promise<number> {
   const workspace = path.resolve(String(v['out'] ?? process.cwd()));
   if (sub === 'auth') {
     if (process.env['CI']) throw new UsageError('gsc auth is interactive (browser consent) and is disabled in CI. Use "gsc import <export.zip>" or SEARVEX_GSC_TOKEN there.');
-    const existing = readCredentials()['gsc'];
+    const existing = getCredential('gsc');
     if (existing && !v['force']) {
       try {
         await accessToken(existing);
@@ -193,7 +193,7 @@ export async function commandGsc(flags: GlobalFlags): Promise<number> {
     return 0;
   }
   if (sub === 'status') {
-    const cred = readCredentials()['gsc'];
+    const cred = getCredential('gsc');
     const envToken = !!process.env['SEARVEX_GSC_TOKEN'];
     const status: Record<string, unknown> = { credential: cred ? 'stored' : 'none', envToken, store: defaultCredentialStore().describe() };
     if (cred) {
@@ -212,7 +212,7 @@ export async function commandGsc(flags: GlobalFlags): Promise<number> {
     return cred || envToken ? 0 : 1;
   }
   if (sub === 'logout') {
-    const cred = readCredentials()['gsc'];
+    const cred = getCredential('gsc');
     if (!cred) {
       console.log('No stored Search Console credential.');
       return 0;
@@ -323,7 +323,7 @@ export async function commandConnect(flags: GlobalFlags): Promise<number> {
   const choice = v['choice'] as SearchDataChoice | undefined;
   if (choice && !['google', 'csv', 'skip'].includes(choice)) throw new UsageError('--choice must be google, csv or skip');
   if (choice) setSitePreference(site, { choice, property: v['property'] as string | undefined });
-  const cred = readCredentials()['gsc'];
+  const cred = getCredential('gsc');
   const state = {
     site: siteKey(site),
     preference: getSitePreference(site),
