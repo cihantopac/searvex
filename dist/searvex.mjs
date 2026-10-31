@@ -30372,6 +30372,11 @@ var adapter = {
 };
 
 // src/extract/html.ts
+function sizedByLayout(style, nimg) {
+  if (nimg === "fill") return true;
+  const s = (style ?? "").toLowerCase().replace(/\s+/g, "");
+  return /aspect-ratio:/.test(s) || /position:absolute/.test(s) && /(^|;)width:100%/.test(s) && /(^|;)height:100%/.test(s);
+}
 function collapse(s) {
   return s.replace(/\s+/g, " ").trim();
 }
@@ -30457,7 +30462,8 @@ function extractPage(html3, pageUrl) {
     alt: $2(el).attr("alt") ?? null,
     width: $2(el).attr("width"),
     height: $2(el).attr("height"),
-    loading: $2(el).attr("loading")
+    loading: $2(el).attr("loading"),
+    sizedByLayout: sizedByLayout($2(el).attr("style"), $2(el).attr("data-nimg"))
   })).get();
   const jsonLd = [];
   $2('script[type="application/ld+json" i]').each((_, el) => {
@@ -35842,7 +35848,8 @@ function checkStructuredData(url, f, sink, isHomepage) {
     }
   }
   for (const t of allTypes) if (RETIRED_TYPES.has(t)) sink.emit("sd.retired-type", { url, observed: t });
-  if (isHomepage && !["Organization", "Corporation", "OnlineStore", "OnlineBusiness", "NGO", "EducationalOrganization", "GovernmentOrganization", ...LOCAL_BUSINESS_SUBTYPES].some((t) => allTypes.has(t))) {
+  const personal = allTypes.has("Person") || allTypes.has("ProfilePage");
+  if (isHomepage && !personal && !["Organization", "Corporation", "OnlineStore", "OnlineBusiness", "NGO", "EducationalOrganization", "GovernmentOrganization", ...LOCAL_BUSINESS_SUBTYPES].some((t) => allTypes.has(t))) {
     sink.emit("geo.organization-missing", { url, observed: `types present: ${[...allTypes].join(", ") || "none"}` });
   }
 }
@@ -36358,7 +36365,7 @@ function runTechnicalChecks(ctx, sink) {
     if (p.redirects.length && p.foundOn && p.foundOn !== "sitemap" && p.redirects.some((r) => [302, 303, 307].includes(r.status))) {
       sink.emit("redirect.temporary-internal", { url: p.url, observed: p.redirects.map((r) => `${r.status} \u2192 ${r.location}`).join(", "), expected: "linked from " + p.foundOn });
     }
-    if (p.inSitemap && (p.redirects.length || p.status !== 200)) sink.emit("index.sitemap-non200", { url: p.url, observed: p.redirects.length ? `redirects to ${p.finalUrl}` : `HTTP ${p.status}` });
+    if (p.inSitemap && (p.redirects.length || p.status !== 200)) sink.emit("index.sitemap-non200", { url: p.url, observed: p.redirects.length ? `redirects to ${p.finalUrl}` : p.error ? `${p.error} (HTTP ${p.status || "error"})` : `HTTP ${p.status}` });
     if (p.bytes > 15 * 1024 * 1024 || p.truncated) sink.emit("index.oversized-html", { url: p.url, observed: `${Math.round(p.bytes / 1024 / 1024)} MB${p.truncated ? " (truncated by crawler limit)" : ""}` });
     const f = factsOf(p);
     if (!f || p.status !== 200 || p.redirects.length) continue;
@@ -36367,7 +36374,7 @@ function runTechnicalChecks(ctx, sink) {
     const noindex = isNoindex(p);
     const selfCanon = isSelfCanonical(p);
     if (noindex) {
-      sink.emit("index.noindex", { url: p.url, observed: robotsDirectives(p, ["googlebot", "bingbot"]).join(", ") });
+      sink.emit("index.noindex", { url: p.url, observed: [...new Set(robotsDirectives(p, ["googlebot", "bingbot"]))].join(", ") });
       if (p.inSitemap) sink.emit("index.noindex-in-sitemap", ev);
       if (f.canonical && !selfCanon) sink.emit("canonical.noindex-conflict", { url: p.url, observed: `noindex + canonical \u2192 ${f.canonical}` });
     }
@@ -36418,7 +36425,7 @@ function runTechnicalChecks(ctx, sink) {
     if (!f.openGraph["og:title"] && !f.openGraph["og:description"] && !f.openGraph["og:image"]) sink.emit("social.og-missing", ev);
     const noAlt = f.images.filter((i) => i.alt === null && i.src);
     if (noAlt.length) sink.emit("img.alt-missing", { url: p.url, observed: `${noAlt.length} image(s), e.g. ${noAlt[0].src.slice(0, 120)}` });
-    const noDim = f.images.filter((i) => i.src && (!i.width || !i.height));
+    const noDim = f.images.filter((i) => i.src && (!i.width || !i.height) && !i.sizedByLayout);
     if (noDim.length) sink.emit("img.dimensions-missing", { url: p.url, observed: `${noDim.length} image(s) without width/height attributes` });
     const uncrawlable = f.links.filter((l) => l.uncrawlable && l.text);
     if (uncrawlable.length) sink.emit("links.uncrawlable", { url: p.url, observed: `${uncrawlable.length} link(s), e.g. "${uncrawlable[0].text}" href="${uncrawlable[0].href}"` });
@@ -36461,7 +36468,7 @@ function runTechnicalChecks(ctx, sink) {
     const rec = resolveRecord(ctx, target);
     if (new URL(target).pathname.startsWith("/cdn-cgi/")) continue;
     if (rec && !rec.blockedByRobots && rec.status >= 400 && rec.status < 500) {
-      sink.emit("links.broken-internal", { url: target, observed: `HTTP ${rec.status}, linked from ${sources.size} page(s): ${[...sources].slice(0, 3).join(", ")}` });
+      sink.emit("links.broken-internal", { url: target, observed: `${rec.error ? rec.error : `HTTP ${rec.status}`}, linked from ${sources.size} page(s): ${[...sources].slice(0, 3).join(", ")}` }, rec.error ? { confidence: "heuristic" } : {});
     }
   }
   checkFacetsAndPagination(ctx, sink);
@@ -36712,6 +36719,9 @@ function failingMetrics(m) {
 }
 
 // src/analyze/audit.ts
+function scoreLabel(s) {
+  return s.notApplicable ? "n/a (nothing to audit)" : `${s.overall}/100`;
+}
 var WEIGHT = { critical: 25, high: 10, medium: 4, low: 1.5, info: 0 };
 function computeScores(findings, pageCount) {
   const penalty = (fs15) => fs15.reduce((sum, f) => {
@@ -36934,7 +36944,7 @@ function renderHtml(r, kb) {
 document.getElementById('t').textContent='Searvex audit \u2014 '+R.target;
 document.getElementById('meta').textContent=R.generatedAt+' \xB7 Searvex '+R.tool.version+' \xB7 rules '+R.tool.rulesVersion+' \xB7 '+R.runId;
 var issues=R.findings.filter(function(f){return f.severity!=='info'});
-[['Health score*',R.scores.overall+'/100'],['Pages crawled',R.crawl.crawled+(R.crawl.truncated?' (limit)':'')],['Issues',issues.length],['Critical / high',R.findings.filter(function(f){return f.severity==='critical'||f.severity==='high'}).length],['Site type (heuristic)',R.inventory.businessModel.label],['Evidence','\u2713'+R.measurement.verified+' ~'+R.measurement.heuristic+' ?'+R.measurement.unmeasurable]].forEach(function(c){document.getElementById('cards').appendChild(el('div',{class:'card'},[el('span',{class:'muted',text:c[0]}),el('b',{text:String(c[1])})]))});
+[['Health score*',R.scores.notApplicable?'n/a':R.scores.overall+'/100'],['Pages crawled',R.crawl.crawled+(R.crawl.truncated?' (limit)':'')],['Issues',issues.length],['Critical / high',R.findings.filter(function(f){return f.severity==='critical'||f.severity==='high'}).length],['Site type (heuristic)',R.inventory.businessModel.label],['Evidence','\u2713'+R.measurement.verified+' ~'+R.measurement.heuristic+' ?'+R.measurement.unmeasurable]].forEach(function(c){document.getElementById('cards').appendChild(el('div',{class:'card'},[el('span',{class:'muted',text:c[0]}),el('b',{text:String(c[1])})]))});
 var SEV=['critical','high','medium','low'],ch=document.getElementById('charts');
 ch.appendChild(bars('Issues by severity (rules)',SEV.map(function(s){return[s,issues.filter(function(f){return f.severity===s}).length,s]})));
 ch.appendChild(bars('Score by category (100 = no findings)',Object.keys(R.scores.byCategory).sort(function(a,b){return R.scores.byCategory[a]-R.scores.byCategory[b]}).map(function(k){var v=R.scores.byCategory[k];return[k,v,v>=90?'good':v>=70?'medium':'critical']}),{max:100}));
@@ -37028,7 +37038,7 @@ function renderMarkdown(r, opts = {}) {
   L.push(`Generated ${r.generatedAt} \xB7 Searvex ${r.tool.version} \xB7 rules ${r.tool.rulesVersion} \xB7 run \`${r.runId}\``, "");
   L.push("## Summary", "");
   L.push(`| Metric | Value |`, `|---|---|`);
-  L.push(`| Searvex health score\xB9 | **${r.scores.overall}/100** |`);
+  L.push(`| Searvex health score\xB9 | **${scoreLabel(r.scores)}** |`);
   L.push(`| Pages crawled | ${r.crawl.crawled}${r.crawl.truncated ? ` (limit reached, ${r.crawl.queuedRemaining} queued)` : ""} |`);
   L.push(`| Indexable HTML pages | ${r.inventory.pages.filter((p) => p.indexable).length} |`);
   L.push(`| Likely site type (heuristic) | ${md(r.inventory.businessModel.label)} |`);
@@ -37392,6 +37402,26 @@ function detectApp(dir, rel2 = ".") {
   if (has2(dir, "_config.yml") && has2(dir, "_layouts", "_posts")) out.push({ framework: "jekyll", root: rel2, evidence: "_config.yml + _layouts" });
   return out;
 }
+var STATIC_DIRS = ["", "public", "dist", "out", "build", "_site"];
+function staticHtmlIndexes(dir) {
+  const found = [];
+  for (const d of STATIC_DIRS) {
+    const base = path4.join(dir, d);
+    if (fs4.existsSync(path4.join(base, "index.html"))) {
+      found.push(path4.posix.join(d, "index.html"));
+      continue;
+    }
+    let subs = [];
+    try {
+      subs = fs4.readdirSync(base, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    const locales = subs.filter((s) => s.isDirectory() && /^[a-z]{2,3}([-_][a-z0-9]{2,8})?$/i.test(s.name) && fs4.existsSync(path4.join(base, s.name, "index.html")));
+    if (locales.length) found.push(...locales.map((s) => path4.posix.join(d, s.name, "index.html")));
+  }
+  return found;
+}
 function detect(root2) {
   const candidates = detectApp(root2);
   const pkg = readJson(path4.join(root2, "package.json"));
@@ -37399,18 +37429,22 @@ function detect(root2) {
   const pnpmWs = fs4.existsSync(path4.join(root2, "pnpm-workspace.yaml")) ? (fs4.readFileSync(path4.join(root2, "pnpm-workspace.yaml"), "utf8").match(/-\s*['"]?([^'"\n]+)['"]?/g) ?? []).map((l) => l.replace(/^-\s*['"]?|['"]?$/g, "")) : [];
   const patterns = [...ws, ...pnpmWs];
   const workspaces = [];
-  for (const pattern of patterns.length ? patterns : ["apps/*", "packages/*", "sites/*"]) {
+  for (const pattern of patterns.length ? patterns : ["apps/*", "packages/*", "sites/*", "services/*"]) {
     const base = pattern.replace(/\/\*+$/, "");
     const dir = path4.join(root2, base);
     if (!fs4.existsSync(dir) || !fs4.statSync(dir).isDirectory()) continue;
     const children2 = pattern.endsWith("*") ? fs4.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path4.posix.join(base, d.name)) : [base];
     for (const c of children2) {
       const found = detectApp(path4.join(root2, c), c);
+      if (!found.length) {
+        const idx = staticHtmlIndexes(path4.join(root2, c));
+        if (idx.length) found.push({ framework: "static-html", root: c, evidence: idx.slice(0, 3).map((f) => path4.posix.join(c, f)).join(", ") });
+      }
       if (found.length) workspaces.push(c);
       candidates.push(...found);
     }
   }
-  const htmlFiles = ["index.html", "public/index.html", "dist/index.html", "out/index.html", "build/index.html", "_site/index.html"].filter((f) => fs4.existsSync(path4.join(root2, f)));
+  const htmlFiles = staticHtmlIndexes(root2);
   if (!candidates.length && htmlFiles.length) candidates.push({ framework: "static-html", root: ".", evidence: htmlFiles.join(", ") });
   const framework = candidates[0]?.framework ?? "unknown";
   const packageManager = has2(root2, "pnpm-lock.yaml") ? "pnpm" : has2(root2, "yarn.lock") ? "yarn" : has2(root2, "bun.lockb", "bun.lock") ? "bun" : has2(root2, "package-lock.json") ? "npm" : has2(root2, "composer.lock") ? "composer" : void 0;
@@ -37772,7 +37806,11 @@ function rel(appRoot, f) {
 function find4(files, re) {
   return files.filter((f) => re.test(f.rel));
 }
-function imgWithoutAlt(text4) {
+function blankTemplateExpressions(text4) {
+  return text4.replace(/\{!!.*?!!\}|\{\{.*?\}\}|<\?(?:php|=)[\s\S]*?\?>/gs, (m) => m.replace(/[^\n]/g, " "));
+}
+function imgWithoutAlt(source) {
+  const text4 = blankTemplateExpressions(source);
   const lines = [];
   const re = /<(img|Image)\b([^>]*?)\/?>/g;
   let m;
@@ -37781,7 +37819,8 @@ function imgWithoutAlt(text4) {
   }
   return lines;
 }
-function anchorsWithoutHref(text4) {
+function anchorsWithoutHref(source) {
+  const text4 = blankTemplateExpressions(source);
   const lines = [];
   const re = /<a\b([^>]*)>/g;
   let m;
@@ -37930,6 +37969,8 @@ function scanLayouts(layoutFiles, read, sink, scan, idioms) {
 function scanSources(files, read, sink) {
   for (const f of files) {
     if (!/\.(tsx|jsx|vue|svelte|astro|php|html?)$/.test(f.rel) || /(^|\/)(dist|build|out|public|_site|static)\//.test(f.rel) || /\.(test|spec|stories)\./.test(f.rel)) continue;
+    if (NON_SITE_DIRS.test(f.rel)) continue;
+    if (ADMIN_VIEWS.test(f.rel)) continue;
     const src = read(f.rel);
     const ast = isJsSource(f.rel) ? parseSource(src, f.rel) : null;
     const noAlt = ast ? jsxImagesWithoutAlt(ast) : imgWithoutAlt(src);
@@ -37940,16 +37981,26 @@ function scanSources(files, read, sink) {
 }
 function staticCrawl(htmlFiles, dirBase, read, scan, files, siteOrigin) {
   const pages = [];
+  const sitemapFiles = files.filter((f) => f.rel.startsWith(dirBase) && /sitemap[^/]*\.xml$/i.test(f.rel)).map((f) => f.rel);
+  const smUrls = sitemapFiles.flatMap((s) => parseSitemapXml(read(s), s).urls);
+  const smSet = new Set(smUrls.map((u) => normalizeUrl(u.loc)).filter((u) => !!u));
   for (const f of htmlFiles) {
     let urlPath = "/" + f.slice(dirBase.length).replace(/^\/+/, "");
     urlPath = urlPath.replace(/(^|\/)index\.html?$/i, "$1");
-    const url = new URL(urlPath, siteOrigin).toString();
     const html3 = read(f);
+    const clean = urlPath.replace(/\.html?$/i, "");
+    if (clean !== urlPath) {
+      const cleanUrl = normalizeUrl(new URL(clean, siteOrigin).toString());
+      const canonical = /<link\b[^>]*rel=["']?canonical["']?[^>]*href=["']([^"']+)["']/i.exec(html3)?.[1] ?? /<link\b[^>]*href=["']([^"']+)["'][^>]*rel=["']?canonical["']?/i.exec(html3)?.[1];
+      if (cleanUrl && (smSet.has(cleanUrl) || canonical && normalizeUrl(canonical, siteOrigin) === cleanUrl)) urlPath = clean;
+    }
+    const url = new URL(urlPath, siteOrigin).toString();
     scan.urlToFile.set(url, f);
     pages.push({
+      // Hosts serve 404.html & co. with an error status, so page-level SEO checks do not apply to them.
       url,
       finalUrl: url,
-      status: 200,
+      status: errorPageStatus(urlPath) ?? 200,
       depth: urlPath.split("/").filter(Boolean).length,
       redirects: [],
       contentType: "text/html",
@@ -37966,10 +38017,34 @@ function staticCrawl(htmlFiles, dirBase, read, scan, files, siteOrigin) {
   }
   const robotsRel = [`${dirBase}robots.txt`, "public/robots.txt", "robots.txt"].find((r) => files.some((f) => f.rel === r));
   const robots = robotsRel ? parseRobots(new URL("/robots.txt", siteOrigin).toString(), read(robotsRel), 200) : { ...parseRobots(new URL("/robots.txt", siteOrigin).toString(), "", 404), state: "missing" };
-  const sitemapFiles = files.filter((f) => f.rel.startsWith(dirBase) && /sitemap[^/]*\.xml$/i.test(f.rel)).map((f) => f.rel);
-  const smUrls = sitemapFiles.flatMap((s) => parseSitemapXml(read(s), s).urls);
-  const smSet = new Set(smUrls.map((u) => u.loc));
-  for (const p of pages) p.inSitemap = smSet.has(p.url);
+  const byNorm = /* @__PURE__ */ new Set();
+  for (const p of pages) {
+    const n = normalizeUrl(p.url);
+    if (n) byNorm.add(n);
+    p.inSitemap = !!n && smSet.has(n);
+  }
+  for (const loc of smSet) {
+    if (byNorm.has(loc) || !loc.startsWith(siteOrigin)) continue;
+    const urlPath = new URL(loc).pathname;
+    pages.push({
+      url: loc,
+      finalUrl: loc,
+      status: 404,
+      depth: urlPath.split("/").filter(Boolean).length,
+      redirects: [],
+      contentType: "",
+      timingMs: 0,
+      bytes: 0,
+      truncated: false,
+      headers: {},
+      xRobots: [],
+      xRobotsByBot: {},
+      blockedByRobots: false,
+      inSitemap: true,
+      foundOn: "sitemap",
+      error: MISSING_IN_REPO
+    });
+  }
   return {
     runId: "repository",
     startUrl: new URL("/", siteOrigin).toString(),
@@ -37982,6 +38057,12 @@ function staticCrawl(htmlFiles, dirBase, read, scan, files, siteOrigin) {
     stats: { crawled: pages.length, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: 0, avgResponseMs: 0 },
     truncated: false
   };
+}
+var MISSING_IN_REPO = "no file in the repository serves this URL";
+function routeMatches(route, urlPath) {
+  const norm4 = (s) => (s.replace(/\/+$/, "") || "/").toLowerCase();
+  const re = norm4(route).split("/").map((seg) => /^\[\[?\.\.\.[^\]]+\]\]?$/.test(seg) ? ".+" : /^\{[^}]+\}$|^\[[^\]]+\]$|^:[\w]+$/.test(seg) ? "[^/]+" : seg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("/");
+  return new RegExp(`^${re}$`).test(norm4(urlPath));
 }
 function inferSiteOrigin(htmls) {
   const counts = /* @__PURE__ */ new Map();
@@ -37999,6 +38080,15 @@ function inferSiteOrigin(htmls) {
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 }
 var OUTPUT_DIRS = /(^|\/)(dist|build|out|_site|public|node_modules|vendor)\//;
+var NON_SITE_DIRS = /(^|\/)(tests?|__tests__|specs?|e2e|cypress|playwright|fixtures?|__fixtures__|testdata|bench|benchmarks?|examples?|samples?|evals?|snapshots?|__snapshots__|stories|storybook-static|coverage)\//i;
+var TEMPLATE_DIRS = /(^|\/)(templates|layouts|_layouts|_includes|includes|partials)\//i;
+var ADMIN_VIEWS = /(^|\/)resources\/views\/(vendor\/)?filament\//;
+var isHtmlDocument = (src) => /<!doctype\s+html|<html[\s>]/i.test(src);
+function errorPageStatus(urlPath) {
+  if (/(^|\/)(404|_not-found)(\.html?|\/)?$/i.test(urlPath)) return 404;
+  if (/(^|\/)(500|50x)(\.html?|\/)?$/i.test(urlPath)) return 500;
+  return null;
+}
 function scanApp(root2, appRoot, framework, files, read, sink, opts) {
   const scan = {
     appRoot,
@@ -38053,10 +38143,10 @@ function scanApp(root2, appRoot, framework, files, read, sink, opts) {
       break;
     }
     case "laravel": {
-      const layouts = find4(appFiles, /resources\/views\/.*\.blade\.php$/).map((f) => f.rel).filter((f) => /<head\b/i.test(read(f)));
+      const layouts = find4(appFiles, /resources\/views\/.*\.blade\.php$/).map((f) => f.rel).filter((f) => !ADMIN_VIEWS.test(f) && /<head\b/i.test(read(f)));
       scanLayouts(layouts, read, sink, scan, { titleRe: /<title\b/i, langRe: /\blang\s*=/ });
-      const routes = appFiles.find((f) => f.rel === rel(appRoot, "routes/web.php"));
-      if (routes) {
+      const routeFiles = appFiles.filter((f) => f.rel.startsWith(rel(appRoot, "routes") + "/") && /\.php$/.test(f.rel) && !/\/(api|console|channels)\.php$/.test(f.rel));
+      for (const routes of routeFiles) {
         const src = read(routes.rel);
         for (const m of src.matchAll(/Route::(get|view|match|any)\s*\(\s*['"]([^'"]+)['"]/g)) {
           const r = m[2].startsWith("/") ? m[2] : "/" + m[2];
@@ -38097,7 +38187,7 @@ function scanApp(root2, appRoot, framework, files, read, sink, opts) {
   for (const d of ["", "public/", "dist/", "out/", "build/", "_site/", "docs/"].map((x) => appRoot === "." ? x : `${appRoot}/${x}`)) {
     const isOutput = ["dist/", "out/", "build/", "_site/"].some((x) => d.endsWith(x));
     if (SPA || !staticKinds && !isOutput) continue;
-    const html3 = appFiles.filter((f) => f.rel.startsWith(d) && /\.html?$/i.test(f.rel)).filter((f) => d !== (appRoot === "." ? "" : `${appRoot}/`) || !OUTPUT_DIRS.test(f.rel.slice(d.length))).filter((f) => !/(^|\/)(googl[a-z0-9]+|yandex_[a-z0-9]+|BingSiteAuth)\.html$/i.test(f.rel));
+    const html3 = appFiles.filter((f) => f.rel.startsWith(d) && /\.html?$/i.test(f.rel)).filter((f) => d !== (appRoot === "." ? "" : `${appRoot}/`) || !OUTPUT_DIRS.test(f.rel.slice(d.length))).filter((f) => !/(^|\/)(googl[a-z0-9]+|yandex_[a-z0-9]+|BingSiteAuth)\.html$/i.test(f.rel)).filter((f) => !NON_SITE_DIRS.test(f.rel.slice(d.length)) && !TEMPLATE_DIRS.test(f.rel.slice(d.length)) && isHtmlDocument(read(f.rel)));
     if (!html3.length) continue;
     let origin = PLACEHOLDER_ORIGIN;
     scan.originSource = "placeholder";
@@ -38151,6 +38241,7 @@ function scanRepository(root2, sink, opts = {}) {
 }
 
 // src/repo/audit.ts
+var NOTHING_TO_AUDIT = "No website found: the repository has no web framework, HTML pages or server templates that Searvex can audit (tests, fixtures, examples and benchmarks are ignored). Point Searvex at the folder of the site, or at its deployed URL.";
 var NETWORK_ONLY = /* @__PURE__ */ new Set(["perf.slow-ttfb", "perf.no-compression", "https.not-used", "canonical.http-https", "canonical.www-duplicate", "http.server-error", "http.fetch-error", "robots.unreachable", "geo.citations-unmeasured", "perf.cwv-unmeasured"]);
 var emptyContent = { topTerms: [], pageTerms: [], clusters: [], cannibalization: [], nearDuplicates: [], exactDuplicates: [] };
 function auditRepository(root2, opts = {}) {
@@ -38172,6 +38263,8 @@ function auditRepository(root2, opts = {}) {
   let first2 = true;
   for (const app of scan.apps) {
     if (!app.staticSite) continue;
+    const otherRoutes = scan.apps.filter((a) => a !== app).flatMap((a) => a.routes.map((r) => r.route));
+    app.staticSite.pages = app.staticSite.pages.filter((p) => p.error !== MISSING_IN_REPO || !otherRoutes.some((r) => routeMatches(r, new URL(p.url).pathname)));
     const inner = new FindingSink(kb);
     const ctx = buildContext(app.staticSite);
     runTechnicalChecks(ctx, inner);
@@ -38205,6 +38298,8 @@ function auditRepository(root2, opts = {}) {
     if (app.originSource === "inferred") limitations.push(`App "${app.appRoot}": site origin ${app.staticSite.origin} was inferred from canonical/og:url/hreflang URLs; pass --site-url to override.`);
     if (app.originSource === "placeholder") limitations.push(`App "${app.appRoot}": site URL unknown; canonical cross-domain checks were skipped. Pass --site-url for complete results.`);
   }
+  const nothingToAudit = !scan.routes.length && scan.apps.every((a) => a.framework === "unknown" && !a.staticSite) && !findings.some((f) => f.severity !== "info");
+  if (nothingToAudit) limitations.unshift(NOTHING_TO_AUDIT);
   if (scan.skipped.secrets) limitations.push(`${scan.skipped.secrets} secret-bearing file(s) (.env, keys, credentials) were skipped and never read.`);
   if (scan.skipped.symlinks) limitations.push(`${scan.skipped.symlinks} symlink(s) were not followed.`);
   if (scan.skipped.truncated) limitations.push("File limit reached; repository scan is partial.");
@@ -38232,7 +38327,7 @@ function auditRepository(root2, opts = {}) {
     findings,
     geo,
     content,
-    scores: computeScores(findings, Math.max(1, scan.routes.length)),
+    scores: nothingToAudit ? { ...computeScores(findings, 1), notApplicable: NOTHING_TO_AUDIT } : computeScores(findings, Math.max(1, scan.routes.length)),
     measurement: {
       verified: findings.filter((f) => f.confidence === "verified").length,
       heuristic: findings.filter((f) => f.confidence === "heuristic").length,
@@ -39932,7 +40027,7 @@ function renderRunSummary(s) {
   L.push("");
   if (s.website) {
     const r = s.website.report;
-    L.push("## 1. Website audit", "", `${md(r.target)} \u2014 health score **${r.scores.overall}/100**, ${r.crawl.crawled} pages${r.crawl.truncated ? " (page limit reached)" : ""}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, "");
+    L.push("## 1. Website audit", "", `${md(r.target)} \u2014 health score **${scoreLabel(r.scores)}**, ${r.crawl.crawled} pages${r.crawl.truncated ? " (page limit reached)" : ""}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, "");
     for (const f of top(r)) L.push(`- [${f.severity}] ${md(f.title)} \u2014 ${f.count} \xD7 (\`${f.ruleId}\`)`);
     L.push("", `Full report: \`.searvex/runs/${s.website.runId}/report.md\``, "");
     L.push("## 2. GEO / AI search readiness", "");
@@ -39954,7 +40049,7 @@ function renderRunSummary(s) {
   if (s.diff) L.push("## 3. Change since previous run", "", renderDiffMarkdown(s.diff).split("\n").slice(2).join("\n"), "");
   if (s.research) L.push("## 4. Competitor research", "", renderResearchMarkdown(s.research).split("\n").slice(2).join("\n"), "");
   if (s.repository) {
-    L.push("## 5. Repository audit", "", `Framework: ${s.repository.framework} \u2014 health score **${s.repository.report.scores.overall}/100**.`, "");
+    L.push("## 5. Repository audit", "", `Framework: ${s.repository.framework} \u2014 health score **${scoreLabel(s.repository.report.scores)}**.`, "");
     for (const f of top(s.repository.report)) L.push(`- [${f.severity}] ${md(f.title)} \u2014 ${f.count} \xD7 (\`${f.ruleId}\`)`);
     L.push("");
   }
@@ -40027,7 +40122,7 @@ async function commandRun(flags) {
     log(v, `5. Auditing repository ${root2}\u2026`);
     const ra = auditRepository(root2, { siteUrl, kb });
     summary.repository = { report: ra.report, framework: ra.scan.apps.map((a) => a.framework + (a.appRoot === "." ? "" : "@" + a.appRoot)).join(", ") };
-    step(5, "Repository audit", "done", `${summary.repository.framework}, score ${ra.report.scores.overall}/100`);
+    step(5, "Repository audit", "done", `${summary.repository.framework}, score ${scoreLabel(ra.report.scores)}`);
     summary.plan = planFixes(ra.report, ra.scan, { siteUrl, lang: v["lang"] });
     step(6, "Fix plan (dry run)", "done", `${summary.plan.fixes.length} automatic fix(es), ${summary.plan.tasks.length} task(s); nothing applied`);
   } else {
@@ -40952,7 +41047,7 @@ function printSummary(report, files, v) {
   const counts = SEVERITY_ORDER.map((s) => `${s}: ${report.findings.filter((f) => f.severity === s).length}`).join("  ");
   console.log(`
 Searvex audit \u2014 ${report.target}`);
-  console.log(`Health score ${report.scores.overall}/100 (Searvex summary, not a search engine metric)`);
+  console.log(`Health score ${scoreLabel(report.scores)} (Searvex summary, not a search engine metric)`);
   console.log(`Pages: ${report.crawl.crawled}${report.crawl.truncated ? ` (limit reached; ${report.crawl.queuedRemaining} queued)` : ""}   Rules: ${report.tool.rulesVersion}`);
   console.log(`Findings by rule \u2014 ${counts}`);
   for (const f of report.findings.filter((x) => x.severity !== "info").slice(0, 12)) {

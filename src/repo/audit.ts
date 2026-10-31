@@ -1,5 +1,7 @@
 import path from 'node:path';
 import { computeScores, type AuditReport } from '../analyze/audit.js';
+
+const NOTHING_TO_AUDIT = 'No website found: the repository has no web framework, HTML pages or server templates that Searvex can audit (tests, fixtures, examples and benchmarks are ignored). Point Searvex at the folder of the site, or at its deployed URL.';
 import { buildContext } from '../analyze/context.js';
 import { runContentChecks, type ContentReport } from '../analyze/content.js';
 import { runGeoChecks, type GeoReport } from '../analyze/geo.js';
@@ -7,7 +9,7 @@ import { buildInventory, type SiteInventory } from '../analyze/inventory.js';
 import { runTechnicalChecks } from '../analyze/technical.js';
 import { SEARVEX_VERSION } from '../net/fetcher.js';
 import { FindingSink, loadKnowledge, type KnowledgeBase } from '../rules/engine.js';
-import { PLACEHOLDER_ORIGIN, scanRepository, type RepoScan } from './scan.js';
+import { MISSING_IN_REPO, PLACEHOLDER_ORIGIN, routeMatches, scanRepository, type RepoScan } from './scan.js';
 import { prioritise } from '../analyze/priority.js';
 
 /** Rules that are meaningless for files on disk (they need a live server). */
@@ -36,6 +38,10 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
   let first = true;
   for (const app of scan.apps) {
     if (!app.staticSite) continue;
+    // A URL missing from the static files may be a route of another app in the same repository (a monorepo
+    // whose reverse proxy sends /blog to the CMS app): then it is served, not missing.
+    const otherRoutes = scan.apps.filter((a) => a !== app).flatMap((a) => a.routes.map((r) => r.route));
+    app.staticSite.pages = app.staticSite.pages.filter((p) => p.error !== MISSING_IN_REPO || !otherRoutes.some((r) => routeMatches(r, new URL(p.url).pathname)));
     // Run the website analyzers against the synthetic crawl, then drop network-only rules.
     const inner = new FindingSink(kb);
     const ctx = buildContext(app.staticSite);
@@ -71,6 +77,9 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
     if (app.originSource === 'inferred') limitations.push(`App "${app.appRoot}": site origin ${app.staticSite!.origin} was inferred from canonical/og:url/hreflang URLs; pass --site-url to override.`);
     if (app.originSource === 'placeholder') limitations.push(`App "${app.appRoot}": site URL unknown; canonical cross-domain checks were skipped. Pass --site-url for complete results.`);
   }
+  // No framework, no routes, no HTML pages: a library or CLI repository. Say so instead of scoring 100.
+  const nothingToAudit = !scan.routes.length && scan.apps.every((a) => a.framework === 'unknown' && !a.staticSite) && !findings.some((f) => f.severity !== 'info');
+  if (nothingToAudit) limitations.unshift(NOTHING_TO_AUDIT);
   if (scan.skipped.secrets) limitations.push(`${scan.skipped.secrets} secret-bearing file(s) (.env, keys, credentials) were skipped and never read.`);
   if (scan.skipped.symlinks) limitations.push(`${scan.skipped.symlinks} symlink(s) were not followed.`);
   if (scan.skipped.truncated) limitations.push('File limit reached; repository scan is partial.');
@@ -90,7 +99,7 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
     findings,
     geo,
     content,
-    scores: computeScores(findings, Math.max(1, scan.routes.length)),
+    scores: nothingToAudit ? { ...computeScores(findings, 1), notApplicable: NOTHING_TO_AUDIT } : computeScores(findings, Math.max(1, scan.routes.length)),
     measurement: {
       verified: findings.filter((f) => f.confidence === 'verified').length,
       heuristic: findings.filter((f) => f.confidence === 'heuristic').length,

@@ -2,6 +2,7 @@ import path from 'node:path';
 import type { CrawlResult, PageRecord } from '../crawl/crawler.js';
 import { parseRobots, type RobotsInfo } from '../crawl/robots.js';
 import { parseSitemapXml } from '../crawl/sitemap.js';
+import { normalizeUrl } from '../core/url.js';
 import { extractPage } from '../extract/html.js';
 import type { FindingSink } from '../rules/engine.js';
 import { detect, type Detection, type Framework } from './detect.js';
@@ -64,8 +65,18 @@ function find(files: WalkedFile[], re: RegExp): WalkedFile[] {
   return files.filter((f) => re.test(f.rel));
 }
 
+/**
+ * Template expressions (Blade `{{ }}` / `{!! !!}`, PHP `<?php ?>` / `<?= ?>`, Vue/Jinja `{{ }}`) blanked out
+ * with spaces of the same length: their `=>`, `->` and `?>` would otherwise end a tag early, hiding the
+ * attributes after them. Offsets and line numbers stay unchanged.
+ */
+export function blankTemplateExpressions(text: string): string {
+  return text.replace(/\{!!.*?!!\}|\{\{.*?\}\}|<\?(?:php|=)[\s\S]*?\?>/gs, (m) => m.replace(/[^\n]/g, ' '));
+}
+
 /** JSX/HTML <img> without alt (case-sensitive `<img`/`<Image` tags), with line numbers. */
-export function imgWithoutAlt(text: string): number[] {
+export function imgWithoutAlt(source: string): number[] {
+  const text = blankTemplateExpressions(source);
   const lines: number[] = [];
   const re = /<(img|Image)\b([^>]*?)\/?>/g;
   let m: RegExpExecArray | null;
@@ -76,7 +87,8 @@ export function imgWithoutAlt(text: string): number[] {
 }
 
 /** <a> elements without href (non-crawlable links) and javascript: hrefs. */
-export function anchorsWithoutHref(text: string): number[] {
+export function anchorsWithoutHref(source: string): number[] {
+  const text = blankTemplateExpressions(source);
   const lines: number[] = [];
   const re = /<a\b([^>]*)>/g;
   let m: RegExpExecArray | null;
@@ -244,6 +256,8 @@ function scanLayouts(layoutFiles: string[], read: (f: string) => string, sink: F
 function scanSources(files: WalkedFile[], read: (f: string) => string, sink: FindingSink): void {
   for (const f of files) {
     if (!/\.(tsx|jsx|vue|svelte|astro|php|html?)$/.test(f.rel) || /(^|\/)(dist|build|out|public|_site|static)\//.test(f.rel) || /\.(test|spec|stories)\./.test(f.rel)) continue;
+    if (NON_SITE_DIRS.test(f.rel)) continue;
+    if (ADMIN_VIEWS.test(f.rel)) continue;
     const src = read(f.rel);
     const ast = isJsSource(f.rel) ? parseSource(src, f.rel) : null;
     const noAlt = ast ? jsxImagesWithoutAlt(ast) : imgWithoutAlt(src);
@@ -256,29 +270,67 @@ function scanSources(files: WalkedFile[], read: (f: string) => string, sink: Fin
 /** Build a synthetic crawl from static HTML files so the website analyzers can be reused. */
 function staticCrawl(htmlFiles: string[], dirBase: string, read: (f: string) => string, scan: AppScan, files: WalkedFile[], siteOrigin: string): CrawlResult {
   const pages: PageRecord[] = [];
+  const sitemapFiles = files.filter((f) => f.rel.startsWith(dirBase) && /sitemap[^/]*\.xml$/i.test(f.rel)).map((f) => f.rel);
+  const smUrls = sitemapFiles.flatMap((s) => parseSitemapXml(read(s), s).urls);
+  const smSet = new Set(smUrls.map((u) => normalizeUrl(u.loc)).filter((u): u is string => !!u));
   for (const f of htmlFiles) {
     let urlPath = '/' + f.slice(dirBase.length).replace(/^\/+/, '');
     urlPath = urlPath.replace(/(^|\/)index\.html?$/i, '$1');
-    const url = new URL(urlPath, siteOrigin).toString();
     const html = read(f);
+    // Clean URLs: hosts such as Cloudflare Pages, Netlify or Vercel serve about.html at /about. Use that URL
+    // when the page's canonical or the sitemap does, so canonical and sitemap checks compare like with like.
+    const clean = urlPath.replace(/\.html?$/i, '');
+    if (clean !== urlPath) {
+      const cleanUrl = normalizeUrl(new URL(clean, siteOrigin).toString());
+      const canonical = /<link\b[^>]*rel=["']?canonical["']?[^>]*href=["']([^"']+)["']/i.exec(html)?.[1] ?? /<link\b[^>]*href=["']([^"']+)["'][^>]*rel=["']?canonical["']?/i.exec(html)?.[1];
+      if (cleanUrl && (smSet.has(cleanUrl) || (canonical && normalizeUrl(canonical, siteOrigin) === cleanUrl))) urlPath = clean;
+    }
+    const url = new URL(urlPath, siteOrigin).toString();
     scan.urlToFile.set(url, f);
     pages.push({
-      url, finalUrl: url, status: 200, depth: urlPath.split('/').filter(Boolean).length, redirects: [], contentType: 'text/html', timingMs: 0,
+      // Hosts serve 404.html & co. with an error status, so page-level SEO checks do not apply to them.
+      url, finalUrl: url, status: errorPageStatus(urlPath) ?? 200, depth: urlPath.split('/').filter(Boolean).length, redirects: [], contentType: 'text/html', timingMs: 0,
       bytes: Buffer.byteLength(html), truncated: false, headers: { 'content-encoding': 'n/a (repository)' }, xRobots: [], xRobotsByBot: {},
       blockedByRobots: false, inSitemap: false, data: extractPage(html, url),
     });
   }
   const robotsRel = [`${dirBase}robots.txt`, 'public/robots.txt', 'robots.txt'].find((r) => files.some((f) => f.rel === r));
   const robots: RobotsInfo = robotsRel ? parseRobots(new URL('/robots.txt', siteOrigin).toString(), read(robotsRel), 200) : { ...parseRobots(new URL('/robots.txt', siteOrigin).toString(), '', 404), state: 'missing' };
-  const sitemapFiles = files.filter((f) => f.rel.startsWith(dirBase) && /sitemap[^/]*\.xml$/i.test(f.rel)).map((f) => f.rel);
-  const smUrls = sitemapFiles.flatMap((s) => parseSitemapXml(read(s), s).urls);
-  const smSet = new Set(smUrls.map((u) => u.loc));
-  for (const p of pages) p.inSitemap = smSet.has(p.url);
+  const byNorm = new Set<string>();
+  for (const p of pages) {
+    const n = normalizeUrl(p.url);
+    if (n) byNorm.add(n);
+    p.inSitemap = !!n && smSet.has(n);
+  }
+  // Sitemap URLs of this site that no file in the repository serves (a removed page, a typo, a route that
+  // exists only as a server rewrite): recorded as missing so the sitemap checks see them.
+  for (const loc of smSet) {
+    if (byNorm.has(loc) || !loc.startsWith(siteOrigin)) continue;
+    const urlPath = new URL(loc).pathname;
+    pages.push({
+      url: loc, finalUrl: loc, status: 404, depth: urlPath.split('/').filter(Boolean).length, redirects: [], contentType: '', timingMs: 0,
+      bytes: 0, truncated: false, headers: {}, xRobots: [], xRobotsByBot: {}, blockedByRobots: false, inSitemap: true, foundOn: 'sitemap',
+      error: MISSING_IN_REPO,
+    });
+  }
   return {
     runId: 'repository', startUrl: new URL('/', siteOrigin).toString(), origin: siteOrigin, robots,
     sitemap: { sitemaps: sitemapFiles, urls: smUrls, issues: [] }, pages, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(),
     stats: { crawled: pages.length, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: 0, avgResponseMs: 0 }, truncated: false,
   };
+}
+
+/** `error` of synthetic records for URLs that no file in the repository serves. */
+export const MISSING_IN_REPO = 'no file in the repository serves this URL';
+
+/** True when a framework route pattern (`/blog/{slug}`, `/blog/[slug]`, `/docs/[...path]`) matches `urlPath`. */
+export function routeMatches(route: string, urlPath: string): boolean {
+  const norm = (s: string) => (s.replace(/\/+$/, '') || '/').toLowerCase();
+  const re = norm(route)
+    .split('/')
+    .map((seg) => (/^\[\[?\.\.\.[^\]]+\]\]?$/.test(seg) ? '.+' : /^\{[^}]+\}$|^\[[^\]]+\]$|^:[\w]+$/.test(seg) ? '[^/]+' : seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    .join('/');
+  return new RegExp(`^${re}$`).test(norm(urlPath));
 }
 
 /** Most common origin among absolute canonical / og:url / hreflang URLs in the HTML files. */
@@ -300,6 +352,30 @@ export function inferSiteOrigin(htmls: string[]): string | null {
 }
 
 const OUTPUT_DIRS = /(^|\/)(dist|build|out|_site|public|node_modules|vendor)\//;
+
+/**
+ * Folders whose files are not part of the website: tests, fixtures, benchmarks, examples, evaluation
+ * output. Auditing a repository whose only HTML lives there (a CLI tool,
+ * a library) must not report those files as the site. Pointing Searvex at such a folder directly still
+ * audits it (paths are relative to the audited root).
+ */
+export const NON_SITE_DIRS = /(^|\/)(tests?|__tests__|specs?|e2e|cypress|playwright|fixtures?|__fixtures__|testdata|bench|benchmarks?|examples?|samples?|evals?|snapshots?|__snapshots__|stories|storybook-static|coverage)\//i;
+
+/** Server-side template folders: their .html files are partials rendered by a framework, not pages. */
+const TEMPLATE_DIRS = /(^|\/)(templates|layouts|_layouts|_includes|includes|partials)\//i;
+
+/** Admin panels of server frameworks: always behind a login, never indexed. */
+const ADMIN_VIEWS = /(^|\/)resources\/views\/(vendor\/)?filament\//;
+
+/** A file is an HTML page (not a fragment or snippet) when it has a document element or doctype. */
+const isHtmlDocument = (src: string) => /<!doctype\s+html|<html[\s>]/i.test(src);
+
+/** HTTP status a static host serves for a conventional error page (404.html, Next.js _not-found, 500.html). */
+export function errorPageStatus(urlPath: string): number | null {
+  if (/(^|\/)(404|_not-found)(\.html?|\/)?$/i.test(urlPath)) return 404;
+  if (/(^|\/)(500|50x)(\.html?|\/)?$/i.test(urlPath)) return 500;
+  return null;
+}
 
 function scanApp(root: string, appRoot: string, framework: Framework, files: WalkedFile[], read: (f: string) => string, sink: FindingSink, opts: { siteUrl?: string }): AppScan {
   const scan: AppScan = {
@@ -355,10 +431,12 @@ function scanApp(root: string, appRoot: string, framework: Framework, files: Wal
       break;
     }
     case 'laravel': {
-      const layouts = find(appFiles, /resources\/views\/.*\.blade\.php$/).map((f) => f.rel).filter((f) => /<head\b/i.test(read(f)));
+      const layouts = find(appFiles, /resources\/views\/.*\.blade\.php$/).map((f) => f.rel).filter((f) => !ADMIN_VIEWS.test(f) && /<head\b/i.test(read(f)));
       scanLayouts(layouts, read, sink, scan, { titleRe: /<title\b/i, langRe: /\blang\s*=/ });
-      const routes = appFiles.find((f) => f.rel === rel(appRoot, 'routes/web.php'));
-      if (routes) {
+      // Page routes live in routes/web.php and in any extra route file the app registers (routes/public.php,
+      // routes/marketing.php …); api, console and broadcast channel routes are not pages.
+      const routeFiles = appFiles.filter((f) => f.rel.startsWith(rel(appRoot, 'routes') + '/') && /\.php$/.test(f.rel) && !/\/(api|console|channels)\.php$/.test(f.rel));
+      for (const routes of routeFiles) {
         const src = read(routes.rel);
         for (const m of src.matchAll(/Route::(get|view|match|any)\s*\(\s*['"]([^'"]+)['"]/g)) {
           const r = m[2]!.startsWith('/') ? m[2]! : '/' + m[2]!;
@@ -405,7 +483,8 @@ function scanApp(root: string, appRoot: string, framework: Framework, files: Wal
       .filter((f) => f.rel.startsWith(d) && /\.html?$/i.test(f.rel))
       // At the app root, skip output/vendor folders (they are scanned as their own candidates).
       .filter((f) => d !== (appRoot === '.' ? '' : `${appRoot}/`) || !OUTPUT_DIRS.test(f.rel.slice(d.length)))
-      .filter((f) => !/(^|\/)(googl[a-z0-9]+|yandex_[a-z0-9]+|BingSiteAuth)\.html$/i.test(f.rel));
+      .filter((f) => !/(^|\/)(googl[a-z0-9]+|yandex_[a-z0-9]+|BingSiteAuth)\.html$/i.test(f.rel))
+      .filter((f) => !NON_SITE_DIRS.test(f.rel.slice(d.length)) && !TEMPLATE_DIRS.test(f.rel.slice(d.length)) && isHtmlDocument(read(f.rel)));
     if (!html.length) continue;
     let origin = PLACEHOLDER_ORIGIN;
     scan.originSource = 'placeholder';

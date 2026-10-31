@@ -59,7 +59,7 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     if (p.redirects.length && p.foundOn && p.foundOn !== 'sitemap' && p.redirects.some((r) => [302, 303, 307].includes(r.status))) {
       sink.emit('redirect.temporary-internal', { url: p.url, observed: p.redirects.map((r) => `${r.status} → ${r.location}`).join(', '), expected: 'linked from ' + p.foundOn });
     }
-    if (p.inSitemap && (p.redirects.length || p.status !== 200)) sink.emit('index.sitemap-non200', { url: p.url, observed: p.redirects.length ? `redirects to ${p.finalUrl}` : `HTTP ${p.status}` });
+    if (p.inSitemap && (p.redirects.length || p.status !== 200)) sink.emit('index.sitemap-non200', { url: p.url, observed: p.redirects.length ? `redirects to ${p.finalUrl}` : p.error ? `${p.error} (HTTP ${p.status || 'error'})` : `HTTP ${p.status}` });
     if (p.bytes > 15 * 1024 * 1024 || p.truncated) sink.emit('index.oversized-html', { url: p.url, observed: `${Math.round(p.bytes / 1024 / 1024)} MB${p.truncated ? ' (truncated by crawler limit)' : ''}` });
 
     const f = factsOf(p);
@@ -71,7 +71,7 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     const noindex = isNoindex(p);
     const selfCanon = isSelfCanonical(p);
     if (noindex) {
-      sink.emit('index.noindex', { url: p.url, observed: robotsDirectives(p, ['googlebot', 'bingbot']).join(', ') });
+      sink.emit('index.noindex', { url: p.url, observed: [...new Set(robotsDirectives(p, ['googlebot', 'bingbot']))].join(', ') });
       if (p.inSitemap) sink.emit('index.noindex-in-sitemap', ev);
       if (f.canonical && !selfCanon) sink.emit('canonical.noindex-conflict', { url: p.url, observed: `noindex + canonical → ${f.canonical}` });
     }
@@ -134,7 +134,7 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     // Images
     const noAlt = f.images.filter((i) => i.alt === null && i.src);
     if (noAlt.length) sink.emit('img.alt-missing', { url: p.url, observed: `${noAlt.length} image(s), e.g. ${noAlt[0]!.src.slice(0, 120)}` });
-    const noDim = f.images.filter((i) => i.src && (!i.width || !i.height));
+    const noDim = f.images.filter((i) => i.src && (!i.width || !i.height) && !i.sizedByLayout);
     if (noDim.length) sink.emit('img.dimensions-missing', { url: p.url, observed: `${noDim.length} image(s) without width/height attributes` });
 
     // Links
@@ -199,7 +199,8 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     const rec = resolveRecord(ctx, target);
     if (new URL(target).pathname.startsWith('/cdn-cgi/')) continue;
     if (rec && !rec.blockedByRobots && rec.status >= 400 && rec.status < 500) {
-      sink.emit('links.broken-internal', { url: target, observed: `HTTP ${rec.status}, linked from ${sources.size} page(s): ${[...sources].slice(0, 3).join(', ')}` });
+      // Repository mode: "missing" means no file was found, which a server rewrite could still serve.
+      sink.emit('links.broken-internal', { url: target, observed: `${rec.error ? rec.error : `HTTP ${rec.status}`}, linked from ${sources.size} page(s): ${[...sources].slice(0, 3).join(', ')}` }, rec.error ? { confidence: 'heuristic' } : {});
     }
   }
 

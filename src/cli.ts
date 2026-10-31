@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { auditWebsite, type AuditReport } from './analyze/audit.js';
+import { auditWebsite, scoreLabel, type AuditReport } from './analyze/audit.js';
 import type { Severity } from './core/types.js';
 import { RunStore } from './crawl/store.js';
 import { SEARVEX_VERSION } from './net/fetcher.js';
@@ -191,7 +191,7 @@ export function printSummary(report: AuditReport, files: string[], v: GlobalFlag
   if (v['quiet']) return;
   const counts = SEVERITY_ORDER.map((s) => `${s}: ${report.findings.filter((f) => f.severity === s).length}`).join('  ');
   console.log(`\nSearvex audit — ${report.target}`);
-  console.log(`Health score ${report.scores.overall}/100 (Searvex summary, not a search engine metric)`);
+  console.log(`Health score ${scoreLabel(report.scores)} (Searvex summary, not a search engine metric)`);
   console.log(`Pages: ${report.crawl.crawled}${report.crawl.truncated ? ` (limit reached; ${report.crawl.queuedRemaining} queued)` : ''}   Rules: ${report.tool.rulesVersion}`);
   console.log(`Findings by rule — ${counts}`);
   for (const f of report.findings.filter((x) => x.severity !== 'info').slice(0, 12)) {

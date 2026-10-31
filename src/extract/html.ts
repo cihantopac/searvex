@@ -14,12 +14,23 @@ export interface LinkInfo {
   uncrawlable: boolean;
 }
 
+function sizedByLayout(style: string | undefined, nimg: string | undefined): boolean {
+  if (nimg === 'fill') return true;
+  const s = (style ?? '').toLowerCase().replace(/\s+/g, '');
+  return /aspect-ratio:/.test(s) || (/position:absolute/.test(s) && /(^|;)width:100%/.test(s) && /(^|;)height:100%/.test(s));
+}
+
 export interface ImageInfo {
   src: string;
   alt: string | null;
   width?: string;
   height?: string;
   loading?: string;
+  /**
+   * Sized by its container or an inline aspect-ratio, so missing width/height cannot shift the layout
+   * (Next.js `<Image fill>` renders `position:absolute` at 100% of a sized parent).
+   */
+  sizedByLayout?: boolean;
 }
 
 export interface JsonLdBlock {
@@ -216,6 +227,7 @@ export function extractPage(html: string, pageUrl: string): PageData {
       width: $(el).attr('width'),
       height: $(el).attr('height'),
       loading: $(el).attr('loading'),
+      sizedByLayout: sizedByLayout($(el).attr('style'), $(el).attr('data-nimg')),
     }))
     .get();
 

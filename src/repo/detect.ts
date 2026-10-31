@@ -60,6 +60,32 @@ export function detectApp(dir: string, rel = '.'): Array<{ framework: Framework;
   return out;
 }
 
+const STATIC_DIRS = ['', 'public', 'dist', 'out', 'build', '_site'];
+
+/**
+ * index.html files that mark a plain static site: at the app root or in a public/build folder, also one
+ * level down for sites that only have locale folders (public/en/index.html, public/tr/index.html).
+ */
+export function staticHtmlIndexes(dir: string): string[] {
+  const found: string[] = [];
+  for (const d of STATIC_DIRS) {
+    const base = path.join(dir, d);
+    if (fs.existsSync(path.join(base, 'index.html'))) {
+      found.push(path.posix.join(d, 'index.html'));
+      continue;
+    }
+    let subs: fs.Dirent[] = [];
+    try {
+      subs = fs.readdirSync(base, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    const locales = subs.filter((s) => s.isDirectory() && /^[a-z]{2,3}([-_][a-z0-9]{2,8})?$/i.test(s.name) && fs.existsSync(path.join(base, s.name, 'index.html')));
+    if (locales.length) found.push(...locales.map((s) => path.posix.join(d, s.name, 'index.html')));
+  }
+  return found;
+}
+
 export function detect(root: string): Detection {
   const candidates = detectApp(root);
   const pkg = readJson<Pkg>(path.join(root, 'package.json'));
@@ -67,18 +93,23 @@ export function detect(root: string): Detection {
   const pnpmWs = fs.existsSync(path.join(root, 'pnpm-workspace.yaml')) ? (fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8').match(/-\s*['"]?([^'"\n]+)['"]?/g) ?? []).map((l) => l.replace(/^-\s*['"]?|['"]?$/g, '')) : [];
   const patterns = [...ws, ...pnpmWs];
   const workspaces: string[] = [];
-  for (const pattern of patterns.length ? patterns : ['apps/*', 'packages/*', 'sites/*']) {
+  for (const pattern of patterns.length ? patterns : ['apps/*', 'packages/*', 'sites/*', 'services/*']) {
     const base = pattern.replace(/\/\*+$/, '');
     const dir = path.join(root, base);
     if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue;
     const children = pattern.endsWith('*') ? fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path.posix.join(base, d.name)) : [base]; // repo-relative ids are always POSIX
     for (const c of children) {
       const found = detectApp(path.join(root, c), c);
+      // A workspace folder without a framework but with built or hand-written HTML is a static site.
+      if (!found.length) {
+        const idx = staticHtmlIndexes(path.join(root, c));
+        if (idx.length) found.push({ framework: 'static-html', root: c, evidence: idx.slice(0, 3).map((f) => path.posix.join(c, f)).join(', ') });
+      }
       if (found.length) workspaces.push(c);
       candidates.push(...found);
     }
   }
-  const htmlFiles = ['index.html', 'public/index.html', 'dist/index.html', 'out/index.html', 'build/index.html', '_site/index.html'].filter((f) => fs.existsSync(path.join(root, f)));
+  const htmlFiles = staticHtmlIndexes(root);
   if (!candidates.length && htmlFiles.length) candidates.push({ framework: 'static-html', root: '.', evidence: htmlFiles.join(', ') });
   const framework = candidates[0]?.framework ?? 'unknown';
   const packageManager = has(root, 'pnpm-lock.yaml') ? 'pnpm' : has(root, 'yarn.lock') ? 'yarn' : has(root, 'bun.lockb', 'bun.lock') ? 'bun' : has(root, 'package-lock.json') ? 'npm' : has(root, 'composer.lock') ? 'composer' : undefined;

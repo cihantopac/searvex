@@ -111,7 +111,9 @@ export function checkStructuredData(url: string, f: PageData, sink: FindingSink,
     }
   }
   for (const t of allTypes) if (RETIRED_TYPES.has(t)) sink.emit('sd.retired-type', { url, observed: t });
-  if (isHomepage && !['Organization', 'Corporation', 'OnlineStore', 'OnlineBusiness', 'NGO', 'EducationalOrganization', 'GovernmentOrganization', ...LOCAL_BUSINESS_SUBTYPES].some((t) => allTypes.has(t))) {
+  // A personal site describes a Person (often on a ProfilePage); Organization markup does not apply there.
+  const personal = allTypes.has('Person') || allTypes.has('ProfilePage');
+  if (isHomepage && !personal && !['Organization', 'Corporation', 'OnlineStore', 'OnlineBusiness', 'NGO', 'EducationalOrganization', 'GovernmentOrganization', ...LOCAL_BUSINESS_SUBTYPES].some((t) => allTypes.has(t))) {
     sink.emit('geo.organization-missing', { url, observed: `types present: ${[...allTypes].join(', ') || 'none'}` });
   }
 }

@@ -38,6 +38,13 @@ export interface Scores {
   overall: number;
   byCategory: Partial<Record<Category, number>>;
   method: string;
+  /** Set when there was nothing to audit (e.g. a repository without any website); `overall` is then meaningless. */
+  notApplicable?: string;
+}
+
+/** "87/100", or "n/a" when nothing could be audited. */
+export function scoreLabel(s: Scores): string {
+  return s.notApplicable ? 'n/a (nothing to audit)' : `${s.overall}/100`;
 }
 
 const WEIGHT: Record<Severity, number> = { critical: 25, high: 10, medium: 4, low: 1.5, info: 0 };
