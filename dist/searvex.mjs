@@ -699,7 +699,7 @@ function assertUrlAllowed(raw, policy) {
   if (isIP(host) && !isAddressAllowed(host, policy)) {
     throw new BlockedUrlError(`Address not allowed (${classifyAddress(host)}): ${host}`, raw);
   }
-  const lower = host.toLowerCase();
+  const lower = host.toLowerCase().replace(/\.+$/, "");
   if (!policy.allowPrivate && (lower === "localhost" || lower.endsWith(".localhost") || lower.endsWith(".internal") || lower.endsWith(".local"))) {
     throw new BlockedUrlError(`Local hostname not allowed: ${host}`, raw);
   }
@@ -16028,6 +16028,12 @@ __export(render_exports, {
   BROWSER_ARGS: () => BROWSER_ARGS,
   createRenderer: () => createRenderer
 });
+async function bounded(p, ms) {
+  let timer;
+  const ok = await Promise.race([p.then(() => true, () => true), new Promise((r) => timer = setTimeout(() => r(false), ms))]);
+  clearTimeout(timer);
+  return ok;
+}
 async function launch(chromium, proxy) {
   const base = { headless: true, args: BROWSER_ARGS, proxy: { server: proxy.server, username: proxy.username, password: proxy.password, bypass: "" } };
   try {
@@ -16053,7 +16059,14 @@ async function createRenderer(policy, timeoutMs = 3e4) {
     await proxy.close();
     throw e;
   }
-  const stats = { pages: 0, blockedRequests: 0, skippedResources: 0, sandbox, proxy: proxy.stats };
+  const stats = { pages: 0, blockedRequests: 0, skippedResources: 0, deadlineExceeded: 0, browserRestarts: 0, sandbox, proxy: proxy.stats };
+  const deadlineMs = timeoutMs + SETTLE_MS + 5e3;
+  const restart = async () => {
+    stats.browserRestarts++;
+    await bounded(browser.close(), CLOSE_MS);
+    ({ browser, sandbox } = await launch(chromium, proxy));
+    stats.sandbox = sandbox;
+  };
   return {
     stats,
     async render(url) {
@@ -16066,7 +16079,7 @@ async function createRenderer(policy, timeoutMs = 3e4) {
         if (main2 && p !== main2) void p.close().catch(() => {
         });
       });
-      try {
+      const work = (async () => {
         await context.route("**/*", async (route) => {
           const req = route.request();
           if (SKIPPED_RESOURCE_TYPES.has(req.resourceType())) {
@@ -16087,24 +16100,33 @@ async function createRenderer(policy, timeoutMs = 3e4) {
         });
         main2 = await context.newPage();
         await main2.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
-        await main2.waitForLoadState("networkidle", { timeout: 5e3 }).catch(() => {
+        await main2.waitForLoadState("networkidle", { timeout: SETTLE_MS }).catch(() => {
         });
         return { html: await main2.content() };
+      })();
+      let timer;
+      const deadline = new Promise((resolve) => timer = setTimeout(() => resolve("deadline"), deadlineMs));
+      try {
+        const r = await Promise.race([work, deadline]);
+        if (r !== "deadline") return r;
+        stats.deadlineExceeded++;
+        work.catch(() => {
+        });
+        return { html: "", error: `rendering exceeded ${Math.round(deadlineMs / 1e3)} s (page scripts kept the browser busy)` };
       } catch (e) {
         return { html: "", error: e.message.split("\n")[0] };
       } finally {
-        await context.close().catch(() => {
-        });
+        clearTimeout(timer);
+        if (!await bounded(context.close(), CLOSE_MS)) await restart();
       }
     },
     async close() {
-      await browser.close().catch(() => {
-      });
+      await bounded(browser.close(), CLOSE_MS);
       await proxy.close();
     }
   };
 }
-var SKIPPED_RESOURCE_TYPES, MAX_REQUESTS_PER_PAGE, BROWSER_ARGS;
+var SKIPPED_RESOURCE_TYPES, MAX_REQUESTS_PER_PAGE, SETTLE_MS, CLOSE_MS, BROWSER_ARGS;
 var init_render = __esm({
   "src/crawl/render.ts"() {
     "use strict";
@@ -16113,6 +16135,8 @@ var init_render = __esm({
     init_policy_proxy();
     SKIPPED_RESOURCE_TYPES = /* @__PURE__ */ new Set(["image", "media", "font"]);
     MAX_REQUESTS_PER_PAGE = 300;
+    SETTLE_MS = 5e3;
+    CLOSE_MS = 5e3;
     BROWSER_ARGS = [
       // Send loopback through the proxy too (Chromium bypasses proxies for localhost by default).
       "--proxy-bypass-list=<-loopback>",
@@ -38366,9 +38390,10 @@ function planFixes(report, scan, opts = {}) {
       return null;
     }
   };
-  const stage = (ruleId, title, rationale, file2, after2, action = "modify") => {
+  const stage = (ruleId, title, rationale, file2, after0, action = "modify") => {
     const prev2 = pending.get(file2);
     const original0 = prev2 ? prev2.before : action === "create" ? null : original(file2);
+    const after2 = original0 !== null && usesCrlf(original0) ? after0.replace(/\r?\n/g, "\r\n") : after0;
     const stepBefore = prev2 ? prev2.after : original0;
     if (stepBefore === after2) return;
     pending.set(file2, { path: file2, action: original0 === null ? "create" : "modify", before: original0, after: after2 });
@@ -38590,6 +38615,10 @@ Sitemap: ${sitemapUrl}
 Sitemap: ${sitemapUrl}
 `);
 }
+function usesCrlf(text4) {
+  const crlf = (text4.match(/\r\n/g) ?? []).length;
+  return crlf > 0 && crlf >= (text4.match(/\n/g) ?? []).length - crlf;
+}
 function sitemapXml(urls) {
   const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -38609,9 +38638,20 @@ function changesDir(root2) {
 }
 function atomicWrite(file2, content) {
   fs6.mkdirSync(path10.dirname(file2), { recursive: true });
+  const mode = fs6.existsSync(file2) ? fs6.statSync(file2).mode & 4095 : void 0;
   const tmp = `${file2}.searvex-${process.pid}.tmp`;
-  fs6.writeFileSync(tmp, content);
-  fs6.renameSync(tmp, file2);
+  try {
+    fs6.writeFileSync(tmp, content, mode === void 0 ? void 0 : { mode });
+    if (mode !== void 0) fs6.chmodSync(tmp, mode);
+    fs6.renameSync(tmp, file2);
+  } catch (e) {
+    fs6.rmSync(tmp, { force: true });
+    throw e;
+  }
+}
+var hashOf = (abs) => fs6.existsSync(abs) ? sha(fs6.readFileSync(abs, "utf8")) : null;
+function interruptedChanges(root2) {
+  return listChanges(root2).filter((m) => m.status === "applying");
 }
 var ConflictError = class extends Error {
 };
@@ -38633,28 +38673,34 @@ function applyFixes(root2, fixes) {
   }
   fs6.mkdirSync(path10.join(dir, "backup"), { recursive: true });
   ensureSelfIgnored(root2);
-  const manifest = { changeId, createdAt: (/* @__PURE__ */ new Date()).toISOString(), root: root2, fixes: fixes.map((f) => ({ id: f.id, ruleId: f.ruleId, title: f.title })), files: [], status: "applied" };
+  const manifest = { changeId, createdAt: (/* @__PURE__ */ new Date()).toISOString(), root: root2, fixes: fixes.map((f) => ({ id: f.id, ruleId: f.ruleId, title: f.title })), files: [], status: "applying" };
   let n = 0;
+  for (const [p, c] of finalByPath) {
+    let backup = null;
+    if (c.action === "modify") {
+      backup = `backup/${n++}`;
+      fs6.writeFileSync(path10.join(dir, backup), c.before ?? "");
+    }
+    manifest.files.push({ path: p, action: c.action, beforeHash: c.before === null ? null : sha(c.before), afterHash: sha(c.after), backup });
+  }
+  writeManifest(root2, manifest);
   const written = [];
   try {
-    for (const [p, c] of finalByPath) {
-      const abs = resolveInside(root2, p);
-      let backup = null;
-      if (c.action === "modify") {
-        backup = `backup/${n++}`;
-        fs6.writeFileSync(path10.join(dir, backup), c.before ?? "");
-      }
-      atomicWrite(abs, c.after);
-      const entry = { path: p, action: c.action, beforeHash: c.before === null ? null : sha(c.before), afterHash: sha(c.after), backup };
-      written.push(entry);
-      manifest.files.push(entry);
+    for (const e of manifest.files) {
+      atomicWrite(resolveInside(root2, e.path), finalByPath.get(e.path).after);
+      written.push(e);
     }
   } catch (e) {
-    for (const w of written.reverse()) restoreEntry(root2, dir, w);
+    try {
+      for (const w of written.reverse()) restoreEntry(root2, dir, w);
+    } catch (undo) {
+      throw new Error(`Applying ${changeId} failed (${e.message}) and undoing it failed (${undo.message}); run "searvex rollback ${changeId}" to restore the files.`);
+    }
     fs6.rmSync(dir, { recursive: true, force: true });
     throw e;
   }
-  fs6.writeFileSync(path10.join(dir, "manifest.json"), JSON.stringify(manifest, null, 2));
+  manifest.status = "applied";
+  writeManifest(root2, manifest);
   return manifest;
 }
 function restoreEntry(root2, dir, e) {
@@ -38676,14 +38722,16 @@ function rollback(root2, changeId, opts = {}) {
   if (m.status === "rolled-back") throw new Error(`Change ${changeId} was already rolled back`);
   const dir = path10.join(changesDir(root2), changeId);
   const conflicts = [];
+  const pending = [];
   for (const e of m.files) {
-    const abs = resolveInside(root2, e.path);
-    const current = fs6.existsSync(abs) ? sha(fs6.readFileSync(abs, "utf8")) : null;
+    const current = hashOf(resolveInside(root2, e.path));
+    if (current === e.beforeHash) continue;
+    pending.push(e);
     if (current !== e.afterHash) conflicts.push(e.path);
   }
   if (conflicts.length && !opts.force) return { restored: [], conflicts };
   const restored = [];
-  for (const e of [...m.files].reverse()) {
+  for (const e of pending.reverse()) {
     restoreEntry(root2, dir, e);
     restored.push(e.path);
   }
@@ -38758,6 +38806,8 @@ Dry run \u2014 no files changed. Preview diff: ${store2.file("plan.patch")}`);
     console.log("Apply with: searvex optimize <path> --apply [same options]");
     return 0;
   }
+  const interrupted = interruptedChanges(root2);
+  if (interrupted.length) throw new UsageError(`An earlier change was interrupted while applying (${interrupted.map((m) => m.changeId).join(", ")}). Restore it first: searvex rollback ${interrupted[0].changeId} ${target}`);
   if (gitDirty(root2)) console.log("\nNote: the git working tree has uncommitted changes; Searvex keeps its own backups, but committing first is recommended.");
   if (!v["yes"]) {
     if (!process.stdin.isTTY) throw new UsageError("Refusing to apply without confirmation in a non-interactive shell; pass --yes after reviewing the dry run.");
@@ -38776,7 +38826,16 @@ Apply ${plan.fixes.length} fix(es) to ${new Set(plan.fixes.flatMap((f) => f.chan
   }
   console.log(`
 Applied change ${manifest.changeId} (${manifest.files.length} file(s)). Verifying\u2026`);
-  const after2 = auditRepository(root2, { siteUrl, kb });
+  let after2;
+  try {
+    after2 = auditRepository(root2, { siteUrl, kb });
+  } catch (e) {
+    manifest.status = "verification-failed";
+    manifest.verification = { error: e.message };
+    writeManifest(root2, manifest);
+    reportUndo(rollback(root2, manifest.changeId), manifest, target);
+    throw e;
+  }
   const count = (r, id) => r.findings.find((f) => f.ruleId === id)?.count ?? 0;
   const targeted = [...new Set(plan.fixes.map((f) => f.ruleId))];
   const results = targeted.map((id) => ({ ruleId: id, before: count(before2.report, id), after: count(after2.report, id) }));
@@ -38788,9 +38847,9 @@ Applied change ${manifest.changeId} (${manifest.files.length} file(s)). Verifyin
   if (introduced.length || notImproved.length) {
     manifest.status = "verification-failed";
     writeManifest(root2, manifest);
-    const rb = rollback(root2, manifest.changeId, { force: true });
     console.log(`
-Verification failed (${introduced.length ? "new issues: " + introduced.join(", ") : "no improvement for " + notImproved.map((r) => r.ruleId).join(", ")}). Rolled back ${rb.restored.length} file(s).`);
+Verification failed (${introduced.length ? "new issues: " + introduced.join(", ") : "no improvement for " + notImproved.map((r) => r.ruleId).join(", ")}).`);
+    reportUndo(rollback(root2, manifest.changeId), manifest, target);
     return 1;
   }
   manifest.status = "verified";
@@ -38799,6 +38858,10 @@ Verification failed (${introduced.length ? "new issues: " + introduced.join(", "
 Verified. Health score ${before2.report.scores.overall} \u2192 ${after2.report.scores.overall}.`);
   console.log(`Undo with: searvex rollback ${manifest.changeId} ${target}`);
   return 0;
+}
+function reportUndo(rb, m, target) {
+  if (!rb.conflicts.length) return console.log(`Rolled back ${rb.restored.length} file(s).`);
+  console.log(`Not rolled back: ${rb.conflicts.join(", ")} changed again after the fix was applied. Review them, then run: searvex rollback ${m.changeId} ${target} --yes`);
 }
 async function commandRollback(flags) {
   const id = flags.positionals[1];
@@ -39335,16 +39398,142 @@ function importGscFiles(files) {
   }
   return out;
 }
-function pageHosts(exp) {
-  const m = /* @__PURE__ */ new Map();
-  for (const p of exp.tables.pages ?? []) {
+
+// src/integrations/property.ts
+var PropertyError = class extends Error {
+};
+function parseProperty(raw, opts = {}) {
+  const s = raw.trim();
+  const dm = /^sc-domain:(.+)$/i.exec(s);
+  if (dm) {
+    const domain = dm[1].trim().toLowerCase().replace(/\.$/, "");
+    if (!/^[a-z0-9.-]+\.[a-z0-9-]+$/i.test(domain) || domain.includes("..")) throw new PropertyError(`Invalid domain property: ${raw}`);
+    return { kind: "domain", raw: s, domain };
+  }
+  let u;
+  try {
+    u = new URL(s);
+  } catch {
+    throw new PropertyError(`Invalid property "${raw}": use sc-domain:example.com or a URL prefix such as https://example.com/`);
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new PropertyError(`Invalid property protocol: ${raw}`);
+  return { kind: "url-prefix", raw: s, protocol: u.protocol, host: u.host.toLowerCase(), path: u.pathname || "/", anyProtocol: !!opts.anyProtocol };
+}
+function urlInProperty(url, p) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+  if (p.kind === "domain") {
+    const h = u.hostname.toLowerCase();
+    return h === p.domain || h.endsWith(`.${p.domain}`);
+  }
+  if (!p.anyProtocol && u.protocol !== p.protocol) return false;
+  return u.host.toLowerCase() === p.host && u.pathname.startsWith(p.path);
+}
+function describeProperty(p) {
+  return p.kind === "domain" ? `domain property ${p.domain} (all subdomains and protocols)` : `URL-prefix property ${p.anyProtocol ? "" : p.protocol + "//"}${p.host}${p.path}`;
+}
+var MIN_COVERAGE = 0.5;
+function matchAuditToProperty(audit, p) {
+  const urls = (audit.inventory?.pages ?? []).map((x) => x.url);
+  const hosts = /* @__PURE__ */ new Map();
+  for (const url of urls) {
     try {
-      const h = new URL(p.key).host.toLowerCase();
-      m.set(h, (m.get(h) ?? 0) + 1);
+      const h = new URL(url).host.toLowerCase();
+      hosts.set(h, (hosts.get(h) ?? 0) + 1);
     } catch {
     }
   }
+  const primaryHost = [...hosts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? safeHost(audit.crawl?.startUrl ?? audit.target);
+  if (!urls.length) {
+    const start = audit.crawl?.startUrl ?? audit.target;
+    const ok = urlInProperty(start, p);
+    return { coverage: ok ? 1 : 0, pages: 0, primaryHost, matches: ok, reason: ok ? "start URL inside the property (no pages crawled)" : `start URL ${start} is outside the ${describeProperty(p)}` };
+  }
+  const inside = urls.filter((u) => urlInProperty(u, p)).length;
+  const coverage = inside / urls.length;
+  const matches = coverage >= MIN_COVERAGE;
+  return {
+    coverage,
+    pages: urls.length,
+    primaryHost,
+    matches,
+    reason: matches ? `${inside}/${urls.length} crawled pages inside the property` : `only ${inside}/${urls.length} crawled pages (host ${primaryHost}) are inside the ${describeProperty(p)}`
+  };
+}
+function assertAuditInProperty(audit, p, source) {
+  const match = matchAuditToProperty(audit, p);
+  if (!match.matches) throw new PropertyError(`${source} belongs to the ${describeProperty(p)}, but the audit of ${audit.target} does not: ${match.reason}. Search data of another website is never combined with this audit.`);
+  return match;
+}
+function hostsOf(urls) {
+  const m = /* @__PURE__ */ new Map();
+  for (const url of urls) {
+    const h = safeHost(url);
+    if (h) m.set(h, (m.get(h) ?? 0) + 1);
+  }
   return [...m].map(([host, pages]) => ({ host, pages })).sort((a, b) => b.pages - a.pages);
+}
+function propertyForExport(raw, pageUrls) {
+  const urls = pageUrls ?? [];
+  const hosts = hostsOf(urls);
+  if (raw) {
+    const p = parseProperty(raw);
+    if (urls.length) {
+      const inside = urls.filter((u) => urlInProperty(u, p)).length;
+      if (inside / urls.length < MIN_COVERAGE) throw new PropertyError(`The export's pages (${hosts.slice(0, 3).map((h) => h.host).join(", ")}) do not belong to the ${describeProperty(p)}. Check that you exported the right property.`);
+    }
+    return p;
+  }
+  if (!hosts.length) return void 0;
+  const total = hosts.reduce((a, h) => a + h.pages, 0);
+  if (hosts.length > 1 && hosts[0].pages / total < 0.9) throw new PropertyError(`The export contains pages from several hosts (${hosts.slice(0, 5).map((h) => h.host).join(", ")}): pass --property (e.g. sc-domain:example.com).`);
+  return parseProperty(`https://${hosts[0].host}/`, { anyProtocol: true });
+}
+function safeHost(url) {
+  try {
+    return new URL(url).host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+function selectAuditForProperty(workspace, ref, p) {
+  if (ref !== "latest") {
+    const audit = new RunStore(workspace, ref).readJson("report.json");
+    if (!audit || audit.mode !== "website") throw new PropertyError(`No website audit report found for --audit ${ref}`);
+    const match = matchAuditToProperty(audit, p);
+    if (!match.matches) throw new PropertyError(`Audit ${ref} (${audit.target}) does not belong to this property: ${match.reason}. Run an audit of this site first or pass the matching run id.`);
+    return { runId: ref, audit, match };
+  }
+  const candidates = [];
+  const others = [];
+  for (const id of RunStore.list(workspace)) {
+    const audit = new RunStore(workspace, id).readJson("report.json");
+    if (audit?.mode !== "website") continue;
+    const match = matchAuditToProperty(audit, p);
+    if (match.matches) candidates.push({ runId: id, audit, match });
+    else others.push(`${id} (${audit.target})`);
+  }
+  if (!candidates.length) {
+    const hint = others.length ? ` Audits in this workspace belong to other sites: ${others.slice(-5).join(", ")}.` : "";
+    throw new PropertyError(`No website audit in ${workspace} matches the ${describeProperty(p)}.${hint} Run "searvex audit <url>" for this site first.`);
+  }
+  const byHost = /* @__PURE__ */ new Map();
+  for (const c of candidates) {
+    const k = c.match.primaryHost ?? "?";
+    (byHost.get(k) ?? byHost.set(k, []).get(k)).push(c);
+  }
+  if (byHost.size === 1) return candidates.at(-1);
+  if (p.kind === "domain") {
+    const apex = [...byHost].filter(([h]) => h === p.domain || h === `www.${p.domain}`);
+    if (apex.length === 1) return apex[0][1].at(-1);
+  }
+  const list = [...byHost].map(([h, xs]) => `${h}: ${xs.at(-1).runId}`).join("; ");
+  throw new PropertyError(`Ambiguous --audit latest: audits of several hosts match the ${describeProperty(p)} (${list}). Pass the run id explicitly.`);
 }
 
 // src/commands/monitor.ts
@@ -39411,42 +39600,81 @@ function findBaseline(workspace, target, exclude) {
   }
   return null;
 }
+function sameSite2(a, b) {
+  if (a === b) return true;
+  try {
+    return new URL(a).host.toLowerCase() === new URL(b).host.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+function propertyOrUsage(fn) {
+  try {
+    return fn();
+  } catch (e) {
+    if (e instanceof PropertyError || e instanceof GscImportError) throw new UsageError(e.message);
+    throw e;
+  }
+}
 async function commandMonitor(flags) {
   const v = flags.values;
   const target = flags.positionals[1];
   if (!target || !/^https?:\/\//i.test(target)) throw new UsageError("monitor requires a URL");
   const kb = loadKnowledge();
   const workspace = path14.resolve(String(v["out"] ?? process.cwd()));
+  const imports = v["import"] ?? [];
+  let exp;
+  let importProperty;
+  if (imports.length) {
+    try {
+      exp = importGscFiles(imports);
+    } catch (e) {
+      if (e instanceof GscImportError) throw new UsageError(e.message);
+      throw e;
+    }
+    importProperty = propertyOrUsage(() => propertyForExport(v["property"], exp.tables.pages?.map((p) => p.key)));
+    if (!importProperty)
+      throw new UsageError(`The export (${exp.files.join(", ")}) has no pages table, so Searvex cannot tell which website it belongs to. Include the pages table (export the ZIP) or pass --property (e.g. sc-domain:example.com) to state the property it was exported from.`);
+  }
+  const explicitSite = v["site-url"];
+  const site = imports.length ? void 0 : explicitSite ?? process.env["SEARVEX_GSC_SITE"];
+  const apiProperty = site ? propertyOrUsage(() => parseProperty(site)) : void 0;
   log(v, `Re-auditing ${target}\u2026`);
   const { report, store: store2 } = await auditWebsite(target, { workspace, kb, crawl: crawlOptionsFrom(v) });
   writeReports(store2, report, kb, ["json", "md", "html"]);
   const explicit = v["baseline"];
   const base = explicit ? { id: explicit, report: new RunStore(workspace, explicit).readJson("report.json") } : findBaseline(workspace, report.target, store2.runId);
   if (explicit && !base?.report) throw new UsageError(`Baseline run ${explicit} has no report.json`);
+  if (explicit && (base.report.mode !== "website" || !sameSite2(base.report.target, report.target)))
+    throw new UsageError(`Baseline run ${explicit} is an audit of ${base.report.target}, not of ${report.target}; runs of different websites cannot be compared.`);
   const diff = diffReports(base?.report ?? null, report, base?.id ?? null);
   let gsc;
-  const token = await gscAccessToken();
-  const site = v["site-url"] ?? process.env["SEARVEX_GSC_SITE"];
-  if (token && site) {
-    log(v, `Querying Search Console for ${site} (read-only)\u2026`);
-    gsc = { rows: await querySearchConsole({ token, siteUrl: site, days: 28, dimensions: ["query"] }), source: `Search Console API, ${site}, last 28 days` };
-  }
-  for (const file2 of v["import"] ?? []) {
-    let exp;
-    try {
-      exp = importGscFiles([file2]);
-    } catch (e) {
-      if (e instanceof GscImportError) throw new UsageError(e.message);
-      throw e;
-    }
-    const table = exp.tables.queries ?? exp.tables.pages;
-    if (table?.length) gsc = { rows: table.map((r) => ({ keys: [r.key], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })), source: `imported ${path14.basename(file2)}` };
+  const notes = [];
+  if (exp && importProperty) {
+    const label = `The export ${exp.files.join(", ")}`;
+    propertyOrUsage(() => (assertAuditInProperty(report, importProperty, label), void 0));
     for (const w of exp.warnings) log(v, `warning: ${w}`);
+    const table = exp.tables.queries ?? exp.tables.pages;
+    const verified = exp.tables.pages?.length ? "property checked against the pages table" : "property as stated with --property (the export has no pages table to check it)";
+    if (table?.length) gsc = { rows: table.map((r) => ({ keys: [r.key], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })), source: `imported ${exp.files.join(", ")}, ${importProperty.raw}; ${verified}` };
+  } else if (site && apiProperty) {
+    const match = matchAuditToProperty(report, apiProperty);
+    if (!match.matches) {
+      if (explicitSite) throw new UsageError(`--site-url ${site} does not cover ${report.target}: ${match.reason}.`);
+      notes.push(`Search performance not measured: SEARVEX_GSC_SITE (${site}) does not cover ${report.target}.`);
+    } else {
+      const token = await gscAccessToken();
+      if (token) {
+        log(v, `Querying Search Console for ${site} (read-only)\u2026`);
+        gsc = { rows: await querySearchConsole({ token, siteUrl: site, days: 28, dimensions: ["query"] }), source: `Search Console API, ${site}, last 28 days` };
+      }
+    }
   }
-  store2.writeJson("monitor.json", { diff, gsc });
+  for (const n of notes) log(v, n);
+  store2.writeJson("monitor.json", { diff, gsc, notes });
   const out = store2.writeText("monitor.md", renderDiffMarkdown(diff, gsc));
   store2.writeText("monitor.html", renderMonitorHtml(diff));
-  if (v["json"]) process.stdout.write(JSON.stringify({ diff, gsc }, null, 2) + "\n");
+  if (v["json"]) process.stdout.write(JSON.stringify({ diff, gsc, notes }, null, 2) + "\n");
   else console.log(renderDiffMarkdown(diff, gsc) + `
 Saved: ${out}`);
   return diff.regression && v["fail-on"] ? 1 : 0;
@@ -39945,114 +40173,6 @@ Saved: ${out}`);
 // src/commands/gsc.ts
 import path19 from "node:path";
 
-// src/integrations/property.ts
-var PropertyError = class extends Error {
-};
-function parseProperty(raw, opts = {}) {
-  const s = raw.trim();
-  const dm = /^sc-domain:(.+)$/i.exec(s);
-  if (dm) {
-    const domain = dm[1].trim().toLowerCase().replace(/\.$/, "");
-    if (!/^[a-z0-9.-]+\.[a-z0-9-]+$/i.test(domain) || domain.includes("..")) throw new PropertyError(`Invalid domain property: ${raw}`);
-    return { kind: "domain", raw: s, domain };
-  }
-  let u;
-  try {
-    u = new URL(s);
-  } catch {
-    throw new PropertyError(`Invalid property "${raw}": use sc-domain:example.com or a URL prefix such as https://example.com/`);
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") throw new PropertyError(`Invalid property protocol: ${raw}`);
-  return { kind: "url-prefix", raw: s, protocol: u.protocol, host: u.host.toLowerCase(), path: u.pathname || "/", anyProtocol: !!opts.anyProtocol };
-}
-function urlInProperty(url, p) {
-  let u;
-  try {
-    u = new URL(url);
-  } catch {
-    return false;
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-  if (p.kind === "domain") {
-    const h = u.hostname.toLowerCase();
-    return h === p.domain || h.endsWith(`.${p.domain}`);
-  }
-  if (!p.anyProtocol && u.protocol !== p.protocol) return false;
-  return u.host.toLowerCase() === p.host && u.pathname.startsWith(p.path);
-}
-function describeProperty(p) {
-  return p.kind === "domain" ? `domain property ${p.domain} (all subdomains and protocols)` : `URL-prefix property ${p.anyProtocol ? "" : p.protocol + "//"}${p.host}${p.path}`;
-}
-var MIN_COVERAGE = 0.5;
-function matchAuditToProperty(audit, p) {
-  const urls = (audit.inventory?.pages ?? []).map((x) => x.url);
-  const hosts = /* @__PURE__ */ new Map();
-  for (const url of urls) {
-    try {
-      const h = new URL(url).host.toLowerCase();
-      hosts.set(h, (hosts.get(h) ?? 0) + 1);
-    } catch {
-    }
-  }
-  const primaryHost = [...hosts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? safeHost(audit.crawl?.startUrl ?? audit.target);
-  if (!urls.length) {
-    const start = audit.crawl?.startUrl ?? audit.target;
-    const ok = urlInProperty(start, p);
-    return { coverage: ok ? 1 : 0, pages: 0, primaryHost, matches: ok, reason: ok ? "start URL inside the property (no pages crawled)" : `start URL ${start} is outside the ${describeProperty(p)}` };
-  }
-  const inside = urls.filter((u) => urlInProperty(u, p)).length;
-  const coverage = inside / urls.length;
-  const matches = coverage >= MIN_COVERAGE;
-  return {
-    coverage,
-    pages: urls.length,
-    primaryHost,
-    matches,
-    reason: matches ? `${inside}/${urls.length} crawled pages inside the property` : `only ${inside}/${urls.length} crawled pages (host ${primaryHost}) are inside the ${describeProperty(p)}`
-  };
-}
-function safeHost(url) {
-  try {
-    return new URL(url).host.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-function selectAuditForProperty(workspace, ref, p) {
-  if (ref !== "latest") {
-    const audit = new RunStore(workspace, ref).readJson("report.json");
-    if (!audit || audit.mode !== "website") throw new PropertyError(`No website audit report found for --audit ${ref}`);
-    const match = matchAuditToProperty(audit, p);
-    if (!match.matches) throw new PropertyError(`Audit ${ref} (${audit.target}) does not belong to this property: ${match.reason}. Run an audit of this site first or pass the matching run id.`);
-    return { runId: ref, audit, match };
-  }
-  const candidates = [];
-  const others = [];
-  for (const id of RunStore.list(workspace)) {
-    const audit = new RunStore(workspace, id).readJson("report.json");
-    if (audit?.mode !== "website") continue;
-    const match = matchAuditToProperty(audit, p);
-    if (match.matches) candidates.push({ runId: id, audit, match });
-    else others.push(`${id} (${audit.target})`);
-  }
-  if (!candidates.length) {
-    const hint = others.length ? ` Audits in this workspace belong to other sites: ${others.slice(-5).join(", ")}.` : "";
-    throw new PropertyError(`No website audit in ${workspace} matches the ${describeProperty(p)}.${hint} Run "searvex audit <url>" for this site first.`);
-  }
-  const byHost = /* @__PURE__ */ new Map();
-  for (const c of candidates) {
-    const k = c.match.primaryHost ?? "?";
-    (byHost.get(k) ?? byHost.set(k, []).get(k)).push(c);
-  }
-  if (byHost.size === 1) return candidates.at(-1);
-  if (p.kind === "domain") {
-    const apex = [...byHost].filter(([h]) => h === p.domain || h === `www.${p.domain}`);
-    if (apex.length === 1) return apex[0][1].at(-1);
-  }
-  const list = [...byHost].map(([h, xs]) => `${h}: ${xs.at(-1).runId}`).join("; ");
-  throw new PropertyError(`Ambiguous --audit latest: audits of several hosts match the ${describeProperty(p)} (${list}). Pass the run id explicitly.`);
-}
-
 // src/analyze/search-performance.ts
 function rowsToQueryPage(rows) {
   return rows.filter((r) => r.keys.length >= 2).map((r) => ({ query: r.keys[0], page: r.keys[1], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
@@ -40309,7 +40429,7 @@ function renderSearchPerformanceMarkdown(r) {
   L.push("## Notes", "", ...r.notes.map((n) => `- ${md(n)}`), "");
   return L.join("\n");
 }
-function propertyOrUsage(raw, opts) {
+function propertyOrUsage2(raw, opts) {
   try {
     return parseProperty(raw, opts);
   } catch (e) {
@@ -40353,7 +40473,7 @@ async function verifyProperty(token, raw, workspace) {
   const names = sites.map((s) => s.siteUrl);
   if (raw) {
     if (names.includes(raw)) return raw;
-    const p = propertyOrUsage(raw);
+    const p = propertyOrUsage2(raw);
     const similar = names.filter((n) => {
       try {
         const q = parseProperty(n);
@@ -40484,7 +40604,7 @@ async function commandGsc(flags) {
   }
   if (sub === "report") {
     const siteUrl = await verifyProperty(token, flags.positionals[2], workspace);
-    const property = propertyOrUsage(siteUrl);
+    const property = propertyOrUsage2(siteUrl);
     const days = num(v["days"], 28, 1, 480);
     const sel = resolveAudit(flags, workspace, property);
     const rows = await querySearchConsole({ token, siteUrl, days, dimensions: ["query", "page"], maxRows: num(v["max-rows"], 25e3, 1, 1e5) });
@@ -40497,20 +40617,12 @@ async function commandGsc(flags) {
   throw new UsageError("gsc subcommands: auth --client <file> [--force] | status | sites | report [property] [--days 28] [--audit latest|<runId>] | import <export.zip|*.csv> [--property P] [--audit latest] | logout");
 }
 function resolveImportProperty(raw, exp) {
-  const hosts = pageHosts(exp);
-  if (raw) {
-    const p = propertyOrUsage(raw);
-    const pages = exp.tables.pages ?? [];
-    if (pages.length) {
-      const inside = pages.filter((x) => urlInProperty(x.key, p)).length;
-      if (inside / pages.length < 0.5) throw new UsageError(`The export's pages (${hosts.slice(0, 3).map((h) => h.host).join(", ")}) do not belong to the ${describeProperty(p)}. Check that you exported the right property.`);
-    }
-    return p;
+  try {
+    return propertyForExport(raw, exp.tables.pages?.map((p) => p.key));
+  } catch (e) {
+    if (e instanceof PropertyError) throw new UsageError(e.message);
+    throw e;
   }
-  if (!hosts.length) return void 0;
-  const total = hosts.reduce((a, h) => a + h.pages, 0);
-  if (hosts.length > 1 && hosts[0].pages / total < 0.9) throw new UsageError(`The export contains pages from several hosts (${hosts.slice(0, 5).map((h) => h.host).join(", ")}): pass --property (e.g. sc-domain:example.com).`);
-  return parseProperty(`https://${hosts[0].host}/`, { anyProtocol: true });
 }
 async function commandBing(flags) {
   const v = flags.values;
@@ -40520,7 +40632,7 @@ async function commandBing(flags) {
   if (!apiKey) throw new UsageError("Set SEARVEX_BING_API_KEY (Bing Webmaster Tools \u2192 Settings \u2192 API access)");
   const siteUrl = flags.positionals[2];
   if (!siteUrl || !/^https?:\/\//.test(siteUrl)) throw new UsageError("bing report requires the verified site URL, e.g. https://example.com/");
-  const property = propertyOrUsage(siteUrl, { anyProtocol: true });
+  const property = propertyOrUsage2(siteUrl, { anyProtocol: true });
   const days = num(v["days"], 28, 1, 480);
   const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
   const sel = resolveAudit(flags, workspace, property);

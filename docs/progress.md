@@ -32,6 +32,19 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Session log
 
+### 2026-10-31 — v1.0.0 readiness round (branch `release/v1.0-readiness`)
+- Release checklist with evidence per criterion: [release-checklist.md](release-checklist.md).
+- Fixed (P0): `monitor --import` accepted exports of any website (and queries-only exports with no way to
+  attribute them); `--site-url`/`SEARVEX_GSC_SITE` and `--baseline` were not checked against the monitored
+  site. Shared `propertyForExport` / `assertAuditInProperty` now serve `gsc import` and `monitor`.
+- Fixed (P0): a page whose scripts never yield hung `--render` indefinitely (reproduced: > 40 s, never
+  returned). Hard per-page deadline, bounded context/browser close, browser restart.
+- Fixed (P0): optimizer wrote its manifest only after all files (a crash left untracked edits); failed
+  verification force-overwrote files edited during verification; CRLF files got LF insertions; file modes
+  were reset. Journal-first apply, `applying` state, recovery via `rollback`.
+- Verified without change: SSRF numeric/IPv6/NAT64 encodings, connection-time DNS validation against
+  rebinding names (`*.nip.io` → 0 requests reached the local server).
+
 ### 2026-10-30 — v0.7.0 data integrity round
 - Assessment found: `--audit latest` ignored the property (could join another site's audit); CSV import only
   in `monitor`, English headers only, silent zero rows for localised exports; `gsc logout` did not revoke;
@@ -98,7 +111,6 @@ Use this file to resume work after an interrupted session. Newest entries first.
 | 9 | Plugin icon missing (directory warning) | listing only | add 512 px PNG before directory submission |
 | 10 | Each user needs their own Google Cloud Desktop OAuth client | setup friction | CSV import as the no-account path; hosted OAuth only with a future SaaS (owner decision) |
 | 16 | Render mode residual risk: browser zero-days; no OS sandbox in some containers; CPU-heavy scripts only bounded by the page timeout | renderer compromise on hostile sites | consider a separate low-privilege process/container option; documented in security.md |
-| 17 | `monitor --import` does not check that the export belongs to the monitored site | wrong performance section in monitor output | reuse property checks |
 | 18 | Turkish/other-language Search Console header wording verified only against published UI terms | localised imports may need synonyms | confirm with the owner's real exports |
 | 11 | Entity/answerability signals are heuristics | could be over-read | keep `info`, documented |
 | 13 | Language detector covers 8 languages, ~30-word minimum | other locales not judged | extend word lists / n-gram model |
