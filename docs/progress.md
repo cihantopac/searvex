@@ -32,6 +32,16 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Session log
 
+### 2026-11-01 — first real Search Console export (Turkish UI)
+- Real domain-property export ("Son 3 ay", 7 CSVs) imported end to end; totals cross-checked against the
+  devices and countries tables (identical), row counts against Python's csv module (identical).
+- Real format differs from the earlier guesses ("Pozisyon", "En alakalı sayfalar", dot decimals, dates in
+  `Grafik.csv`); all were already recognised. Fixtures now follow the real structure.
+- Fixed (data integrity): pages of several subdomains were attributed to the most common host; such an export
+  can only come from a domain property and is now scoped as `sc-domain:`. An explicit `--property` that does
+  not contain every page of the export is refused (a URL-prefix property never exports other hosts).
+- The raw export stays in `.searvex/fixtures-private/` (git-ignored).
+
 ### 2026-11-01 — local repository round
 - Audited 5 local repositories read-only (quality.md round 6); fixed 11 repository-mode defects (non-site
   folders, workspace static sites, clean URLs, missing sitemap URLs vs routes of other apps, all Laravel route
@@ -119,7 +129,7 @@ Use this file to resume work after an interrupted session. Newest entries first.
 | 9 | Plugin icon missing (directory warning) | listing only | add 512 px PNG before directory submission |
 | 10 | Each user needs their own Google Cloud Desktop OAuth client | setup friction | CSV import as the no-account path; hosted OAuth only with a future SaaS (owner decision) |
 | 16 | Render mode residual risk: browser zero-days; no OS sandbox in some containers; CPU-heavy scripts only bounded by the page timeout | renderer compromise on hostile sites | consider a separate low-privilege process/container option; documented in security.md |
-| 18 | Turkish/other-language Search Console header wording verified only against published UI terms | localised imports may need synonyms | confirm with the owner's real exports |
+| 18 | English and other-language Search Console exports not yet checked against a real download (Turkish verified 2026-11-01) | localised imports may need synonyms | real EN export from the owner |
 | 11 | Entity/answerability signals are heuristics | could be over-read | keep `info`, documented |
 | 13 | Language detector covers 8 languages, ~30-word minimum | other locales not judged | extend word lists / n-gram model |
 | 14 | Cannibalisation uses title/H1 terms only | misses body-level intent overlap | combine with GSC query data |

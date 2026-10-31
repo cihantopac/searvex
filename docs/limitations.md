@@ -7,8 +7,10 @@ Searvex reports what it can observe and labels everything else. Known limits (v0
 - **Traffic, rankings, impressions, CTR:** only via Search Console (`gsc auth` with your own OAuth client, or
   `gsc import` of a CSV export) or Bing Webmaster Tools. Never estimated; without data they are "Not measured".
 - **Search Console CSV exports** have no query × page combination and at most 1,000 rows per table, so query →
-  page mapping, shared-query analysis and intent mismatches need the API. Headers are verified for the English
-  and Turkish UI; other UI languages are best-effort.
+  page mapping, shared-query analysis and intent mismatches need the API. The Turkish UI export
+  is verified against a real download (file names, headers, number format, filters); the English UI against
+  published samples; other UI languages are best-effort. An export whose pages span several subdomains is
+  treated as a domain property (`sc-domain:`), whose totals include every subdomain.
 - **Shared queries** (several pages with impressions for one query) are classified heuristically; one
   aggregated period cannot prove harmful cannibalisation.
 - **Search volumes, keyword difficulty, SERP features, backlinks:** not fetched; no paid data providers.
