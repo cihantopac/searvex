@@ -114,7 +114,7 @@ searvex connect https://example.com
 searvex gsc import performance-export.zip --audit latest   # Search Console CSV export, no account access
 searvex gsc auth --client client_secret.json               # your own Google OAuth "Desktop app" client
 searvex gsc report sc-domain:example.com --audit latest
-SEARVEX_BING_API_KEY=… searvex bing report https://example.com/
+searvex bing auth && searvex bing report https://example.com/   # Bing API key, asked once (hidden input)
 
 # Inspect the rule base and re-verify its official sources
 searvex rules check-sources
@@ -134,7 +134,7 @@ Full reference: [docs/cli.md](docs/cli.md).
 | `npm i -D playwright` | `--render`: JavaScript rendering and raw-vs-rendered comparison | supported |
 | `searvex gsc import export.zip` | Search Console Performance CSV/ZIP exports (no account access; no query × page data) | supported² |
 | `searvex gsc auth` (or `SEARVEX_GSC_TOKEN`) | Search Console query × page analysis, `monitor` performance | supported³ |
-| `SEARVEX_BING_API_KEY` | Bing Webmaster Tools query × page analysis | experimental¹ |
+| `searvex bing auth` (or `SEARVEX_BING_API_KEY`) | Bing Webmaster Tools query × page analysis | experimental¹ |
 | `SEARVEX_CRUX_API_KEY` | Real-user Core Web Vitals (Chrome UX Report API) | experimental¹ |
 | `SEARVEX_CREDENTIAL_STORE=keychain` | Keep the Search Console refresh token in the OS keychain instead of a 0600 file | supported |
 

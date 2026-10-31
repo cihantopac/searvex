@@ -7,7 +7,8 @@ import type { QueryPage } from '../analyze/search-performance.js';
  * Methods used: GetQueryStats, GetPageStats, GetPageQueryStats — response items are QueryStats
  * {Query, Clicks, Impressions, AvgImpressionPosition, AvgClickPosition, Date}.
  * Docs: https://learn.microsoft.com/en-us/dotnet/api/microsoft.bing.webmaster.api.interfaces.iwebmasterapi
- * The API key comes from Bing Webmaster Tools → Settings → API access (SEARVEX_BING_API_KEY).
+ * The API key comes from Bing Webmaster Tools → Settings → API access (`searvex bing auth`, or
+ * SEARVEX_BING_API_KEY). It travels in the query string, as the API requires, so URLs are never logged.
  */
 export interface BingStat {
   key: string;
@@ -29,6 +30,12 @@ export function parseBingDate(v: unknown): string | null {
   return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10);
 }
 
+/** Remove every occurrence of the key (raw and URL-encoded) from text shown to the user. */
+export function maskKey(text: string, apiKey: string): string {
+  if (!apiKey) return text;
+  return [apiKey, encodeURIComponent(apiKey)].reduce((t, k) => t.split(k).join('***'), text);
+}
+
 function get(method: string, params: Record<string, string>, apiKey: string): Promise<unknown[]> {
   const url = `${BASE()}/${method}?${new URLSearchParams({ ...params, apikey: apiKey })}`;
   const mod = url.startsWith('https:') ? https : http;
@@ -40,7 +47,7 @@ function get(method: string, params: Record<string, string>, apiKey: string): Pr
         const text = Buffer.concat(chunks).toString('utf8');
         if ((res.statusCode ?? 0) !== 200) {
           // Never echo the request URL: it contains the API key.
-          reject(new Error(`Bing Webmaster API error ${res.statusCode} on ${method}: ${text.slice(0, 200).replace(apiKey, '***')}`));
+          reject(new Error(`Bing Webmaster API error ${res.statusCode} on ${method}: ${maskKey(text.slice(0, 200), apiKey)}`));
           return;
         }
         try {
@@ -52,7 +59,7 @@ function get(method: string, params: Record<string, string>, apiKey: string): Pr
       });
     });
     req.on('timeout', () => req.destroy(new Error('Bing Webmaster API request timed out')));
-    req.on('error', reject);
+    req.on('error', (e) => reject(new Error(maskKey(e.message, apiKey))));
   });
 }
 
@@ -102,4 +109,17 @@ export async function bingQueryPageRows(siteUrl: string, apiKey: string, opts: {
     }
   }
   return { rows, pages: pages.length };
+}
+
+export interface BingSite {
+  url: string;
+  verified: boolean;
+}
+
+/** Sites of the account the API key belongs to (GetUserSites); also validates the key. */
+export async function getUserSites(apiKey: string): Promise<BingSite[]> {
+  return (await get('GetUserSites', {}, apiKey)).map((x) => {
+    const o = x as Record<string, unknown>;
+    return { url: String(o['Url'] ?? ''), verified: o['IsVerified'] === true };
+  });
 }

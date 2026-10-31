@@ -15787,6 +15787,8 @@ __export(bing_exports, {
   getPageQueryStats: () => getPageQueryStats,
   getPageStats: () => getPageStats,
   getQueryStats: () => getQueryStats,
+  getUserSites: () => getUserSites,
+  maskKey: () => maskKey,
   parseBingDate: () => parseBingDate
 });
 import http4 from "node:http";
@@ -15798,6 +15800,10 @@ function parseBingDate(v) {
   const t = Date.parse(v);
   return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10);
 }
+function maskKey(text4, apiKey) {
+  if (!apiKey) return text4;
+  return [apiKey, encodeURIComponent(apiKey)].reduce((t, k) => t.split(k).join("***"), text4);
+}
 function get2(method, params, apiKey) {
   const url = `${BASE2()}/${method}?${new URLSearchParams({ ...params, apikey: apiKey })}`;
   const mod = url.startsWith("https:") ? https5 : http4;
@@ -15808,7 +15814,7 @@ function get2(method, params, apiKey) {
       res.on("end", () => {
         const text4 = Buffer.concat(chunks).toString("utf8");
         if ((res.statusCode ?? 0) !== 200) {
-          reject(new Error(`Bing Webmaster API error ${res.statusCode} on ${method}: ${text4.slice(0, 200).replace(apiKey, "***")}`));
+          reject(new Error(`Bing Webmaster API error ${res.statusCode} on ${method}: ${maskKey(text4.slice(0, 200), apiKey)}`));
           return;
         }
         try {
@@ -15820,7 +15826,7 @@ function get2(method, params, apiKey) {
       });
     });
     req.on("timeout", () => req.destroy(new Error("Bing Webmaster API request timed out")));
-    req.on("error", reject);
+    req.on("error", (e) => reject(new Error(maskKey(e.message, apiKey))));
   });
 }
 function toStats(items) {
@@ -15858,6 +15864,12 @@ async function bingQueryPageRows(siteUrl, apiKey, opts) {
     }
   }
   return { rows, pages: pages.length };
+}
+async function getUserSites(apiKey) {
+  return (await get2("GetUserSites", {}, apiKey)).map((x) => {
+    const o = x;
+    return { url: String(o["Url"] ?? ""), verified: o["IsVerified"] === true };
+  });
 }
 var BASE2, getQueryStats, getPageStats, getPageQueryStats;
 var init_bing = __esm({
@@ -40888,25 +40900,113 @@ function resolveImportProperty(raw, exp) {
     throw e;
   }
 }
+function bingKey() {
+  const env = process.env["SEARVEX_BING_API_KEY"];
+  if (env) return { key: env, source: "SEARVEX_BING_API_KEY" };
+  const stored = getCredential("bing");
+  return stored?.refreshToken ? { key: stored.refreshToken, source: defaultCredentialStore().describe() } : null;
+}
+async function readSecret(prompt, input = process.stdin, output = process.stderr) {
+  if (!input.isTTY) {
+    const chunks = [];
+    for await (const c of input) chunks.push(Buffer.from(c));
+    return Buffer.concat(chunks).toString("utf8").trim();
+  }
+  output.write(prompt);
+  input.setRawMode(true);
+  input.resume();
+  return new Promise((resolve, reject) => {
+    let value = "";
+    const done = (fn) => {
+      input.setRawMode(false);
+      input.pause();
+      input.removeListener("data", onData);
+      output.write("\n");
+      fn();
+    };
+    const onData = (buf) => {
+      for (const ch of buf.toString("utf8")) {
+        if (ch === "\r" || ch === "\n") return done(() => resolve(value.trim()));
+        if (ch === "") return done(() => reject(new UsageError("Cancelled.")));
+        if (ch === "\x7F" || ch === "\b") value = value.slice(0, -1);
+        else if (ch >= " ") value += ch;
+      }
+    };
+    input.on("data", onData);
+  });
+}
 async function commandBing(flags) {
   const v = flags.values;
   const sub = flags.positionals[1];
-  const apiKey = process.env["SEARVEX_BING_API_KEY"];
-  if (sub !== "report") throw new UsageError("bing subcommands: report <siteUrl> [--days 28] [--audit latest|<runId>] [--max-pages 25]");
-  if (!apiKey) throw new UsageError("Set SEARVEX_BING_API_KEY (Bing Webmaster Tools \u2192 Settings \u2192 API access)");
+  const { getUserSites: getUserSites2, bingQueryPageRows: bingQueryPageRows2, maskKey: maskKey2 } = await Promise.resolve().then(() => (init_bing(), bing_exports));
+  const usage = "bing subcommands: auth | status | sites | report <siteUrl> [--days 28] [--audit latest|<runId>] [--max-pages 25] | logout";
+  if (sub === "auth") {
+    const existing = getCredential("bing");
+    if (existing && !v["force"]) {
+      console.log(`A Bing API key is already stored in ${defaultCredentialStore().describe()}. Use --force to replace it, or "bing logout".`);
+      return 0;
+    }
+    const key = await readSecret("Bing Webmaster API key (Settings \u2192 API access; input hidden): ");
+    if (!/^[A-Za-z0-9_-]{16,128}$/.test(key)) throw new UsageError("That does not look like a Bing Webmaster API key (16\u2013128 letters, digits, - or _). Nothing was stored.");
+    let sites2;
+    try {
+      sites2 = await getUserSites2(key);
+    } catch (e) {
+      throw new UsageError(`Bing rejected the key; nothing was stored. ${maskKey2(e.message, key)}`);
+    }
+    saveCredential("bing", { clientId: "bing-webmaster-api-key", refreshToken: key, scope: "bing-webmaster:read", createdAt: (/* @__PURE__ */ new Date()).toISOString() });
+    console.log(`Stored the Bing API key in ${defaultCredentialStore().describe()}. Sites on this account: ${sites2.length} (${sites2.filter((s) => s.verified).length} verified).`);
+    return 0;
+  }
+  if (sub === "logout") {
+    const removed = deleteCredential("bing");
+    console.log(`${removed ? "Removed the stored Bing API key." : "No stored Bing API key."} Bing API keys stay valid until you regenerate them in Bing Webmaster Tools \u2192 Settings \u2192 API access.`);
+    return 0;
+  }
+  const k = bingKey();
+  if (!k) throw new UsageError('No Bing API key: run "searvex bing auth" (Bing Webmaster Tools \u2192 Settings \u2192 API access), or set SEARVEX_BING_API_KEY.');
+  if (sub === "status" || sub === "sites") {
+    let sites2;
+    try {
+      sites2 = await getUserSites2(k.key);
+    } catch (e) {
+      if (sub === "sites") throw e;
+      const status2 = { key: k.source, valid: false, error: e.message };
+      if (v["json"]) process.stdout.write(JSON.stringify(status2, null, 2) + "\n");
+      else for (const [n, x] of Object.entries(status2)) console.log(`${n}: ${String(x)}`);
+      return 1;
+    }
+    if (sub === "sites") {
+      if (v["json"]) process.stdout.write(JSON.stringify(sites2, null, 2) + "\n");
+      else for (const s of sites2) console.log(`${s.url}  (${s.verified ? "verified" : "not verified"})`);
+      return 0;
+    }
+    const status = { key: k.source, valid: true, sites: sites2.length, verifiedSites: sites2.filter((s) => s.verified).length };
+    if (v["json"]) process.stdout.write(JSON.stringify(status, null, 2) + "\n");
+    else for (const [n, x] of Object.entries(status)) console.log(`${n}: ${String(x)}`);
+    return 0;
+  }
+  if (sub !== "report") throw new UsageError(usage);
   const siteUrl = flags.positionals[2];
   if (!siteUrl || !/^https?:\/\//.test(siteUrl)) throw new UsageError("bing report requires the verified site URL, e.g. https://example.com/");
   const property = propertyOrUsage2(siteUrl, { anyProtocol: true });
+  const sites = await getUserSites2(k.key);
+  const norm4 = (u) => u.toLowerCase().replace(/\/+$/, "");
+  const site = sites.find((s) => norm4(s.url) === norm4(siteUrl));
+  if (!site?.verified) {
+    const hostOf2 = (u) => new URL(u).host;
+    const similar = sites.filter((s) => s.url && commonDomain([hostOf2(s.url), hostOf2(siteUrl)])).map((s) => s.url);
+    throw new UsageError(`${siteUrl} is ${site ? "not verified" : "not a site"} in this Bing Webmaster account.${similar.length ? ` Did you mean: ${similar.join(", ")}?` : sites.length ? ` Sites: ${sites.map((s) => s.url).join(", ")}` : " The account has no sites."}`);
+  }
   const days = num(v["days"], 28, 1, 480);
   const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
   const sel = resolveAudit(flags, workspace, property);
-  const { bingQueryPageRows: bingQueryPageRows2 } = await Promise.resolve().then(() => (init_bing(), bing_exports));
-  const { rows, pages } = await bingQueryPageRows2(siteUrl, apiKey, { days, maxPages: num(v["max-pages"], 25, 1, 200) });
-  const report = analyzeSearchPerformance(rows, { days, source: `Bing Webmaster Tools ${siteUrl}`, audit: sel?.audit, property });
+  const { rows, pages } = await bingQueryPageRows2(site.url, k.key, { days, maxPages: num(v["max-pages"], 25, 1, 200) });
+  const report = analyzeSearchPerformance(rows, { days, source: `Bing Webmaster Tools ${site.url}`, audit: sel?.audit, property });
   attachAudit(report, sel);
   report.totals.basis = `sum of query \xD7 page rows for the top ${pages} pages by clicks (not site totals)`;
   report.notes.push(`Query \xD7 page rows come from GetPageQueryStats for the top ${pages} pages by clicks; positions are impression-weighted AvgImpressionPosition.`);
-  saveReport(flags, workspace, "bing", { target: siteUrl, days }, report);
+  saveReport(flags, workspace, "bing", { target: site.url, days }, report);
   return 0;
 }
 async function commandConnect(flags) {
@@ -40963,7 +41063,10 @@ Commands
                         opens your browser, --no-browser to only print the URL),
                         property check, query/page analysis with a property-matched --audit join;
                         "gsc import <export.zip>" reads a Performance CSV export without any account access
-  bing report <siteUrl> Bing Webmaster Tools query/page analysis (SEARVEX_BING_API_KEY, read-only)
+  bing <auth|status|sites|report|logout>
+                        Bing Webmaster Tools (read-only API key): "bing auth" stores the key (hidden input)
+                        in the credential store; "bing report <siteUrl>" checks the site is verified, then
+                        analyses queries/pages
                         (bing is experimental: not yet verified against the live service)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
@@ -40995,7 +41098,7 @@ Common options
 Environment (all optional, read-only integrations)
   SEARVEX_CRUX_API_KEY  Chrome UX Report API key \u2192 real Core Web Vitals field data
   SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
-  SEARVEX_BING_API_KEY  Bing Webmaster Tools API key \u2192 "searvex bing report"
+  SEARVEX_BING_API_KEY  Bing Webmaster Tools API key (instead of "searvex bing auth")
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
   SEARVEX_CREDENTIAL_STORE  file (default, 0600 file in the config dir) or keychain (macOS Keychain,
                         Secret Service via secret-tool, Windows DPAPI)

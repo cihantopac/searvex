@@ -42,7 +42,10 @@ Commands
                         opens your browser, --no-browser to only print the URL),
                         property check, query/page analysis with a property-matched --audit join;
                         "gsc import <export.zip>" reads a Performance CSV export without any account access
-  bing report <siteUrl> Bing Webmaster Tools query/page analysis (SEARVEX_BING_API_KEY, read-only)
+  bing <auth|status|sites|report|logout>
+                        Bing Webmaster Tools (read-only API key): "bing auth" stores the key (hidden input)
+                        in the credential store; "bing report <siteUrl>" checks the site is verified, then
+                        analyses queries/pages
                         (bing is experimental: not yet verified against the live service)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
@@ -74,7 +77,7 @@ Common options
 Environment (all optional, read-only integrations)
   SEARVEX_CRUX_API_KEY  Chrome UX Report API key → real Core Web Vitals field data
   SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
-  SEARVEX_BING_API_KEY  Bing Webmaster Tools API key → "searvex bing report"
+  SEARVEX_BING_API_KEY  Bing Webmaster Tools API key (instead of "searvex bing auth")
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
   SEARVEX_CREDENTIAL_STORE  file (default, 0600 file in the config dir) or keychain (macOS Keychain,
                         Secret Service via secret-tool, Windows DPAPI)

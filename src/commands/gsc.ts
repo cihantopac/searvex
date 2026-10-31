@@ -7,7 +7,7 @@ import { authorize, accessToken, deleteCredential, gscAccessToken, GSC_SCOPE, lo
 import { defaultCredentialStore } from '../integrations/credentials.js';
 import { listSites, querySearchConsole } from '../integrations/gsc.js';
 import { GscImportError, importGscFiles, type GscExport } from '../integrations/gsc-csv.js';
-import { parseProperty, propertyForExport, PropertyError, selectAuditForProperty, urlInProperty, type SearchProperty, type SelectedAudit } from '../integrations/property.js';
+import { commonDomain, parseProperty, propertyForExport, PropertyError, selectAuditForProperty, urlInProperty, type SearchProperty, type SelectedAudit } from '../integrations/property.js';
 import { getSitePreference, setSitePreference, siteKey, type SearchDataChoice } from '../integrations/preferences.js';
 import { md } from '../report/markdown.js';
 import { log, num, UsageError, type GlobalFlags } from '../cli.js';
@@ -317,25 +317,124 @@ function resolveImportProperty(raw: string | undefined, exp: GscExport): SearchP
 }
 
 /** `searvex bing report <siteUrl>`: same analysis on Bing Webmaster data (API key, read-only). */
+/**
+ * Bing Webmaster API key: SEARVEX_BING_API_KEY, or the key saved with `bing auth` in the credential store
+ * (file or OS keychain). API-key integrations keep the key in the credential's long-lived secret field.
+ */
+function bingKey(): { key: string; source: string } | null {
+  const env = process.env['SEARVEX_BING_API_KEY'];
+  if (env) return { key: env, source: 'SEARVEX_BING_API_KEY' };
+  const stored = getCredential('bing');
+  return stored?.refreshToken ? { key: stored.refreshToken, source: defaultCredentialStore().describe() } : null;
+}
+
+/** Read a secret from the terminal without echoing it, or from piped stdin. */
+export async function readSecret(prompt: string, input: NodeJS.ReadStream = process.stdin, output: NodeJS.WriteStream = process.stderr): Promise<string> {
+  if (!input.isTTY) {
+    const chunks: Buffer[] = [];
+    for await (const c of input) chunks.push(Buffer.from(c as Buffer));
+    return Buffer.concat(chunks).toString('utf8').trim();
+  }
+  output.write(prompt);
+  input.setRawMode(true);
+  input.resume();
+  return new Promise((resolve, reject) => {
+    let value = '';
+    const done = (fn: () => void) => {
+      input.setRawMode(false);
+      input.pause();
+      input.removeListener('data', onData);
+      output.write('\n');
+      fn();
+    };
+    const onData = (buf: Buffer) => {
+      for (const ch of buf.toString('utf8')) {
+        if (ch === '\r' || ch === '\n') return done(() => resolve(value.trim()));
+        if (ch === '\u0003') return done(() => reject(new UsageError('Cancelled.')));
+        if (ch === '\u007f' || ch === '\b') value = value.slice(0, -1);
+        else if (ch >= ' ') value += ch;
+      }
+    };
+    input.on('data', onData);
+  });
+}
+
+/** `searvex bing auth|status|sites|logout|report`: Bing Webmaster Tools (read-only API key). */
 export async function commandBing(flags: GlobalFlags): Promise<number> {
   const v = flags.values;
   const sub = flags.positionals[1];
-  const apiKey = process.env['SEARVEX_BING_API_KEY'];
-  if (sub !== 'report') throw new UsageError('bing subcommands: report <siteUrl> [--days 28] [--audit latest|<runId>] [--max-pages 25]');
-  if (!apiKey) throw new UsageError('Set SEARVEX_BING_API_KEY (Bing Webmaster Tools → Settings → API access)');
+  const { getUserSites, bingQueryPageRows, maskKey } = await import('../integrations/bing.js');
+  const usage = 'bing subcommands: auth | status | sites | report <siteUrl> [--days 28] [--audit latest|<runId>] [--max-pages 25] | logout';
+  if (sub === 'auth') {
+    const existing = getCredential('bing');
+    if (existing && !v['force']) {
+      console.log(`A Bing API key is already stored in ${defaultCredentialStore().describe()}. Use --force to replace it, or "bing logout".`);
+      return 0;
+    }
+    const key = await readSecret('Bing Webmaster API key (Settings → API access; input hidden): ');
+    if (!/^[A-Za-z0-9_-]{16,128}$/.test(key)) throw new UsageError('That does not look like a Bing Webmaster API key (16–128 letters, digits, - or _). Nothing was stored.');
+    let sites;
+    try {
+      sites = await getUserSites(key);
+    } catch (e) {
+      throw new UsageError(`Bing rejected the key; nothing was stored. ${maskKey((e as Error).message, key)}`);
+    }
+    saveCredential('bing', { clientId: 'bing-webmaster-api-key', refreshToken: key, scope: 'bing-webmaster:read', createdAt: new Date().toISOString() });
+    console.log(`Stored the Bing API key in ${defaultCredentialStore().describe()}. Sites on this account: ${sites.length} (${sites.filter((s) => s.verified).length} verified).`);
+    return 0;
+  }
+  if (sub === 'logout') {
+    const removed = deleteCredential('bing');
+    console.log(`${removed ? 'Removed the stored Bing API key.' : 'No stored Bing API key.'} Bing API keys stay valid until you regenerate them in Bing Webmaster Tools → Settings → API access.`);
+    return 0;
+  }
+  const k = bingKey();
+  if (!k) throw new UsageError('No Bing API key: run "searvex bing auth" (Bing Webmaster Tools → Settings → API access), or set SEARVEX_BING_API_KEY.');
+  if (sub === 'status' || sub === 'sites') {
+    let sites;
+    try {
+      sites = await getUserSites(k.key);
+    } catch (e) {
+      if (sub === 'sites') throw e;
+      const status = { key: k.source, valid: false, error: (e as Error).message };
+      if (v['json']) process.stdout.write(JSON.stringify(status, null, 2) + '\n');
+      else for (const [n, x] of Object.entries(status)) console.log(`${n}: ${String(x)}`);
+      return 1;
+    }
+    if (sub === 'sites') {
+      if (v['json']) process.stdout.write(JSON.stringify(sites, null, 2) + '\n');
+      else for (const s of sites) console.log(`${s.url}  (${s.verified ? 'verified' : 'not verified'})`);
+      return 0;
+    }
+    const status = { key: k.source, valid: true, sites: sites.length, verifiedSites: sites.filter((s) => s.verified).length };
+    if (v['json']) process.stdout.write(JSON.stringify(status, null, 2) + '\n');
+    else for (const [n, x] of Object.entries(status)) console.log(`${n}: ${String(x)}`);
+    return 0;
+  }
+  if (sub !== 'report') throw new UsageError(usage);
   const siteUrl = flags.positionals[2];
   if (!siteUrl || !/^https?:\/\//.test(siteUrl)) throw new UsageError('bing report requires the verified site URL, e.g. https://example.com/');
   const property = propertyOrUsage(siteUrl, { anyProtocol: true });
+  // The site must be a verified site of this account: Bing answers unknown sites with empty data, which would
+  // read as "no traffic" instead of "wrong site".
+  const sites = await getUserSites(k.key);
+  const norm = (u: string) => u.toLowerCase().replace(/\/+$/, '');
+  const site = sites.find((s) => norm(s.url) === norm(siteUrl));
+  if (!site?.verified) {
+    const hostOf = (u: string) => new URL(u).host;
+    // Same registrable domain (www vs apex, subdomains) is the usual mix-up.
+    const similar = sites.filter((s) => s.url && commonDomain([hostOf(s.url), hostOf(siteUrl)])).map((s) => s.url);
+    throw new UsageError(`${siteUrl} is ${site ? 'not verified' : 'not a site'} in this Bing Webmaster account.${similar.length ? ` Did you mean: ${similar.join(', ')}?` : sites.length ? ` Sites: ${sites.map((s) => s.url).join(', ')}` : ' The account has no sites.'}`);
+  }
   const days = num(v['days'], 28, 1, 480);
   const workspace = path.resolve(String(v['out'] ?? process.cwd()));
   const sel = resolveAudit(flags, workspace, property);
-  const { bingQueryPageRows } = await import('../integrations/bing.js');
-  const { rows, pages } = await bingQueryPageRows(siteUrl, apiKey, { days, maxPages: num(v['max-pages'], 25, 1, 200) });
-  const report = analyzeSearchPerformance(rows, { days, source: `Bing Webmaster Tools ${siteUrl}`, audit: sel?.audit, property });
+  const { rows, pages } = await bingQueryPageRows(site.url, k.key, { days, maxPages: num(v['max-pages'], 25, 1, 200) });
+  const report = analyzeSearchPerformance(rows, { days, source: `Bing Webmaster Tools ${site.url}`, audit: sel?.audit, property });
   attachAudit(report, sel);
   report.totals.basis = `sum of query × page rows for the top ${pages} pages by clicks (not site totals)`;
   report.notes.push(`Query × page rows come from GetPageQueryStats for the top ${pages} pages by clicks; positions are impression-weighted AvgImpressionPosition.`);
-  saveReport(flags, workspace, 'bing', { target: siteUrl, days }, report);
+  saveReport(flags, workspace, 'bing', { target: site.url, days }, report);
   return 0;
 }
 

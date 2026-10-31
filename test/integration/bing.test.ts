@@ -4,7 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { aggregate, bingQueryPageRows, getQueryStats, parseBingDate } from '../../src/integrations/bing.js';
+import { aggregate, bingQueryPageRows, getQueryStats, getUserSites, maskKey, parseBingDate } from '../../src/integrations/bing.js';
+import { readSecret } from '../../src/commands/gsc.js';
+import { deleteCredential, saveCredential } from '../../src/integrations/google-oauth.js';
+import { PassThrough } from 'node:stream';
+import { vi } from 'vitest';
 import { main } from '../../src/cli.js';
 
 const KEY = 'secret-api-key-123';
@@ -18,6 +22,7 @@ beforeAll(async () => {
     seen.push(u.pathname);
     if (u.searchParams.get('apikey') !== KEY) return res.writeHead(401).end(`invalid key ${u.searchParams.get('apikey')}`);
     const send = (d: unknown[]) => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ d }));
+    if (u.pathname.endsWith('/GetUserSites')) return send([{ Url: 'https://s.example/', IsVerified: true }, { Url: 'https://pending.example/', IsVerified: false }, { Url: 'https://www.other.example/', IsVerified: true }]);
     if (u.pathname.endsWith('/GetQueryStats')) return send([{ Query: 'team chat', Clicks: 5, Impressions: 50, AvgImpressionPosition: 4, AvgClickPosition: 3, Date: day(3) }]);
     if (u.pathname.endsWith('/GetPageStats')) return send([
       { Query: 'https://s.example/a', Clicks: 30, Impressions: 300, AvgImpressionPosition: 5, AvgClickPosition: 4, Date: day(5) },
@@ -81,5 +86,76 @@ describe('Bing Webmaster API', () => {
     } finally {
       fs.rmSync(ws, { recursive: true, force: true });
     }
+  });
+});
+
+describe('Bing key handling and site selection', () => {
+  const capture = () => {
+    const out: string[] = [];
+    const spies = [vi.spyOn(console, 'log').mockImplementation((...a) => void out.push(a.join(' '))), vi.spyOn(console, 'error').mockImplementation((...a) => void out.push(a.join(' '))), vi.spyOn(process.stdout, 'write').mockImplementation((c) => (out.push(String(c)), true))];
+    return { text: () => out.join('\n'), restore: () => spies.forEach((s) => s.mockRestore()) };
+  };
+
+  it('lists the account sites and refuses unknown or unverified sites with suggestions', async () => {
+    expect(await getUserSites(KEY)).toEqual([{ url: 'https://s.example/', verified: true }, { url: 'https://pending.example/', verified: false }, { url: 'https://www.other.example/', verified: true }]);
+    process.env['SEARVEX_BING_API_KEY'] = KEY;
+    const c = capture();
+    try {
+      expect(await main(['bing', 'report', 'https://pending.example/', '-q'])).toBe(2);
+      expect(await main(['bing', 'report', 'https://other.example/', '-q'])).toBe(2);
+      expect(await main(['bing', 'report', 'https://nowhere.example/', '-q'])).toBe(2);
+    } finally {
+      c.restore();
+      delete process.env['SEARVEX_BING_API_KEY'];
+    }
+    expect(c.text()).toMatch(/pending\.example\/ is not verified/);
+    expect(c.text()).toMatch(/Did you mean: https:\/\/www\.other\.example\//);
+    expect(c.text()).toMatch(/not a site in this Bing Webmaster account/);
+  });
+
+  it('uses a key saved in the credential store, reports status, and logout removes it; the key is never printed', async () => {
+    const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-bingcfg-'));
+    process.env['SEARVEX_CONFIG_DIR'] = cfg;
+    const c = capture();
+    try {
+      expect(await main(['bing', 'status'])).toBe(2); // no key anywhere
+      saveCredential('bing', { clientId: 'bing-webmaster-api-key', refreshToken: KEY, scope: 'bing-webmaster:read', createdAt: '2026-11-01T00:00:00Z' });
+      expect(await main(['bing', 'status', '--json'])).toBe(0);
+      expect(await main(['bing', 'sites'])).toBe(0);
+      expect(await main(['bing', 'logout'])).toBe(0);
+      expect(await main(['bing', 'sites'])).toBe(2);
+      saveCredential('bing', { clientId: 'bing-webmaster-api-key', refreshToken: 'revoked-key-000000', scope: 'bing-webmaster:read', createdAt: '2026-11-01T00:00:00Z' });
+      expect(await main(['bing', 'status'])).toBe(1); // invalid key: explained, not thrown
+    } finally {
+      c.restore();
+      deleteCredential('bing');
+      delete process.env['SEARVEX_CONFIG_DIR'];
+      fs.rmSync(cfg, { recursive: true, force: true });
+    }
+    expect(c.text()).toMatch(/"valid": true/);
+    expect(c.text()).toMatch(/s\.example\/ +\(verified\)/);
+    expect(c.text()).not.toContain(KEY);
+    expect(c.text()).not.toContain('revoked-key-000000');
+  });
+
+  it('masks every occurrence of the key, raw and URL-encoded', () => {
+    expect(maskKey('k=a+b/c&x=a%2Bb%2Fc a+b/c', 'a+b/c')).toBe('k=***&x=*** ***');
+  });
+
+  it('reads a key from a pipe, and from a terminal without echoing it', async () => {
+    const pipe = new PassThrough();
+    pipe.end('  piped-key-0123456789  \n');
+    expect(await readSecret('key: ', pipe as never, new PassThrough() as never)).toBe('piped-key-0123456789');
+
+    const tty = Object.assign(new PassThrough(), { isTTY: true, setRawMode: vi.fn() });
+    const out = new PassThrough();
+    const echoed: string[] = [];
+    out.on('data', (d) => echoed.push(String(d)));
+    const p = readSecret('key: ', tty as never, out as never);
+    tty.write('abcX\u007fd');
+    tty.write('\r');
+    expect(await p).toBe('abcd');
+    expect(echoed.join('')).toBe('key: \n');
+    expect(tty.setRawMode).toHaveBeenLastCalledWith(false);
   });
 });
