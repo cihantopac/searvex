@@ -24,12 +24,41 @@ It ships as a standalone CLI and as a Claude Code plugin.
 
 Competitor research and differentiation notes: [docs/research/competitors-2026-10.md](docs/research/competitors-2026-10.md).
 
+## What it does — and what it does not
+
+**Searvex does:**
+
+- Crawl public pages (robots.txt-compliant, rate-limited) or read a repository's source, and check them against
+  90 rules. 71 rules are `verified` against official documentation, 17 are `heuristic` and 2 are `unmeasurable`
+  signals that are reported as such.
+- Explain every finding with its official source, the date the source was checked, how to fix it and how to
+  verify the fix.
+- Compare runs over time (`monitor`), across related sites (`ecosystem`) and against competitors you name
+  (`research`).
+- Fix a small set of problems in code automatically (9 rule types: e.g. missing `lang`, viewport, robots.txt
+  sitemap line, invalid hreflang codes), always as a dry-run diff first, then apply → re-verify → rollback.
+- Read Search Console or Bing data when you connect them yourself, and keep measured data separate from
+  inference.
+
+**Searvex does not:**
+
+- Estimate traffic, rankings, search volume, keyword difficulty, backlinks or AI citations. Without a connected
+  data source these are reported as **not measured**.
+- Promise rankings or "SEO scores" that search engines use. The health score is a Searvex summary, not a search
+  engine metric.
+- Publish content, submit URLs, change live sites or send data to a Searvex server (there is none).
+- Offer a one-click Google login. Search Console access uses your own Google Cloud OAuth client, or a CSV
+  export you download yourself.
+- See login-protected pages, run Lighthouse lab tests, or execute JavaScript unless you opt into `--render`.
+- Rewrite your content. Judgement-based changes (titles, descriptions, alt text) are drafted by the agent for your
+  review, never applied silently.
+
 ## Install
 
 Requires **Node.js ≥ 20.10** (Windows, macOS, Linux).
 
 ```bash
-npm install -g github:cihantopac/searvex
+npm install -g searvex
 ```
 
 ```bash
@@ -112,7 +141,7 @@ Without them, Searvex reports these metrics as **not measured** — it never est
 
 ## What it checks
 
-87 rules across crawlability, indexability, canonicalisation, international (hreflang), metadata,
+90 rules across crawlability, indexability, canonicalisation, international (hreflang), metadata,
 structured data (Google rich-result requirements), performance, security, links, content and GEO.
 Examples: robots.txt failures and AI crawler access, redirect chains and loops, noindex/sitemap
 conflicts, canonical conflicts (including canonicals pushed into `<body>` by invalid head markup),
