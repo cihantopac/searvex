@@ -363,7 +363,7 @@ export async function readSecret(prompt: string, input: NodeJS.ReadStream = proc
 export async function commandBing(flags: GlobalFlags): Promise<number> {
   const v = flags.values;
   const sub = flags.positionals[1];
-  const { getUserSites, bingQueryPageRows, maskKey } = await import('../integrations/bing.js');
+  const { getUserSites, bingQueryPageRows, getDailyTraffic, maskKey, BingApiError } = await import('../integrations/bing.js');
   const usage = 'bing subcommands: auth | status | sites | report <siteUrl> [--days 28] [--audit latest|<runId>] [--max-pages 25] | logout';
   if (sub === 'auth') {
     const existing = getCredential('bing');
@@ -412,6 +412,18 @@ export async function commandBing(flags: GlobalFlags): Promise<number> {
     return 0;
   }
   if (sub !== 'report') throw new UsageError(usage);
+  try {
+    return await bingReport(flags, k.key, { getUserSites, bingQueryPageRows, getDailyTraffic });
+  } catch (e) {
+    if (e instanceof BingApiError) throw new UsageError(e.message);
+    throw e;
+  }
+}
+
+async function bingReport(flags: GlobalFlags, key: string, api: Pick<typeof import('../integrations/bing.js'), 'getUserSites' | 'bingQueryPageRows' | 'getDailyTraffic'>): Promise<number> {
+  const v = flags.values;
+  const { getUserSites, bingQueryPageRows, getDailyTraffic } = api;
+  const k = { key };
   const siteUrl = flags.positionals[2];
   if (!siteUrl || !/^https?:\/\//.test(siteUrl)) throw new UsageError('bing report requires the verified site URL, e.g. https://example.com/');
   const property = propertyOrUsage(siteUrl, { anyProtocol: true });
@@ -430,10 +442,19 @@ export async function commandBing(flags: GlobalFlags): Promise<number> {
   const workspace = path.resolve(String(v['out'] ?? process.cwd()));
   const sel = resolveAudit(flags, workspace, property);
   const { rows, pages } = await bingQueryPageRows(site.url, k.key, { days, maxPages: num(v['max-pages'], 25, 1, 200) });
-  const report = analyzeSearchPerformance(rows, { days, source: `Bing Webmaster Tools ${site.url}`, audit: sel?.audit, property });
+  // Site totals come from the daily traffic series; query × page rows only cover the top pages.
+  const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const daily = await getDailyTraffic(site.url, k.key, since);
+  const dates = daily.map((d) => ({ key: d.date, clicks: d.clicks, impressions: d.impressions, ctr: d.impressions ? d.clicks / d.impressions : 0, position: 0 }));
+  const report = analyzeSearchPerformance({ queryPage: rows, dates }, { days, source: `Bing Webmaster Tools ${site.url}`, audit: sel?.audit, property });
   attachAudit(report, sel);
-  report.totals.basis = `sum of query × page rows for the top ${pages} pages by clicks (not site totals)`;
+  report.totals.basis = dates.length ? `daily site totals (GetRankAndTrafficStats, ${dates[0]!.key} – ${dates.at(-1)!.key})` : `sum of query × page rows for the top ${pages} pages by clicks (not site totals)`;
   report.notes.push(`Query × page rows come from GetPageQueryStats for the top ${pages} pages by clicks; positions are impression-weighted AvgImpressionPosition.`);
+  if (!rows.length) {
+    const why = report.totals.impressions ? 'Bing reports site impressions but no page or query detail for this period yet' : 'Bing reports no impressions for this site in this period';
+    report.notMeasured.push(`Query and page analysis: ${why}. New sites usually need days to weeks in Bing; check indexing in Bing Webmaster Tools (URL Inspection, Site Explorer).`);
+    log(v, `Note: ${why}.`);
+  }
   saveReport(flags, workspace, 'bing', { target: site.url, days }, report);
   return 0;
 }

@@ -32,6 +32,13 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Session log
 
+### 2026-11-01 — live Bing Webmaster API
+- `bing auth/status/sites/logout` added (hidden key input, credential store); reports require a verified
+  site; totals from the daily site series; empty data explained; actionable InvalidApiKey/quota errors.
+- Live on 8 verified sites: everything works, but Bing has 0 impressions for all of them so far, so the
+  parsing of real query/page rows is not verified live. Bing stays **experimental**; re-run
+  `bing report` on one of the sites in a few weeks and compare with Bing Webmaster Tools' UI.
+
 ### 2026-11-01 — live Search Console API
 - Owner authorised with their own Desktop client; credential in the macOS Keychain. Verified live (quality.md):
   refresh, property list, report, pagination, CSV parity, audit join, error messages, 0 secrets in output.

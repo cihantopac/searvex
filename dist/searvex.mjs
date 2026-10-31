@@ -15782,8 +15782,11 @@ var require_lib = __commonJS({
 // src/integrations/bing.ts
 var bing_exports = {};
 __export(bing_exports, {
+  BingApiError: () => BingApiError,
   aggregate: () => aggregate,
+  bingErrorMessage: () => bingErrorMessage,
   bingQueryPageRows: () => bingQueryPageRows,
+  getDailyTraffic: () => getDailyTraffic,
   getPageQueryStats: () => getPageQueryStats,
   getPageStats: () => getPageStats,
   getQueryStats: () => getQueryStats,
@@ -15800,6 +15803,16 @@ function parseBingDate(v) {
   const t = Date.parse(v);
   return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10);
 }
+function bingErrorMessage(status, method, body) {
+  let code = "";
+  try {
+    code = String(JSON.parse(body).Message ?? "");
+  } catch {
+  }
+  if (/InvalidApiKey/i.test(code)) return 'Bing rejected the API key (InvalidApiKey). Store a new key with "searvex bing auth --force", or fix SEARVEX_BING_API_KEY.';
+  if (/throttl|quota/i.test(code) || status === 429) return `Bing Webmaster API quota or rate limit reached on ${method} (${code || `HTTP ${status}`}). Try again later or lower --max-pages.`;
+  return `Bing Webmaster API error ${status} on ${method}: ${body}`;
+}
 function maskKey(text4, apiKey) {
   if (!apiKey) return text4;
   return [apiKey, encodeURIComponent(apiKey)].reduce((t, k) => t.split(k).join("***"), text4);
@@ -15814,7 +15827,7 @@ function get2(method, params, apiKey) {
       res.on("end", () => {
         const text4 = Buffer.concat(chunks).toString("utf8");
         if ((res.statusCode ?? 0) !== 200) {
-          reject(new Error(`Bing Webmaster API error ${res.statusCode} on ${method}: ${maskKey(text4.slice(0, 200), apiKey)}`));
+          reject(new BingApiError(bingErrorMessage(res.statusCode ?? 0, method, maskKey(text4.slice(0, 200), apiKey))));
           return;
         }
         try {
@@ -15871,11 +15884,19 @@ async function getUserSites(apiKey) {
     return { url: String(o["Url"] ?? ""), verified: o["IsVerified"] === true };
   });
 }
-var BASE2, getQueryStats, getPageStats, getPageQueryStats;
+async function getDailyTraffic(siteUrl, apiKey, sinceIso) {
+  return (await get2("GetRankAndTrafficStats", { siteUrl }, apiKey)).map((x) => {
+    const o = x;
+    return { date: parseBingDate(o["Date"]) ?? "", clicks: Number(o["Clicks"] ?? 0) || 0, impressions: Number(o["Impressions"] ?? 0) || 0 };
+  }).filter((d) => d.date && d.date >= sinceIso).sort((a, b) => a.date.localeCompare(b.date));
+}
+var BASE2, BingApiError, getQueryStats, getPageStats, getPageQueryStats;
 var init_bing = __esm({
   "src/integrations/bing.ts"() {
     "use strict";
     BASE2 = () => process.env["SEARVEX_BING_API_BASE"] ?? "https://ssl.bing.com/webmaster/api.svc/json";
+    BingApiError = class extends Error {
+    };
     getQueryStats = async (siteUrl, apiKey) => toStats(await get2("GetQueryStats", { siteUrl }, apiKey));
     getPageStats = async (siteUrl, apiKey) => toStats(await get2("GetPageStats", { siteUrl }, apiKey));
     getPageQueryStats = async (siteUrl, page, apiKey) => toStats(await get2("GetPageQueryStats", { siteUrl, page }, apiKey));
@@ -40938,7 +40959,7 @@ async function readSecret(prompt, input = process.stdin, output = process.stderr
 async function commandBing(flags) {
   const v = flags.values;
   const sub = flags.positionals[1];
-  const { getUserSites: getUserSites2, bingQueryPageRows: bingQueryPageRows2, maskKey: maskKey2 } = await Promise.resolve().then(() => (init_bing(), bing_exports));
+  const { getUserSites: getUserSites2, bingQueryPageRows: bingQueryPageRows2, getDailyTraffic: getDailyTraffic2, maskKey: maskKey2, BingApiError: BingApiError2 } = await Promise.resolve().then(() => (init_bing(), bing_exports));
   const usage = "bing subcommands: auth | status | sites | report <siteUrl> [--days 28] [--audit latest|<runId>] [--max-pages 25] | logout";
   if (sub === "auth") {
     const existing = getCredential("bing");
@@ -40948,14 +40969,14 @@ async function commandBing(flags) {
     }
     const key = await readSecret("Bing Webmaster API key (Settings \u2192 API access; input hidden): ");
     if (!/^[A-Za-z0-9_-]{16,128}$/.test(key)) throw new UsageError("That does not look like a Bing Webmaster API key (16\u2013128 letters, digits, - or _). Nothing was stored.");
-    let sites2;
+    let sites;
     try {
-      sites2 = await getUserSites2(key);
+      sites = await getUserSites2(key);
     } catch (e) {
       throw new UsageError(`Bing rejected the key; nothing was stored. ${maskKey2(e.message, key)}`);
     }
     saveCredential("bing", { clientId: "bing-webmaster-api-key", refreshToken: key, scope: "bing-webmaster:read", createdAt: (/* @__PURE__ */ new Date()).toISOString() });
-    console.log(`Stored the Bing API key in ${defaultCredentialStore().describe()}. Sites on this account: ${sites2.length} (${sites2.filter((s) => s.verified).length} verified).`);
+    console.log(`Stored the Bing API key in ${defaultCredentialStore().describe()}. Sites on this account: ${sites.length} (${sites.filter((s) => s.verified).length} verified).`);
     return 0;
   }
   if (sub === "logout") {
@@ -40966,9 +40987,9 @@ async function commandBing(flags) {
   const k = bingKey();
   if (!k) throw new UsageError('No Bing API key: run "searvex bing auth" (Bing Webmaster Tools \u2192 Settings \u2192 API access), or set SEARVEX_BING_API_KEY.');
   if (sub === "status" || sub === "sites") {
-    let sites2;
+    let sites;
     try {
-      sites2 = await getUserSites2(k.key);
+      sites = await getUserSites2(k.key);
     } catch (e) {
       if (sub === "sites") throw e;
       const status2 = { key: k.source, valid: false, error: e.message };
@@ -40977,16 +40998,27 @@ async function commandBing(flags) {
       return 1;
     }
     if (sub === "sites") {
-      if (v["json"]) process.stdout.write(JSON.stringify(sites2, null, 2) + "\n");
-      else for (const s of sites2) console.log(`${s.url}  (${s.verified ? "verified" : "not verified"})`);
+      if (v["json"]) process.stdout.write(JSON.stringify(sites, null, 2) + "\n");
+      else for (const s of sites) console.log(`${s.url}  (${s.verified ? "verified" : "not verified"})`);
       return 0;
     }
-    const status = { key: k.source, valid: true, sites: sites2.length, verifiedSites: sites2.filter((s) => s.verified).length };
+    const status = { key: k.source, valid: true, sites: sites.length, verifiedSites: sites.filter((s) => s.verified).length };
     if (v["json"]) process.stdout.write(JSON.stringify(status, null, 2) + "\n");
     else for (const [n, x] of Object.entries(status)) console.log(`${n}: ${String(x)}`);
     return 0;
   }
   if (sub !== "report") throw new UsageError(usage);
+  try {
+    return await bingReport(flags, k.key, { getUserSites: getUserSites2, bingQueryPageRows: bingQueryPageRows2, getDailyTraffic: getDailyTraffic2 });
+  } catch (e) {
+    if (e instanceof BingApiError2) throw new UsageError(e.message);
+    throw e;
+  }
+}
+async function bingReport(flags, key, api) {
+  const v = flags.values;
+  const { getUserSites: getUserSites2, bingQueryPageRows: bingQueryPageRows2, getDailyTraffic: getDailyTraffic2 } = api;
+  const k = { key };
   const siteUrl = flags.positionals[2];
   if (!siteUrl || !/^https?:\/\//.test(siteUrl)) throw new UsageError("bing report requires the verified site URL, e.g. https://example.com/");
   const property = propertyOrUsage2(siteUrl, { anyProtocol: true });
@@ -41002,10 +41034,18 @@ async function commandBing(flags) {
   const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
   const sel = resolveAudit(flags, workspace, property);
   const { rows, pages } = await bingQueryPageRows2(site.url, k.key, { days, maxPages: num(v["max-pages"], 25, 1, 200) });
-  const report = analyzeSearchPerformance(rows, { days, source: `Bing Webmaster Tools ${site.url}`, audit: sel?.audit, property });
+  const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+  const daily = await getDailyTraffic2(site.url, k.key, since);
+  const dates = daily.map((d) => ({ key: d.date, clicks: d.clicks, impressions: d.impressions, ctr: d.impressions ? d.clicks / d.impressions : 0, position: 0 }));
+  const report = analyzeSearchPerformance({ queryPage: rows, dates }, { days, source: `Bing Webmaster Tools ${site.url}`, audit: sel?.audit, property });
   attachAudit(report, sel);
-  report.totals.basis = `sum of query \xD7 page rows for the top ${pages} pages by clicks (not site totals)`;
+  report.totals.basis = dates.length ? `daily site totals (GetRankAndTrafficStats, ${dates[0].key} \u2013 ${dates.at(-1).key})` : `sum of query \xD7 page rows for the top ${pages} pages by clicks (not site totals)`;
   report.notes.push(`Query \xD7 page rows come from GetPageQueryStats for the top ${pages} pages by clicks; positions are impression-weighted AvgImpressionPosition.`);
+  if (!rows.length) {
+    const why = report.totals.impressions ? "Bing reports site impressions but no page or query detail for this period yet" : "Bing reports no impressions for this site in this period";
+    report.notMeasured.push(`Query and page analysis: ${why}. New sites usually need days to weeks in Bing; check indexing in Bing Webmaster Tools (URL Inspection, Site Explorer).`);
+    log(v, `Note: ${why}.`);
+  }
   saveReport(flags, workspace, "bing", { target: site.url, days }, report);
   return 0;
 }

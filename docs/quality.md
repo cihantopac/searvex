@@ -169,6 +169,27 @@ the keychain backend ignored `SEARVEX_CONFIG_DIR`, so a test run from a shell wi
 deleted the real credential — keychain entries are now isolated per config directory (sentinel-verified);
 `gsc auth` now opens the browser.
 
+## Live Bing Webmaster validation (2026-11-01)
+
+Owner's Bing Webmaster account (8 verified sites of the permitted product family), key stored with
+`searvex bing auth` in the macOS Keychain.
+
+| Check | Result |
+|---|---|
+| `bing auth` (hidden input, key checked with GetUserSites before storing) | ✅ |
+| `bing status` / `bing sites` | ✅ 8 sites, all verified |
+| `bing report` on all 8 sites (90 days) | ✅ runs in 1–2 s each; **all values 0** — confirmed against the raw API: GetQueryStats and GetPageStats return no rows, GetRankAndTrafficStats returns 10 days (2026-10-20 – 10-29) with 0 clicks and 0 impressions for every site. The sites have no Bing impressions yet |
+| Wrong site (www vs apex, http vs https, a site of another account) | ✅ refused with "Did you mean …" or the account's site list |
+| Invalid key | ✅ "Bing rejected the API key (InvalidApiKey) …" (was a raw API error) |
+| Secrets in output | ✅ 12 commands, all output and run files scanned for the key (raw and URL-encoded): 0 matches |
+| Parsing of non-empty QueryStats / PageStats from the live API | ⏸ not verifiable until Bing has data for one of the sites; covered by recorded-shape tests |
+
+Defects found and fixed: totals were the sum of the top 25 pages ("not site totals") — they now come from
+the daily site series (GetRankAndTrafficStats); an empty Bing response produced bare zeros — it is now
+explained as "no impressions in this period" with next steps; unknown sites returned empty data that read
+as "no traffic" — `bing report` now requires a verified site of the account; the key could only be passed
+as an environment variable — `bing auth` stores it in the credential store.
+
 ## Real-world validation round 6 — local repositories (2026-11-01)
 
 Five of the owner's local repositories, audited read-only in repository mode (`--out` outside the repository;

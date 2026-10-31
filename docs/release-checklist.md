@@ -17,7 +17,7 @@ Status: ✅ verified · 🔄 in progress · ⬜ open · ⛔ blocked on the owner
 | `--render` (Playwright, optional dependency) | in scope | render CI job + adversarial tests |
 | Search Console CSV/ZIP import | ✅ **supported** | real TR + EN exports of the same domain property (2026-11-01): identical analysis; 2 data-integrity defects found and fixed |
 | Search Console API (own Desktop OAuth client) | ✅ **supported** | live 2026-11-01: OAuth, refresh, keychain storage, property list, pagination, report, CSV parity, leak scan; revoke mock-tested only (owner kept the grant) |
-| Bing Webmaster API (API key) | in scope only after a live run | live report on a verified site |
+| Bing Webmaster API (API key) | 🔄 experimental | live 2026-11-01: key storage, sites, reports, errors, leak scan ✅; parsing of real non-empty query/page data pending (the 8 sites have no Bing impressions yet) |
 | CrUX API | in scope only after a live run | live origin query |
 | GA4, Yandex Webmaster, PSI/Lighthouse, AI-search performance data | ➖ (documented as not implemented) | — |
 

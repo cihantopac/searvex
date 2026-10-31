@@ -30,6 +30,21 @@ export function parseBingDate(v: unknown): string | null {
   return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10);
 }
 
+export class BingApiError extends Error {}
+
+/** Actionable text for the API's error envelope ({"ErrorCode": n, "Message": "..."}). */
+export function bingErrorMessage(status: number, method: string, body: string): string {
+  let code = '';
+  try {
+    code = String((JSON.parse(body) as { Message?: string }).Message ?? '');
+  } catch {
+    /* not JSON */
+  }
+  if (/InvalidApiKey/i.test(code)) return 'Bing rejected the API key (InvalidApiKey). Store a new key with "searvex bing auth --force", or fix SEARVEX_BING_API_KEY.';
+  if (/throttl|quota/i.test(code) || status === 429) return `Bing Webmaster API quota or rate limit reached on ${method} (${code || `HTTP ${status}`}). Try again later or lower --max-pages.`;
+  return `Bing Webmaster API error ${status} on ${method}: ${body}`;
+}
+
 /** Remove every occurrence of the key (raw and URL-encoded) from text shown to the user. */
 export function maskKey(text: string, apiKey: string): string {
   if (!apiKey) return text;
@@ -47,7 +62,7 @@ function get(method: string, params: Record<string, string>, apiKey: string): Pr
         const text = Buffer.concat(chunks).toString('utf8');
         if ((res.statusCode ?? 0) !== 200) {
           // Never echo the request URL: it contains the API key.
-          reject(new Error(`Bing Webmaster API error ${res.statusCode} on ${method}: ${maskKey(text.slice(0, 200), apiKey)}`));
+          reject(new BingApiError(bingErrorMessage(res.statusCode ?? 0, method, maskKey(text.slice(0, 200), apiKey))));
           return;
         }
         try {
@@ -122,4 +137,15 @@ export async function getUserSites(apiKey: string): Promise<BingSite[]> {
     const o = x as Record<string, unknown>;
     return { url: String(o['Url'] ?? ''), verified: o['IsVerified'] === true };
   });
+}
+
+/** Daily site totals (GetRankAndTrafficStats: Date, Clicks, Impressions) since `sinceIso`, oldest first. */
+export async function getDailyTraffic(siteUrl: string, apiKey: string, sinceIso: string): Promise<Array<{ date: string; clicks: number; impressions: number }>> {
+  return (await get('GetRankAndTrafficStats', { siteUrl }, apiKey))
+    .map((x) => {
+      const o = x as Record<string, unknown>;
+      return { date: parseBingDate(o['Date']) ?? '', clicks: Number(o['Clicks'] ?? 0) || 0, impressions: Number(o['Impressions'] ?? 0) || 0 };
+    })
+    .filter((d) => d.date && d.date >= sinceIso)
+    .sort((a, b) => a.date.localeCompare(b.date));
 }

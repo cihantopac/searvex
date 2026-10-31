@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { aggregate, bingQueryPageRows, getQueryStats, getUserSites, maskKey, parseBingDate } from '../../src/integrations/bing.js';
+import { aggregate, bingErrorMessage, bingQueryPageRows, getQueryStats, getUserSites, maskKey, parseBingDate } from '../../src/integrations/bing.js';
 import { readSecret } from '../../src/commands/gsc.js';
 import { deleteCredential, saveCredential } from '../../src/integrations/google-oauth.js';
 import { PassThrough } from 'node:stream';
@@ -23,6 +23,7 @@ beforeAll(async () => {
     if (u.searchParams.get('apikey') !== KEY) return res.writeHead(401).end(`invalid key ${u.searchParams.get('apikey')}`);
     const send = (d: unknown[]) => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ d }));
     if (u.pathname.endsWith('/GetUserSites')) return send([{ Url: 'https://s.example/', IsVerified: true }, { Url: 'https://pending.example/', IsVerified: false }, { Url: 'https://www.other.example/', IsVerified: true }]);
+    if (u.pathname.endsWith('/GetRankAndTrafficStats')) return send([{ Date: day(3), Clicks: 40, Impressions: 900 }, { Date: day(4), Clicks: 4, Impressions: 100 }, { Date: day(400), Clicks: 999, Impressions: 9999 }]);
     if (u.pathname.endsWith('/GetQueryStats')) return send([{ Query: 'team chat', Clicks: 5, Impressions: 50, AvgImpressionPosition: 4, AvgClickPosition: 3, Date: day(3) }]);
     if (u.pathname.endsWith('/GetPageStats')) return send([
       { Query: 'https://s.example/a', Clicks: 30, Impressions: 300, AvgImpressionPosition: 5, AvgClickPosition: 4, Date: day(5) },
@@ -83,6 +84,9 @@ describe('Bing Webmaster API', () => {
       const rep = JSON.parse(fs.readFileSync(path.join(ws, '.searvex', 'runs', run, 'search-performance.json'), 'utf8'));
       expect(rep.source).toContain('Bing Webmaster Tools');
       expect(rep.multiPageQueries[0].query).toBe('chat app');
+      // Totals: the daily site series within the period, not the sum of the top pages.
+      expect(rep.totals).toMatchObject({ clicks: 44, impressions: 1000 });
+      expect(rep.totals.basis).toMatch(/daily site totals/);
     } finally {
       fs.rmSync(ws, { recursive: true, force: true });
     }
@@ -157,5 +161,13 @@ describe('Bing key handling and site selection', () => {
     expect(await p).toBe('abcd');
     expect(echoed.join('')).toBe('key: \n');
     expect(tty.setRawMode).toHaveBeenLastCalledWith(false);
+  });
+});
+
+describe('Bing API error envelope (live shapes, 2026-11-01)', () => {
+  it('turns InvalidApiKey and throttling into actionable messages', () => {
+    expect(bingErrorMessage(400, 'GetUserSites', '{"ErrorCode":3,"Message":"ERROR!!! InvalidApiKey"}')).toMatch(/rejected the API key .*bing auth --force/);
+    expect(bingErrorMessage(400, 'GetPageQueryStats', '{"ErrorCode":14,"Message":"ERROR!!! ThrottleUser"}')).toMatch(/quota or rate limit .*--max-pages/);
+    expect(bingErrorMessage(500, 'GetPageStats', 'oops')).toBe('Bing Webmaster API error 500 on GetPageStats: oops');
   });
 });
