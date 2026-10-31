@@ -50,6 +50,10 @@ export interface RenderStats {
   pages: number;
   blockedRequests: number;
   skippedResources: number;
+  /** Pages stopped by the hard per-page deadline (e.g. scripts in a busy loop). */
+  deadlineExceeded: number;
+  /** Browser relaunches after a page could not be closed. */
+  browserRestarts: number;
   /** Whether Chromium's sandbox was active (false when the OS does not allow it). */
   sandbox: boolean;
   proxy: PolicyProxyStats;
@@ -58,6 +62,18 @@ export interface RenderStats {
 /** Resource types that never affect the indexable DOM; skipping them saves bandwidth and time. */
 const SKIPPED_RESOURCE_TYPES = new Set(['image', 'media', 'font']);
 const MAX_REQUESTS_PER_PAGE = 300;
+/** Time scripts get to settle after DOMContentLoaded. */
+const SETTLE_MS = 5000;
+/** Time a context or browser gets to close before it is abandoned. */
+const CLOSE_MS = 5000;
+
+/** Resolves true when `p` settles within `ms`, false otherwise (never rejects). */
+async function bounded(p: Promise<unknown>, ms: number): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  const ok = await Promise.race([p.then(() => true, () => true), new Promise<boolean>((r) => (timer = setTimeout(() => r(false), ms)))]);
+  clearTimeout(timer);
+  return ok;
+}
 
 export const BROWSER_ARGS = [
   // Send loopback through the proxy too (Chromium bypasses proxies for localhost by default).
@@ -100,7 +116,16 @@ export async function createRenderer(policy: NetPolicy, timeoutMs = 30000): Prom
     await proxy.close();
     throw e;
   }
-  const stats: RenderStats = { pages: 0, blockedRequests: 0, skippedResources: 0, sandbox, proxy: proxy.stats };
+  const stats: RenderStats = { pages: 0, blockedRequests: 0, skippedResources: 0, deadlineExceeded: 0, browserRestarts: 0, sandbox, proxy: proxy.stats };
+  // Hard limit for one page, including scripts that block the renderer's main thread (a busy loop never
+  // yields, so Playwright calls such as content() would otherwise wait forever).
+  const deadlineMs = timeoutMs + SETTLE_MS + 5000;
+  const restart = async () => {
+    stats.browserRestarts++;
+    await bounded(browser.close(), CLOSE_MS);
+    ({ browser, sandbox } = await launch(chromium, proxy));
+    stats.sandbox = sandbox;
+  };
   return {
     stats,
     async render(url: string) {
@@ -113,7 +138,7 @@ export async function createRenderer(policy: NetPolicy, timeoutMs = 30000): Prom
       context.on('page', (p) => {
         if (main && p !== main) void p.close().catch(() => {});
       });
-      try {
+      const work = (async () => {
         await context.route('**/*', async (route) => {
           const req = route.request();
           if (SKIPPED_RESOURCE_TYPES.has(req.resourceType())) {
@@ -137,16 +162,27 @@ export async function createRenderer(policy: NetPolicy, timeoutMs = 30000): Prom
         // Wait for the DOM, then give scripts a bounded window to settle: sites with long-polling or
         // streaming connections never reach "networkidle".
         await main.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
-        await main.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+        await main.waitForLoadState('networkidle', { timeout: SETTLE_MS }).catch(() => {});
         return { html: await main.content() };
+      })();
+      let timer: NodeJS.Timeout | undefined;
+      const deadline = new Promise<'deadline'>((resolve) => (timer = setTimeout(() => resolve('deadline'), deadlineMs)));
+      try {
+        const r = await Promise.race([work, deadline]);
+        if (r !== 'deadline') return r;
+        stats.deadlineExceeded++;
+        work.catch(() => {});
+        return { html: '', error: `rendering exceeded ${Math.round(deadlineMs / 1000)} s (page scripts kept the browser busy)` };
       } catch (e) {
         return { html: '', error: (e as Error).message.split('\n')[0] };
       } finally {
-        await context.close().catch(() => {});
+        clearTimeout(timer);
+        // A renderer stuck in a busy loop may not close its context; then the whole browser is replaced.
+        if (!(await bounded(context.close(), CLOSE_MS))) await restart();
       }
     },
     async close() {
-      await browser.close().catch(() => {});
+      await bounded(browser.close(), CLOSE_MS);
       await proxy.close();
     },
   };

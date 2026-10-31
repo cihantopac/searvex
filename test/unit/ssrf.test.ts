@@ -51,6 +51,11 @@ describe('assertUrlAllowed', () => {
     'http://printer.local/',
     'http://0x7f000001/',
     'http://2130706433/',
+    'http://localhost./',
+    'http://metadata.google.internal./',
+    'http://[fd00:ec2::254]/',
+    'http://100.100.100.200/',
+    'http://017700000001/',
   ])('blocks %s by default', (u) => {
     expect(() => assertUrlAllowed(u, DEFAULT_POLICY)).toThrow();
   });

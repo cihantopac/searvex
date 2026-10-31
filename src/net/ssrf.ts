@@ -147,7 +147,8 @@ export function assertUrlAllowed(raw: string, policy: NetPolicy): URL {
   if (isIP(host) && !isAddressAllowed(host, policy)) {
     throw new BlockedUrlError(`Address not allowed (${classifyAddress(host)}): ${host}`, raw);
   }
-  const lower = host.toLowerCase();
+  // A trailing dot is the same DNS name ("localhost." resolves like "localhost").
+  const lower = host.toLowerCase().replace(/\.+$/, '');
   if (!policy.allowPrivate && (lower === 'localhost' || lower.endsWith('.localhost') || lower.endsWith('.internal') || lower.endsWith('.local'))) {
     throw new BlockedUrlError(`Local hostname not allowed: ${host}`, raw);
   }
