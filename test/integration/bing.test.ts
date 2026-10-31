@@ -122,7 +122,7 @@ describe('Bing key handling and site selection', () => {
     process.env['SEARVEX_CONFIG_DIR'] = cfg;
     const c = capture();
     try {
-      expect(await main(['bing', 'status'])).toBe(2); // no key anywhere
+      expect(await main(['bing', 'status'])).toBe(1); // no key anywhere: reported, exit 1
       saveCredential('bing', { clientId: 'bing-webmaster-api-key', refreshToken: KEY, scope: 'bing-webmaster:read', createdAt: '2026-11-01T00:00:00Z' });
       expect(await main(['bing', 'status', '--json'])).toBe(0);
       expect(await main(['bing', 'sites'])).toBe(0);

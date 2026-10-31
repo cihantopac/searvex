@@ -4,7 +4,8 @@
 searvex <command> [target] [options]
 ```
 
-Exit codes: `0` success · `1` `--fail-on` threshold met, optimize verification failed or rollback conflict · `2` usage or runtime error.
+Exit codes: `0` success · `1` `--fail-on` threshold met, optimize verification failed, rollback conflict, or a
+`gsc|bing|crux status` integration that is not configured or not working · `2` usage or runtime error.
 
 ## Commands
 

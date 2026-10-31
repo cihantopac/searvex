@@ -39,7 +39,12 @@ export async function commandCrux(flags: GlobalFlags): Promise<number> {
   }
   if (sub === 'status') {
     const k = cruxKey();
-    if (!k) throw new UsageError('No CrUX API key: run "searvex crux auth", or set SEARVEX_CRUX_API_KEY.');
+    if (!k) {
+      const hint = 'No CrUX API key: run "searvex crux auth", or set SEARVEX_CRUX_API_KEY.';
+      if (v['json']) process.stdout.write(JSON.stringify({ key: 'none', valid: false, hint }, null, 2) + '\n');
+      else console.log(`key: none\n${hint}`);
+      return 1;
+    }
     const probe = await queryCrux(PROBE_ORIGIN, k.key);
     const status = { key: k.source, valid: probe.status !== 'error', ...(probe.status === 'error' ? { error: probe.message } : {}) };
     if (v['json']) process.stdout.write(JSON.stringify(status, null, 2) + '\n');

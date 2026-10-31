@@ -296,6 +296,16 @@ irrelevant, because those pages are behind a login — Searvex does not resolve 
 | 20,000 | 8 | 17.0 s | 1,179 | 3.5 s | 562 MB |
 | 20,000 (v0.3.0: template-aware duplicates, hashed shingles) | 8 | 18.7 s | 1,069 | 3.8 s | 584 MB |
 | 7-site ecosystem, 40 pages each, real network, 1 s/host delay | parallel | 82 s total | — | — | — |
+| **v1.0.0 RC (2026-11-01)**, 500 | 8 | 0.7 s | 686 | 0.2 s | 127 MB |
+| v1.0.0 RC, 5,000 (best of 3) | 8 | 4.6 s | 1,096 | 1.0 s | 259 MB |
+| v1.0.0 RC, 20,000 | 8 | 32.1 s | 623 | 7.1 s | 614 MB |
+| v1.0.0 RC, 50,000 | 8 | 83.1 s | 602 | 21.6 s | 1,111 MB |
+
+The v1.0.0 RC rows were measured on a loaded machine (load average 5–7); throughput varied 2–4× between
+runs. Under identical conditions v0.7.0 and the RC were equal (5,000 pages: 1,134 vs 1,096 pages/s, 1.03 vs
+1.02 s analysis, 261 vs 259 MB). Memory is the reliable figure: ~22 KB per page, 1.1 GB at 50,000 pages.
+Supported scale for v1.0.0: 50,000 pages per run in memory; larger sites with `--include` sections or
+`--resume`.
 
 Real sites are bounded by politeness (per-host delay, Crawl-delay), not by Searvex throughput.
 Memory grows ~25 KB/page (stored text capped at 20,000 chars/page).

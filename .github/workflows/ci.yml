@@ -54,6 +54,8 @@ jobs:
       - run: npm run bundle
       - name: Committed plugin bundle matches sources
         run: git diff --exit-code -- dist/searvex.mjs
+      - name: Third-party notices match the lockfile
+        run: node scripts/third-party-notices.mjs --check
 
   plugin:
     runs-on: ubuntu-latest
@@ -65,18 +67,32 @@ jobs:
       - run: claude plugin validate .
 
   clean-install:
-    name: clean install from packed tarball
-    runs-on: ubuntu-latest
+    name: clean install from packed tarball (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci && npm run build
       - run: npm pack
-      - run: |
-          mkdir /tmp/consumer && cd /tmp/consumer
+      - name: Install the tarball into an empty project and run the CLI end to end
+        run: |
+          consumer="$RUNNER_TEMP/consumer"
+          mkdir -p "$consumer" && cd "$consumer"
           npm init -y >/dev/null
-          npm install "$GITHUB_WORKSPACE"/searvex-*.tgz
-          npx searvex --version
-          npx searvex rules validate
-          npx searvex audit "$GITHUB_WORKSPACE/test/fixtures/repos/static-site" --out /tmp/consumer -q --format json
+          npm install --no-audit --no-fund "$GITHUB_WORKSPACE"/searvex-seo-*.tgz
+          export SEARVEX_CONFIG_DIR="$consumer/cfg"
+          npx --no-install searvex --version
+          npx --no-install searvex rules validate --strict
+          cp -r "$GITHUB_WORKSPACE/test/fixtures/repos/static-site" site
+          npx --no-install searvex audit site --out ws --format json,md,html,sarif
+          npx --no-install searvex optimize site --site-url https://northwind.example --lang en --apply --yes
+          npx --no-install searvex rollback "$(ls site/.searvex/changes)" site
+          npx --no-install searvex connect https://example.com --json

@@ -61,7 +61,7 @@ describe('CrUX API', () => {
     const out: string[] = [];
     const spies = [vi.spyOn(console, 'log').mockImplementation((...a) => void out.push(a.join(' '))), vi.spyOn(console, 'error').mockImplementation((...a) => void out.push(a.join(' ')))];
     try {
-      expect(await main(['crux', 'status'])).toBe(2);
+      expect(await main(['crux', 'status'])).toBe(1); // reported, not a usage error
       saveCredential('crux', { clientId: 'crux-api-key', refreshToken: KEY, scope: 'chromeuxreport', createdAt: '2026-11-01T00:00:00Z' });
       expect(cruxKey()?.key).toBe(KEY);
       expect(await main(['crux', 'status'])).toBe(0);

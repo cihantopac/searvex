@@ -40480,7 +40480,7 @@ async function commandGsc(flags) {
     }
     if (v["json"]) process.stdout.write(JSON.stringify(status, null, 2) + "\n");
     else for (const [k, x] of Object.entries(status)) console.log(`${k}: ${String(x)}`);
-    return cred || envToken ? 0 : 1;
+    return envToken || status["valid"] === true ? 0 : 1;
   }
   if (sub === "logout") {
     const cred = getCredential("gsc");
@@ -40622,7 +40622,14 @@ async function commandBing(flags) {
     return 0;
   }
   const k = bingKey();
-  if (!k) throw new UsageError('No Bing API key: run "searvex bing auth" (Bing Webmaster Tools \u2192 Settings \u2192 API access), or set SEARVEX_BING_API_KEY.');
+  const noKey = 'No Bing API key: run "searvex bing auth" (Bing Webmaster Tools \u2192 Settings \u2192 API access), or set SEARVEX_BING_API_KEY.';
+  if (!k && sub === "status") {
+    if (v["json"]) process.stdout.write(JSON.stringify({ key: "none", valid: false, hint: noKey }, null, 2) + "\n");
+    else console.log(`key: none
+${noKey}`);
+    return 1;
+  }
+  if (!k) throw new UsageError(noKey);
   if (sub === "status" || sub === "sites") {
     let sites;
     try {
@@ -40749,7 +40756,13 @@ async function commandCrux(flags) {
   }
   if (sub === "status") {
     const k = cruxKey();
-    if (!k) throw new UsageError('No CrUX API key: run "searvex crux auth", or set SEARVEX_CRUX_API_KEY.');
+    if (!k) {
+      const hint = 'No CrUX API key: run "searvex crux auth", or set SEARVEX_CRUX_API_KEY.';
+      if (v["json"]) process.stdout.write(JSON.stringify({ key: "none", valid: false, hint }, null, 2) + "\n");
+      else console.log(`key: none
+${hint}`);
+      return 1;
+    }
     const probe = await queryCrux(PROBE_ORIGIN, k.key);
     const status = { key: k.source, valid: probe.status !== "error", ...probe.status === "error" ? { error: probe.message } : {} };
     if (v["json"]) process.stdout.write(JSON.stringify(status, null, 2) + "\n");

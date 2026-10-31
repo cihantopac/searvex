@@ -233,7 +233,8 @@ export async function commandGsc(flags: GlobalFlags): Promise<number> {
     }
     if (v['json']) process.stdout.write(JSON.stringify(status, null, 2) + '\n');
     else for (const [k, x] of Object.entries(status)) console.log(`${k}: ${String(x)}`);
-    return cred || envToken ? 0 : 1;
+    // Status commands exit 0 only when the integration is usable.
+    return envToken || status['valid'] === true ? 0 : 1;
   }
   if (sub === 'logout') {
     const cred = getCredential('gsc');
@@ -389,7 +390,13 @@ export async function commandBing(flags: GlobalFlags): Promise<number> {
     return 0;
   }
   const k = bingKey();
-  if (!k) throw new UsageError('No Bing API key: run "searvex bing auth" (Bing Webmaster Tools → Settings → API access), or set SEARVEX_BING_API_KEY.');
+  const noKey = 'No Bing API key: run "searvex bing auth" (Bing Webmaster Tools → Settings → API access), or set SEARVEX_BING_API_KEY.';
+  if (!k && sub === 'status') {
+    if (v['json']) process.stdout.write(JSON.stringify({ key: 'none', valid: false, hint: noKey }, null, 2) + '\n');
+    else console.log(`key: none\n${noKey}`);
+    return 1;
+  }
+  if (!k) throw new UsageError(noKey);
   if (sub === 'status' || sub === 'sites') {
     let sites;
     try {
