@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -33,6 +34,11 @@ export interface CredentialStore {
 
 export function configDir(): string {
   if (process.env['SEARVEX_CONFIG_DIR']) return process.env['SEARVEX_CONFIG_DIR'];
+  return defaultConfigDir();
+}
+
+/** The per-user config directory, ignoring SEARVEX_CONFIG_DIR. */
+export function defaultConfigDir(): string {
   if (process.platform === 'win32') return path.join(process.env['APPDATA'] ?? path.join(os.homedir(), 'AppData', 'Roaming'), 'searvex');
   return path.join(process.env['XDG_CONFIG_HOME'] ?? path.join(os.homedir(), '.config'), 'searvex');
 }
@@ -107,7 +113,16 @@ export function keychainKind(platform: NodeJS.Platform = process.platform): Keyc
   return null;
 }
 
-const SERVICE = 'searvex';
+/**
+ * Keychain service name. The default config directory uses "searvex"; any other directory (SEARVEX_CONFIG_DIR,
+ * e.g. tests or a second profile) gets its own service, so it can never read, overwrite or delete the
+ * credentials of the default profile — the same isolation the file store has.
+ */
+export function keychainService(dir: string): string {
+  const resolved = path.resolve(dir);
+  if (resolved === path.resolve(defaultConfigDir())) return 'searvex';
+  return `searvex-${crypto.createHash('sha256').update(resolved).digest('hex').slice(0, 12)}`;
+}
 const PS_PROTECT =
   "$ErrorActionPreference='Stop';Add-Type -AssemblyName System.Security;$s=[Console]::In.ReadToEnd();[Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($s),$null,'CurrentUser'))";
 const PS_UNPROTECT =
@@ -119,6 +134,7 @@ const PS_UNPROTECT =
  */
 export class KeychainCredentialStore implements CredentialStore {
   private readonly legacy: FileCredentialStore;
+  private readonly service: string;
 
   constructor(
     readonly kind: KeychainKind,
@@ -126,6 +142,7 @@ export class KeychainCredentialStore implements CredentialStore {
     private readonly dir = configDir(),
   ) {
     this.legacy = new FileCredentialStore(dir);
+    this.service = keychainService(dir);
   }
 
   get(name: string): StoredCredential | null {
@@ -134,7 +151,7 @@ export class KeychainCredentialStore implements CredentialStore {
     try {
       return JSON.parse(raw) as StoredCredential;
     } catch {
-      throw new CredentialStoreError(`The ${this.label()} entry "${SERVICE}/${name}" is not a Searvex credential; remove it and authorize again.`);
+      throw new CredentialStoreError(`The ${this.label()} entry "${this.service}/${name}" is not a Searvex credential; remove it and authorize again.`);
     }
   }
 
@@ -152,7 +169,7 @@ export class KeychainCredentialStore implements CredentialStore {
   }
 
   describe(): string {
-    return `${this.label()} (service "${SERVICE}")`;
+    return `${this.label()} (service "${this.service}")`;
   }
 
   private label(): string {
@@ -177,7 +194,7 @@ export class KeychainCredentialStore implements CredentialStore {
       if (r.status !== 0) this.fail('read', r);
       return r.stdout;
     }
-    const r = this.kind === 'macos' ? this.run('security', ['find-generic-password', '-s', SERVICE, '-a', name, '-w']) : this.run('secret-tool', ['lookup', 'service', SERVICE, 'account', name]);
+    const r = this.kind === 'macos' ? this.run('security', ['find-generic-password', '-s', this.service, '-a', name, '-w']) : this.run('secret-tool', ['lookup', 'service', this.service, 'account', name]);
     if (r.status === null) this.fail('read', r);
     // Not found: security exits 44, secret-tool exits 1 with empty output.
     if (r.status !== 0) return null;
@@ -201,8 +218,8 @@ export class KeychainCredentialStore implements CredentialStore {
     // `security -i` reads the command from stdin, so the hex-encoded secret never appears in argv.
     const r =
       this.kind === 'macos'
-        ? this.run('security', ['-i'], `add-generic-password -U -s ${SERVICE} -a ${name} -l Searvex-${name} -X ${Buffer.from(json, 'utf8').toString('hex')}\n`)
-        : this.run('secret-tool', ['store', `--label=Searvex ${name}`, 'service', SERVICE, 'account', name], json);
+        ? this.run('security', ['-i'], `add-generic-password -U -s ${this.service} -a ${name} -l Searvex-${name} -X ${Buffer.from(json, 'utf8').toString('hex')}\n`)
+        : this.run('secret-tool', ['store', `--label=Searvex ${name}`, 'service', this.service, 'account', name], json);
     if (r.status !== 0) this.fail('store', r);
   }
 
@@ -214,7 +231,7 @@ export class KeychainCredentialStore implements CredentialStore {
       return true;
     }
     if (this.read(name) === null) return false;
-    const r = this.kind === 'macos' ? this.run('security', ['delete-generic-password', '-s', SERVICE, '-a', name]) : this.run('secret-tool', ['clear', 'service', SERVICE, 'account', name]);
+    const r = this.kind === 'macos' ? this.run('security', ['delete-generic-password', '-s', this.service, '-a', name]) : this.run('secret-tool', ['clear', 'service', this.service, 'account', name]);
     if (r.status !== 0) this.fail('delete', r);
     return true;
   }

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CredentialStoreError, defaultCredentialStore, FileCredentialStore, KeychainCredentialStore, type KeychainKind, type ToolRunner } from '../../src/integrations/credentials.js';
+import { CredentialStoreError, defaultConfigDir, defaultCredentialStore, FileCredentialStore, KeychainCredentialStore, keychainService, type KeychainKind, type ToolRunner } from '../../src/integrations/credentials.js';
 
 const cred = (refreshToken = 'rt-secret-1') => ({ clientId: 'cid', clientSecret: 'cs-secret', refreshToken, scope: 'scope', createdAt: '2026-10-31T00:00:00Z' });
 
@@ -14,17 +14,17 @@ function fakeTools() {
     argv.push([cmd, ...args]);
     const val = (flag: string) => args[args.indexOf(flag) + 1]!;
     if (cmd === 'security' && args[0] === '-i') {
-      const m = /-a (\S+) .*-X ([0-9a-f]+)/.exec(input ?? '')!;
-      items.set(m[1]!, Buffer.from(m[2]!, 'hex').toString('utf8'));
+      const m = /-s (\S+) -a (\S+) .*-X ([0-9a-f]+)/.exec(input ?? '')!;
+      items.set(`${m[1]}/${m[2]}`, Buffer.from(m[3]!, 'hex').toString('utf8'));
       return { status: 0, stdout: '', stderr: '' };
     }
     if (cmd === 'security' && args[0] === 'find-generic-password') {
-      const v = items.get(val('-a'));
+      const v = items.get(`${val('-s')}/${val('-a')}`);
       return v === undefined ? { status: 44, stdout: '', stderr: 'not found' } : { status: 0, stdout: /[^\x20-\x7e]/.test(v) ? Buffer.from(v).toString('hex') + '\n' : v + '\n', stderr: '' };
     }
-    if (cmd === 'security' && args[0] === 'delete-generic-password') return { status: items.delete(val('-a')) ? 0 : 44, stdout: '', stderr: '' };
+    if (cmd === 'security' && args[0] === 'delete-generic-password') return { status: items.delete(`${val('-s')}/${val('-a')}`) ? 0 : 44, stdout: '', stderr: '' };
     if (cmd === 'secret-tool') {
-      const account = args[args.length - 1]!;
+      const account = `${val('service')}/${args[args.length - 1]}`;
       if (args[0] === 'store') return items.set(account, input ?? ''), { status: 0, stdout: '', stderr: '' };
       if (args[0] === 'lookup') return items.has(account) ? { status: 0, stdout: items.get(account)!, stderr: '' } : { status: 1, stdout: '', stderr: '' };
       if (args[0] === 'clear') return items.delete(account), { status: 0, stdout: '', stderr: '' };
@@ -96,6 +96,32 @@ describe.each<KeychainKind>(['macos', 'secret-service', 'windows-dpapi'])('keych
     const s = new KeychainCredentialStore(kind, fakeTools().run, dir);
     expect(() => s.set('-w', cred())).toThrow(CredentialStoreError);
     expect(() => s.get('../x')).toThrow(CredentialStoreError);
+  });
+});
+
+describe('profile isolation', () => {
+  it('a store for another config directory can never read, overwrite or delete the default profile', () => {
+    expect(keychainService(defaultConfigDir())).toBe('searvex');
+    expect(keychainService(dir)).toMatch(/^searvex-[0-9a-f]{12}$/);
+    const t = fakeTools();
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-cred2-'));
+    try {
+      for (const kind of ['macos', 'secret-service'] as const) {
+        const real = new KeychainCredentialStore(kind, t.run, defaultConfigDir());
+        const test = new KeychainCredentialStore(kind, t.run, other);
+        real.set('gsc', cred('rt-real'));
+        test.set('gsc', cred('rt-test'));
+        expect(test.delete('gsc')).toBe(true);
+        expect(real.get('gsc')!.refreshToken).toBe('rt-real');
+        real.delete('gsc');
+      }
+    } finally {
+      fs.rmSync(other, { recursive: true, force: true });
+    }
+  });
+
+  it('tests run with the file store even when the shell selects the keychain', () => {
+    expect(process.env['SEARVEX_CREDENTIAL_STORE']).toBe('file');
   });
 });
 
