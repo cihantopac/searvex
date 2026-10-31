@@ -32,6 +32,11 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Session log
 
+### 2026-11-01 — live CrUX
+- `crux auth/status/logout` (hidden key input, credential store, actionable errors). Live: the product-family
+  origins have no CrUX data (reported as not measured); 3 public origins parsed identically to the raw API.
+  CrUX is now **supported**; only Bing stays experimental.
+
 ### 2026-11-01 — product-family round 7 (render)
 - `--render` on the 7 sites: client-side switch to English for en-US browsers on 6 sites (Turkish blog posts
   render "not found" on one), confirmed in a real browser. Fixed: Turkish soft-404 wording (Unicode

@@ -21,10 +21,10 @@ Searvex reports what it can observe and labels everything else. Known limits (v0
   No Lighthouse/lab measurements.
 - **Bing Webmaster:** API key only; reports are built from the top pages by clicks, so totals are not site
   totals. **Yandex Webmaster, GA4:** not implemented.
-- **Experimental in v1.0:** Bing Webmaster and CrUX are implemented and tested against recorded API behaviour,
-  but have not yet been verified against the live services. They are documented, not advertised as fully
-  supported. The Search Console **API and CSV import are supported** (verified live and with real exports;
-  `gsc logout` revocation at Google is verified against a mock server only).
+- **Experimental in v1.0:** Bing Webmaster works end to end against the live API, but the owner's sites had no
+  Bing data yet, so parsing of real query/page rows is not verified live. It is documented, not advertised as
+  fully supported. The Search Console **API and CSV import** and **CrUX** are supported (verified live and
+  with real exports; `gsc logout` revocation at Google is verified against a mock server only).
 - **Google OAuth:** each user needs their own Google Cloud "Desktop app" client; there is no hosted one-click
   login. Clients in "Testing" status get refresh tokens that expire after 7 days.
 

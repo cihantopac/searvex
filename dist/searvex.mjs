@@ -41207,7 +41207,7 @@ Commands
                         (bing is experimental: not yet verified against the live service)
   crux <auth|status|logout>
                         Chrome UX Report API key for real-user Core Web Vitals (hidden input, stored in the
-                        credential store; experimental)
+                        credential store)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and

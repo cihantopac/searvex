@@ -205,6 +205,20 @@ browser the same URL shows the article.
 | One root cause spread over many findings without a link | render mismatch, hreflang target errors, non-canonical sitemap URLs, soft 404s all followed from the client-side switch, and the consequence ranked above the cause | consequences name their likely root cause; the root cause is ranked first ("likely root cause of N other findings") |
 | Orphans reported on crawls stopped at the page limit | uncrawled pages may link to them | not reported on truncated crawls; the limitation says why |
 
+## Live CrUX validation (2026-11-01)
+
+Owner's Google Cloud API key restricted to the Chrome UX Report API, stored with `searvex crux auth` in the
+macOS Keychain.
+
+| Check | Result |
+|---|---|
+| `crux auth` (hidden input, test query before storing), `crux status` | ✅ |
+| 7 product-family origins | ✅ all "not in the CrUX dataset (insufficient real-user traffic)" → reported as not measured, nothing estimated |
+| 3 public origins (web.dev, www.wikipedia.org, developer.chrome.com), phone + desktop | ✅ p75 LCP / INP / CLS and collection period identical to the raw API JSON in all 6 cases (CLS arrives as a string) |
+| Audit integration | ✅ field data or "not measured" in the report; an invalid key gives an explained error and the audit still completes |
+| Secrets in output | ✅ 15 files scanned for the stored and a wrong key: 0 matches |
+| Comparison with PageSpeed Insights field data | ⏸ PSI's key-less shared quota was exhausted (HTTP 429); CrUX is PSI's field-data source |
+
 ## Live Bing Webmaster validation (2026-11-01)
 
 Owner's Bing Webmaster account (8 verified sites of the permitted product family), key stored with
