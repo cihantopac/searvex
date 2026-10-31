@@ -205,6 +205,24 @@ browser the same URL shows the article.
 | One root cause spread over many findings without a link | render mismatch, hreflang target errors, non-canonical sitemap URLs, soft 404s all followed from the client-side switch, and the consequence ranked above the cause | consequences name their likely root cause; the root cause is ranked first ("likely root cause of N other findings") |
 | Orphans reported on crawls stopped at the page limit | uncrawled pages may link to them | not reported on truncated crawls; the limitation says why |
 
+## Real-world validation round 8 — independent sites (2026-11-01)
+
+To check that Searvex is not tuned to one product family: 6 public sites of different kinds, ≤ 20 pages each,
+1.5 s per-host delay, 1 connection, robots.txt honoured — a multilingual browser vendor (www.mozilla.org), a
+government portal (www.gov.uk), a framework site (nextjs.org), WordPress.org News, Sphinx documentation
+(docs.python.org) and a Turkish public institution (tubitak.gov.tr). 13–111 s, ≤ 340 MB RSS per site.
+
+Findings checked against the live HTML and official documentation were real: nextjs.org has no robots.txt
+(404); mozilla.org's `/en-US/` does not link back to the `x-default` home; WordPress.org and GOV.UK list
+noindexed pages in their sitemaps (`noindex,follow` / `noindex, nofollow` confirmed); Sphinx's `/3/`
+canonicalises to `/3/index.html` while the sitemap lists `/3/`; GOV.UK attachment pages repeat the parent's
+title; Drupal pages on tubitak.gov.tr carry two `<title>` elements.
+
+| Defect in Searvex | Evidence | Fix | Effect |
+|---|---|---|---|
+| Valid 3-letter language codes reported as high-severity mistakes with "correct the code" | `ast`, `ach`, `ceb` have no ISO 639-1 code; Google supports only ISO 639-1 and ignores those alternates (documentation re-read 2026-11-01) — the site has nothing to correct | low severity with that explanation; 3-letter codes that have a 2-letter equivalent (`tur` → `tr`) stay high with the correction | mozilla.org 82 → 86, wordpress.org 86 → 93 |
+| A finding's severity depended on the order of its occurrences | first emission decided | the most severe occurrence wins | — |
+
 ## Live CrUX validation (2026-11-01)
 
 Owner's Google Cloud API key restricted to the Chrome UX Report API, stored with `searvex crux auth` in the

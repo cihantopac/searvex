@@ -32,6 +32,11 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Session log
 
+### 2026-11-01 — independent-site round 8
+- 6 public sites (multilingual, government, framework, WordPress, Sphinx docs, Turkish institution). Most
+  findings verified real. Fixed: 3-letter hreflang codes without an ISO 639-1 equivalent are low severity
+  with an honest explanation; aggregated severity no longer depends on emission order.
+
 ### 2026-11-01 — live CrUX
 - `crux auth/status/logout` (hidden key input, credential store, actionable errors). Live: the product-family
   origins have no CrUX data (reported as not measured); 3 public origins parsed identically to the raw API.

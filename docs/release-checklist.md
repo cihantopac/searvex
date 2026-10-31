@@ -48,7 +48,7 @@ supported) rather than delaying the release — owner decision 2026-10-31. Marke
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
 | P1 | Real-world audit round on the permitted 7-site product family (raw + render) | ✅ | quality.md round 7: raw (4 defects fixed, before/after) and `--render` (3 defects fixed; client-side locale switch confirmed in a real browser) |
-| P2 | Independent sites (not the product family) audited and reviewed for false positives | ⬜ | ≥ 5 sites of different types |
+| P2 | Independent sites (not the product family) audited and reviewed for false positives | ✅ | 6 sites of different types (quality.md round 8); 2 defects fixed |
 | P3 | Local repositories audited (Laravel, React, Next.js, monorepo) | 🔄 | 5 local repositories (Next.js, Laravel + static monorepo, 3 CLI tools): 11 defects fixed, quality.md round 6. The product-family repositories are on another machine (Windows) |
 | P4 | Facet / pagination / parameter-explosion detection documented with its limits | ✅ | `crawl.facet-explosion`, `pagination.canonical-to-first` |
 | P5 | Research distinguishes market hypotheses from verified demand | 🔄 | labels in research output; review in this round |

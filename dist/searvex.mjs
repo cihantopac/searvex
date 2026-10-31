@@ -35322,6 +35322,8 @@ var FindingSink = class {
     const existing = this.byRule.get(ruleId);
     if (existing) {
       existing.count += list.length;
+      const sev = overrides.severity ?? rule.severity;
+      if (SEVERITIES.indexOf(sev) < SEVERITIES.indexOf(existing.severity)) existing.severity = sev;
       for (const e of list) if (existing.evidence.length < this.maxEvidence) existing.evidence.push(e);
       return;
     }
@@ -36378,6 +36380,39 @@ function isValidHreflang(code) {
   if (m[3] && ["uk", "eu"].includes(m[3].toLowerCase())) return false;
   return true;
 }
+var ISO639_2_TO_1 = {
+  eng: "en",
+  tur: "tr",
+  deu: "de",
+  ger: "de",
+  fra: "fr",
+  fre: "fr",
+  spa: "es",
+  ita: "it",
+  por: "pt",
+  nld: "nl",
+  dut: "nl",
+  rus: "ru",
+  jpn: "ja",
+  zho: "zh",
+  chi: "zh",
+  kor: "ko",
+  ara: "ar",
+  pol: "pl",
+  swe: "sv",
+  dan: "da",
+  fin: "fi",
+  nor: "no",
+  ell: "el",
+  gre: "el",
+  heb: "he"
+};
+function hreflangProblem(code) {
+  const three = /^([a-z]{3})(?:-[a-z0-9]{2,8})*$/i.exec(code)?.[1]?.toLowerCase();
+  if (three && ISO639_2_TO_1[three]) return { observed: `${code} \u2014 use the ISO 639-1 code "${ISO639_2_TO_1[three]}"` };
+  if (three) return { observed: `${code} \u2014 valid BCP 47, but Google supports only ISO 639-1 codes and ignores this alternate; this language has no 2-letter code, so there is nothing to correct (other search engines may use it)`, severity: "low" };
+  return { observed: code };
+}
 var SESSION_PARAM = /[?&](sid|sessionid|phpsessid|jsessionid|session_id|utm_[a-z]+|gclid|fbclid)=/i;
 function runTechnicalChecks(ctx, sink) {
   const { crawl: crawl2 } = ctx;
@@ -36553,7 +36588,10 @@ function checkHreflang(ctx, url, f, sink) {
   let hasSelf = false;
   let hasDefault = false;
   for (const h of f.hreflang) {
-    if (!isValidHreflang(h.lang)) sink.emit("hreflang.invalid-code", { url, observed: h.lang });
+    if (!isValidHreflang(h.lang)) {
+      const problem = hreflangProblem(h.lang);
+      sink.emit("hreflang.invalid-code", { url, observed: problem.observed }, problem.severity ? { severity: problem.severity } : {});
+    }
     if (h.lang.toLowerCase() === "x-default") hasDefault = true;
     const target = normalizeUrl(h.href);
     if (target === self) {

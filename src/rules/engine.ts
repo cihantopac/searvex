@@ -195,6 +195,9 @@ export class FindingSink {
     const existing = this.byRule.get(ruleId);
     if (existing) {
       (existing as Finding & { count: number }).count += list.length;
+      // A finding is as severe as its most severe occurrence, whatever order they were found in.
+      const sev = overrides.severity ?? rule.severity;
+      if (SEVERITIES.indexOf(sev) < SEVERITIES.indexOf(existing.severity)) existing.severity = sev;
       for (const e of list) if (existing.evidence.length < this.maxEvidence) existing.evidence.push(e);
       return;
     }
