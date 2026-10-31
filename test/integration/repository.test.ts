@@ -2,10 +2,10 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { auditRepository } from '../../src/repo/audit.js';
-import { planFixes } from '../../src/optimize/fixes.js';
-import { applyFixes, ConflictError, rollback } from '../../src/optimize/transaction.js';
+import { planFixes, usesCrlf } from '../../src/optimize/fixes.js';
+import { applyFixes, ConflictError, interruptedChanges, readManifest, rollback, writeManifest } from '../../src/optimize/transaction.js';
 import { main } from '../../src/cli.js';
 
 const FIX = path.resolve('test/fixtures/repos');
@@ -198,5 +198,73 @@ describe('optimizer — plan, apply, verify, rollback', () => {
     const dir = copyFixture('static-site');
     expect(() => applyFixes(dir, [{ id: 'x', ruleId: 'title.missing', title: 't', rationale: 'r', changes: [{ path: '.env', action: 'create', before: null, after: 'X=1' }] }])).toThrow(/secret/);
     expect(() => applyFixes(dir, [{ id: 'x', ruleId: 'title.missing', title: 't', rationale: 'r', changes: [{ path: '../outside.txt', action: 'create', before: null, after: 'x' }] }])).toThrow(/escapes/);
+  });
+});
+
+describe('optimizer — integrity under failures', () => {
+  const plan = (dir: string) => {
+    const a = auditRepository(dir, { siteUrl: 'https://northwind.example' });
+    return planFixes(a.report, a.scan, { siteUrl: 'https://northwind.example', lang: 'en' });
+  };
+
+  it('undoes a partially applied change when a later write fails, leaving no journal behind', () => {
+    const dir = copyFixture('static-site');
+    const before = snapshot(dir);
+    fs.writeFileSync(path.join(dir, 'blocker'), 'a file where a directory is needed');
+    const p = plan(dir);
+    const fixes = [...p.fixes, { id: 'boom', ruleId: 'robots.no-sitemap', title: 't', rationale: 'r', changes: [{ path: 'blocker/robots.txt', action: 'create' as const, before: null, after: 'x' }] }];
+    expect(() => applyFixes(dir, fixes)).toThrow();
+    fs.rmSync(path.join(dir, 'blocker'));
+    expect(snapshot(dir)).toEqual(before);
+    expect(fs.readdirSync(path.join(dir, '.searvex', 'changes'))).toEqual([]);
+  });
+
+  it('recovers an interrupted apply from its journal: restores written files, skips untouched ones', async () => {
+    const dir = copyFixture('static-site');
+    const before = snapshot(dir);
+    const m = applyFixes(dir, plan(dir).fixes);
+    // Simulate a crash after the first file: the journal says "applying" and later files were never written.
+    const journal = readManifest(dir, m.changeId);
+    journal.status = 'applying';
+    writeManifest(dir, journal);
+    const untouched = journal.files.slice(1);
+    for (const e of untouched) {
+      if (e.action === 'create') fs.rmSync(path.join(dir, e.path));
+      else fs.writeFileSync(path.join(dir, e.path), fs.readFileSync(path.join(dir, '.searvex', 'changes', m.changeId, e.backup!)));
+    }
+    expect(interruptedChanges(dir).map((x) => x.changeId)).toEqual([m.changeId]);
+    // A new apply is refused until the interrupted change is restored.
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      expect(await main(['optimize', dir, '--site-url', 'https://northwind.example', '--lang', 'en', '--apply', '--yes'])).toBe(2);
+      expect(log.mock.calls.flat().join(' ')).toMatch(/interrupted/);
+    } finally {
+      vi.restoreAllMocks();
+    }
+    const rb = rollback(dir, m.changeId);
+    expect(rb.conflicts).toEqual([]);
+    expect(rb.restored).toEqual([journal.files[0]!.path]);
+    expect(snapshot(dir)).toEqual(before);
+  });
+
+  it.skipIf(process.platform === 'win32')('keeps file permission bits when modifying a file', () => {
+    const dir = copyFixture('static-site');
+    const index = path.join(dir, 'index.html');
+    fs.chmodSync(index, 0o640);
+    applyFixes(dir, plan(dir).fixes);
+    expect(fs.statSync(index).mode & 0o777).toBe(0o640);
+  });
+
+  it('keeps CRLF line endings in files that use them', () => {
+    const dir = copyFixture('static-site');
+    const index = path.join(dir, 'index.html');
+    fs.writeFileSync(index, fs.readFileSync(index, 'utf8').replace(/\r?\n/g, '\r\n'));
+    const p = plan(dir);
+    expect(p.files.some((f) => f.path === 'index.html')).toBe(true);
+    applyFixes(dir, p.fixes);
+    const after = fs.readFileSync(index, 'utf8');
+    expect(after).not.toMatch(/[^\r]\n/);
+    expect(usesCrlf(after)).toBe(true);
   });
 });
