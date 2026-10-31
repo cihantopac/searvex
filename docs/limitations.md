@@ -7,9 +7,9 @@ Searvex reports what it can observe and labels everything else. Known limits (v0
 - **Traffic, rankings, impressions, CTR:** only via Search Console (`gsc auth` with your own OAuth client, or
   `gsc import` of a CSV export) or Bing Webmaster Tools. Never estimated; without data they are "Not measured".
 - **Search Console CSV exports** have no query × page combination and at most 1,000 rows per table, so query →
-  page mapping, shared-query analysis and intent mismatches need the API. The Turkish UI export
-  is verified against a real download (file names, headers, number format, filters); the English UI against
-  published samples; other UI languages are best-effort. An export whose pages span several subdomains is
+  page mapping, shared-query analysis and intent mismatches need the API. Turkish and English UI
+  exports are verified against real downloads of the same property (file names, headers, number format,
+  filters; identical results); other UI languages are recognised from published UI terms (best-effort). An export whose pages span several subdomains is
   treated as a domain property (`sc-domain:`), whose totals include every subdomain.
 - **Shared queries** (several pages with impressions for one query) are classified heuristically; one
   aggregated period cannot prove harmful cannibalisation.
@@ -21,9 +21,9 @@ Searvex reports what it can observe and labels everything else. Known limits (v0
   No Lighthouse/lab measurements.
 - **Bing Webmaster:** API key only; reports are built from the top pages by clicks, so totals are not site
   totals. **Yandex Webmaster, GA4:** not implemented.
-- **Experimental in v1.0:** Search Console API and CSV import, Bing Webmaster and CrUX are implemented and
-  tested against recorded API behaviour, but have not yet been verified against the live services (CSV: real
-  exports in every UI language). They are documented, not advertised as fully supported.
+- **Experimental in v1.0:** the Search Console API, Bing Webmaster and CrUX are implemented and tested against
+  recorded API behaviour, but have not yet been verified against the live services. They are documented, not
+  advertised as fully supported. The Search Console **CSV import is supported** (verified with real exports).
 - **Google OAuth:** each user needs their own Google Cloud "Desktop app" client; there is no hosted one-click
   login. Clients in "Testing" status get refresh tokens that expire after 7 days.
 

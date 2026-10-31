@@ -37,8 +37,8 @@ Competitor research and differentiation notes: [docs/research/competitors-2026-1
   (`research`).
 - Fix a small set of problems in code automatically (9 rule types: e.g. missing `lang`, viewport, robots.txt
   sitemap line, invalid hreflang codes), always as a dry-run diff first, then apply → re-verify → rollback.
-- Read Search Console or Bing data when you connect them yourself (experimental integrations), and keep
-  measured data separate from inference.
+- Read Search Console data from a CSV export you download (no account needed), or from the Search Console
+  and Bing APIs when you connect them yourself (experimental), and keep measured data separate from inference.
 
 **Searvex does not:**
 
@@ -132,7 +132,7 @@ Full reference: [docs/cli.md](docs/cli.md).
 | Variable | Enables | Status |
 |---|---|---|
 | `npm i -D playwright` | `--render`: JavaScript rendering and raw-vs-rendered comparison | supported |
-| `searvex gsc import export.zip` | Search Console Performance CSV/ZIP exports (no account access; no query × page data) | experimental¹ |
+| `searvex gsc import export.zip` | Search Console Performance CSV/ZIP exports (no account access; no query × page data) | supported² |
 | `searvex gsc auth` (or `SEARVEX_GSC_TOKEN`) | Search Console query × page analysis, `monitor` performance | experimental¹ |
 | `SEARVEX_BING_API_KEY` | Bing Webmaster Tools query × page analysis | experimental¹ |
 | `SEARVEX_CRUX_API_KEY` | Real-user Core Web Vitals (Chrome UX Report API) | experimental¹ |
@@ -141,6 +141,9 @@ Full reference: [docs/cli.md](docs/cli.md).
 ¹ Experimental: implemented and tested against recorded API behaviour and synthetic exports, but not yet
 verified against the live service or real exports in every UI language. Interfaces may change; please report
 problems. See [docs/release-checklist.md](docs/release-checklist.md).
+
+² Verified with real exports downloaded in the Turkish and English Search Console UI (both give identical
+results); other UI languages are recognised from published UI terms.
 
 Without them, Searvex reports these metrics as **not measured** — it never estimates them.
 

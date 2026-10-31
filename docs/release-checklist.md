@@ -15,7 +15,7 @@ Status: ✅ verified · 🔄 in progress · ⬜ open · ⛔ blocked on the owner
 | Repository audit + optimizer (dry run, apply, verify, rollback) | in scope | fixtures + real repositories |
 | Research, ecosystem, monitor | in scope | fixtures + real sites |
 | `--render` (Playwright, optional dependency) | in scope | render CI job + adversarial tests |
-| Search Console CSV/ZIP import | in scope | real TR export ✅ (2026-11-01, 2 defects fixed); real EN export pending |
+| Search Console CSV/ZIP import | ✅ **supported** | real TR + EN exports of the same domain property (2026-11-01): identical analysis; 2 data-integrity defects found and fixed |
 | Search Console API (own Desktop OAuth client) | in scope only after a live run | live OAuth, refresh, revoke, property list, report |
 | Bing Webmaster API (API key) | in scope only after a live run | live report on a verified site |
 | CrUX API | in scope only after a live run | live origin query |

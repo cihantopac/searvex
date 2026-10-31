@@ -40,7 +40,10 @@ Use this file to resume work after an interrupted session. Newest entries first.
 - Fixed (data integrity): pages of several subdomains were attributed to the most common host; such an export
   can only come from a domain property and is now scoped as `sc-domain:`. An explicit `--property` that does
   not contain every page of the export is refused (a URL-prefix property never exports other hosts).
-- The raw export stays in `.searvex/fixtures-private/` (git-ignored).
+- English-UI export of the same property (`Chart.csv`, `Top queries`, `Filter,Value`): imported without
+  warnings; property, period, totals, top queries/pages, striking distance and intent mix identical to the
+  Turkish export. CSV import is now **supported**; GSC API, Bing and CrUX stay experimental.
+- The raw exports stay in `.searvex/fixtures-private/` (git-ignored).
 
 ### 2026-11-01 — local repository round
 - Audited 5 local repositories read-only (quality.md round 6); fixed 11 repository-mode defects (non-site
@@ -129,7 +132,7 @@ Use this file to resume work after an interrupted session. Newest entries first.
 | 9 | Plugin icon missing (directory warning) | listing only | add 512 px PNG before directory submission |
 | 10 | Each user needs their own Google Cloud Desktop OAuth client | setup friction | CSV import as the no-account path; hosted OAuth only with a future SaaS (owner decision) |
 | 16 | Render mode residual risk: browser zero-days; no OS sandbox in some containers; CPU-heavy scripts only bounded by the page timeout | renderer compromise on hostile sites | consider a separate low-privilege process/container option; documented in security.md |
-| 18 | English and other-language Search Console exports not yet checked against a real download (Turkish verified 2026-11-01) | localised imports may need synonyms | real EN export from the owner |
+| 18 | Search Console exports in UI languages other than Turkish and English not checked against a real download | those imports may need synonyms | real exports when users report them |
 | 11 | Entity/answerability signals are heuristics | could be over-read | keep `info`, documented |
 | 13 | Language detector covers 8 languages, ~30-word minimum | other locales not judged | extend word lists / n-gram model |
 | 14 | Cannibalisation uses title/H1 terms only | misses body-level intent overlap | combine with GSC query data |
