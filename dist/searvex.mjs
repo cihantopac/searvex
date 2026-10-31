@@ -15794,7 +15794,7 @@ __export(bing_exports, {
   maskKey: () => maskKey,
   parseBingDate: () => parseBingDate
 });
-import http4 from "node:http";
+import http5 from "node:http";
 import https5 from "node:https";
 function parseBingDate(v) {
   if (typeof v !== "string") return null;
@@ -15818,8 +15818,8 @@ function maskKey(text4, apiKey) {
   return [apiKey, encodeURIComponent(apiKey)].reduce((t, k) => t.split(k).join("***"), text4);
 }
 function get2(method, params, apiKey) {
-  const url = `${BASE2()}/${method}?${new URLSearchParams({ ...params, apikey: apiKey })}`;
-  const mod = url.startsWith("https:") ? https5 : http4;
+  const url = `${BASE3()}/${method}?${new URLSearchParams({ ...params, apikey: apiKey })}`;
+  const mod = url.startsWith("https:") ? https5 : http5;
   return new Promise((resolve, reject) => {
     const req = mod.get(url, { headers: { accept: "application/json" }, timeout: 3e4 }, (res) => {
       const chunks = [];
@@ -15890,11 +15890,11 @@ async function getDailyTraffic(siteUrl, apiKey, sinceIso) {
     return { date: parseBingDate(o["Date"]) ?? "", clicks: Number(o["Clicks"] ?? 0) || 0, impressions: Number(o["Impressions"] ?? 0) || 0 };
   }).filter((d) => d.date && d.date >= sinceIso).sort((a, b) => a.date.localeCompare(b.date));
 }
-var BASE2, BingApiError, getQueryStats, getPageStats, getPageQueryStats;
+var BASE3, BingApiError, getQueryStats, getPageStats, getPageQueryStats;
 var init_bing = __esm({
   "src/integrations/bing.ts"() {
     "use strict";
-    BASE2 = () => process.env["SEARVEX_BING_API_BASE"] ?? "https://ssl.bing.com/webmaster/api.svc/json";
+    BASE3 = () => process.env["SEARVEX_BING_API_BASE"] ?? "https://ssl.bing.com/webmaster/api.svc/json";
     BingApiError = class extends Error {
     };
     getQueryStats = async (siteUrl, apiKey) => toStats(await get2("GetQueryStats", { siteUrl }, apiKey));
@@ -15905,7 +15905,7 @@ var init_bing = __esm({
 
 // src/net/policy-proxy.ts
 import crypto7 from "node:crypto";
-import http5 from "node:http";
+import http6 from "node:http";
 import net from "node:net";
 async function startPolicyProxy(policy, opts = {}) {
   const maxBytes = opts.maxBytesPerWindow ?? 64 * 1024 * 1024;
@@ -15957,7 +15957,7 @@ Connection: close\r
       return null;
     }
   };
-  const server = http5.createServer((req, res) => {
+  const server = http6.createServer((req, res) => {
     stats.requests++;
     if (!authorized(req)) {
       res.writeHead(407, { "proxy-authenticate": 'Basic realm="searvex"', connection: "close" }).end();
@@ -15970,7 +15970,7 @@ Connection: close\r
     }
     const headers = {};
     for (const [k, val2] of Object.entries(req.headers)) if (!HOP_BY_HOP.has(k.toLowerCase()) && val2 !== void 0) headers[k] = val2;
-    const upstream = http5.request(
+    const upstream = http6.request(
       { host: u.hostname.replace(/^\[|\]$/g, ""), port: u.port || 80, path: `${u.pathname}${u.search}`, method: req.method, headers, lookup: guardedLookup(policy), agent: false, timeout: idle },
       (up) => {
         const out = {};
@@ -36748,11 +36748,13 @@ async function checkExternalLinks(ctx, sink, opts = {}) {
 }
 
 // src/integrations/crux.ts
+import http2 from "node:http";
 import https2 from "node:https";
+var BASE2 = () => process.env["SEARVEX_CRUX_API_BASE"] ?? "https://chromeuxreport.googleapis.com/v1";
 var CWV_THRESHOLDS = { lcpMs: 2500, inpMs: 200, cls: 0.1 };
 function post(url, body) {
   return new Promise((resolve, reject) => {
-    const req = https2.request(url, { method: "POST", headers: { "content-type": "application/json" }, timeout: 2e4 }, (r) => {
+    const req = (url.startsWith("https:") ? https2 : http2).request(url, { method: "POST", headers: { "content-type": "application/json" }, timeout: 2e4 }, (r) => {
       const chunks = [];
       r.on("data", (c) => chunks.push(c));
       r.on("end", () => resolve({ status: r.statusCode ?? 0, text: Buffer.concat(chunks).toString("utf8") }));
@@ -36772,12 +36774,28 @@ function parseCruxRecord(json, formFactor) {
   const cp = json.record?.collectionPeriod;
   return { formFactor, lcpMs: p75("largest_contentful_paint"), inpMs: p75("interaction_to_next_paint"), cls: p75("cumulative_layout_shift"), collectionPeriod: cp ? { first: d(cp.firstDate), last: d(cp.lastDate) } : void 0 };
 }
+function maskCruxKey(text4, apiKey) {
+  return apiKey ? [apiKey, encodeURIComponent(apiKey)].reduce((t, k) => t.split(k).join("***"), text4) : text4;
+}
+function cruxErrorMessage(status, body) {
+  let reason = "";
+  try {
+    const e = JSON.parse(body).error;
+    reason = `${e?.status ?? ""} ${e?.message ?? ""}`.trim();
+  } catch {
+    reason = body;
+  }
+  if (status === 400 && /API key not valid|API_KEY_INVALID/i.test(reason)) return 'Google rejected the CrUX API key (not valid). Store a new key with "searvex crux auth --force", or fix SEARVEX_CRUX_API_KEY.';
+  if (status === 403) return `The key may not use the Chrome UX Report API (${reason.slice(0, 160)}). Enable "Chrome UX Report API" in the key's Google Cloud project and allow it in the key's API restrictions.`;
+  if (status === 429) return "CrUX API quota reached (150 queries per minute per project). Try again in a minute.";
+  return `CrUX API HTTP ${status}: ${reason.slice(0, 200)}`;
+}
 async function queryCrux(origin, apiKey) {
   const metrics = [];
   for (const formFactor of ["PHONE", "DESKTOP"]) {
-    const res = await post(`https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=${encodeURIComponent(apiKey)}`, JSON.stringify({ origin, formFactor, metrics: ["largest_contentful_paint", "interaction_to_next_paint", "cumulative_layout_shift"] }));
+    const res = await post(`${BASE2()}/records:queryRecord?key=${encodeURIComponent(apiKey)}`, JSON.stringify({ origin, formFactor, metrics: ["largest_contentful_paint", "interaction_to_next_paint", "cumulative_layout_shift"] }));
     if (res.status === 404) continue;
-    if (res.status !== 200) return { status: "error", origin, message: `CrUX API HTTP ${res.status}: ${res.text.slice(0, 200)}` };
+    if (res.status !== 200) return { status: "error", origin, message: cruxErrorMessage(res.status, maskCruxKey(res.text.slice(0, 300), apiKey)) };
     metrics.push(parseCruxRecord(JSON.parse(res.text), formFactor));
   }
   if (!metrics.length) return { status: "no-data", origin, message: "Origin not in the CrUX dataset (insufficient real-user traffic)" };
@@ -36832,10 +36850,10 @@ async function probeLocaleAdaptive(startUrl, opts, sink) {
 async function probeHostVariants(startUrl, opts, sink) {
   const u = new URL(startUrl);
   if (u.protocol === "https:") {
-    const http6 = new URL(startUrl);
-    http6.protocol = "http:";
-    const res2 = await safeFetch(http6.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
-    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http6.toString(), observed: "HTTP 200 without redirect to HTTPS" });
+    const http7 = new URL(startUrl);
+    http7.protocol = "http:";
+    const res2 = await safeFetch(http7.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
+    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http7.toString(), observed: "HTTP 200 without redirect to HTTPS" });
   }
   if (/^[\d.]+$/.test(u.hostname) || u.hostname === "localhost" || u.hostname.split(".").length < 2) return;
   const alt = new URL(startUrl);
@@ -36875,7 +36893,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
         if (failing.length) sink.emit("perf.cwv-poor", { url: result.origin, observed: `${m.formFactor}: ${failing.join(", ")} (CrUX p75, ${m.collectionPeriod?.first ?? ""}\u2013${m.collectionPeriod?.last ?? ""})` });
       }
     } else sink.emit("perf.cwv-unmeasured", { observed: fieldData.message });
-  } else sink.emit("perf.cwv-unmeasured", { observed: "No CrUX API key configured (SEARVEX_CRUX_API_KEY)" });
+  } else sink.emit("perf.cwv-unmeasured", { observed: "No CrUX API key configured (searvex crux auth, or SEARVEX_CRUX_API_KEY)" });
   const inventory = buildInventory(ctx);
   const findings = sink.findings();
   prioritise(findings, (id) => sink.affected(id), ctx);
@@ -39053,11 +39071,11 @@ Re-run with --yes to overwrite those edits with the original content.`);
 import path14 from "node:path";
 
 // src/integrations/gsc.ts
-import http2 from "node:http";
+import http3 from "node:http";
 import https3 from "node:https";
 var API_BASE = () => process.env["SEARVEX_GSC_API_BASE"] ?? "https://www.googleapis.com/webmasters/v3";
 function request(method, url, token, body) {
-  const mod = url.startsWith("https:") ? https3 : http2;
+  const mod = url.startsWith("https:") ? https3 : http3;
   return new Promise((resolve, reject) => {
     const req = mod.request(url, { method, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, timeout: 3e4 }, (r) => {
       const chunks = [];
@@ -39110,7 +39128,7 @@ async function querySearchConsole(q) {
 // src/integrations/google-oauth.ts
 import crypto6 from "node:crypto";
 import fs9 from "node:fs";
-import http3 from "node:http";
+import http4 from "node:http";
 import https4 from "node:https";
 
 // src/integrations/credentials.ts
@@ -39332,7 +39350,7 @@ function pkcePair() {
 }
 function postForm(url, form) {
   const body = new URLSearchParams(form).toString();
-  const mod = url.startsWith("https:") ? https4 : http3;
+  const mod = url.startsWith("https:") ? https4 : http4;
   return new Promise((resolve, reject) => {
     const req = mod.request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "content-length": Buffer.byteLength(body) }, timeout: 3e4 }, (res) => {
       const chunks = [];
@@ -39356,7 +39374,7 @@ function postForm(url, form) {
 async function authorize(client, scope, onUrl, timeoutMs = 5 * 60 * 1e3) {
   const { verifier, challenge } = pkcePair();
   const state = b64url(crypto6.randomBytes(16));
-  const server = http3.createServer();
+  const server = http4.createServer();
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const redirectUri = `http://127.0.0.1:${server.address().port}`;
   try {
@@ -39997,499 +40015,9 @@ Saved: ${out}`);
   return diff.regression && v["fail-on"] ? 1 : 0;
 }
 
-// src/commands/research.ts
-import path15 from "node:path";
-function profile(r) {
-  return {
-    url: r.target,
-    pages: r.crawl.crawled,
-    businessModel: r.inventory.businessModel.label,
-    byType: r.inventory.byType,
-    languages: Object.keys(r.inventory.languages),
-    topTerms: r.content.topTerms.map((t) => t.term),
-    sections: r.inventory.sections,
-    // Types actually present on crawled pages (JSON-LD, Microdata, RDFa).
-    schemaTypes: (r.inventory.structuredData?.types ?? []).map((t) => t.type),
-    truncated: r.crawl.truncated
-  };
-}
-function computeGaps(target, competitors, targetAllTerms) {
-  const half = Math.max(1, Math.ceil(competitors.length / 2));
-  const termCount = /* @__PURE__ */ new Map();
-  const typeCount = /* @__PURE__ */ new Map();
-  const schemaCount = /* @__PURE__ */ new Map();
-  const targetSchema = new Set(target.schemaTypes);
-  for (const c of competitors) for (const t of new Set(c.schemaTypes)) schemaCount.set(t, (schemaCount.get(t) ?? 0) + 1);
-  for (const c of competitors) {
-    for (const t of new Set(c.topTerms.slice(0, 40))) termCount.set(t, (termCount.get(t) ?? 0) + 1);
-    for (const t of Object.keys(c.byType)) typeCount.set(t, (typeCount.get(t) ?? 0) + 1);
-  }
-  return {
-    topics: [...termCount.entries()].filter(([t, n]) => n >= half && !targetAllTerms.has(t)).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([term, n]) => ({ term, competitors: n })),
-    pageTypes: [...typeCount.entries()].filter(([t, n]) => n >= half && !target.byType[t] && t !== "other").map(([type, n]) => ({ type, competitors: n })),
-    schemaTypes: [...schemaCount.entries()].filter(([t, n]) => n >= half && !targetSchema.has(t)).sort((a, b) => b[1] - a[1]).map(([type, n]) => ({ type, competitors: n }))
-  };
-}
-function renderResearchMarkdown(r) {
-  const L = [`# Searvex research \u2014 ${md(r.target.url)}`, ""];
-  const row = (p) => `| ${md(p.url)} | ${p.pages}${p.truncated ? "+" : ""} | ${md(p.businessModel)} | ${Object.entries(p.byType).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t, n]) => `${t} ${n}`).join(", ")} | ${p.languages.map(md).join(", ")} | ${p.schemaTypes.slice(0, 8).map(md).join(", ") || "\u2014"} |`;
-  L.push("## Site profiles", "", "| Site | Pages | Model (heuristic) | Main page types | Languages | Structured data |", "|---|---|---|---|---|---|", row(r.target), ...r.competitors.map(row), "");
-  L.push("## Target topics", "", r.target.topTerms.slice(0, 30).map(md).join(", ") || "\u2014", "");
-  if (r.competitors.length) {
-    L.push("## Content gaps (competitor topics missing on target)", "");
-    L.push(r.gaps.topics.length ? r.gaps.topics.map((t) => `- **${md(t.term)}** \u2014 prominent on ${t.competitors}/${r.competitors.length} competitors`).join("\n") : "_No consistent topic gaps found._", "");
-    L.push("## Page-type gaps", "");
-    L.push(r.gaps.pageTypes.length ? r.gaps.pageTypes.map((t) => `- **${t.type}** pages exist on ${t.competitors}/${r.competitors.length} competitors`).join("\n") : "_No page-type gaps._", "");
-    L.push("## Structured data gaps", "");
-    L.push(r.gaps.schemaTypes.length ? r.gaps.schemaTypes.map((t) => `- **${md(t.type)}** markup used by ${t.competitors}/${r.competitors.length} competitors \u2014 add only if it describes visible content on your pages`).join("\n") : "_No structured-data gaps._", "");
-  }
-  L.push("## Limitations", "", ...r.limitations.map((l) => `- ${md(l)}`), "");
-  return L.join("\n");
-}
-async function commandResearch(flags) {
-  const v = flags.values;
-  const target = flags.positionals[1];
-  if (!target || !/^https?:\/\//i.test(target)) throw new UsageError("research requires a URL");
-  const competitors = v["competitor"] ?? [];
-  if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
-  for (const c of competitors) if (!/^https?:\/\//i.test(c)) throw new UsageError(`Invalid competitor URL: ${c}`);
-  const kb = loadKnowledge();
-  const workspace = path15.resolve(String(v["out"] ?? process.cwd()));
-  const store2 = new RunStore(workspace, RunStore.newRunId("research"));
-  const perSite = num(v["max-pages"], 150, 1, 1e5);
-  const base = { ...crawlOptionsFrom(v), maxPages: perSite };
-  const analyse = async (url) => {
-    log(v, `Crawling ${url} (max ${perSite} pages)\u2026`);
-    const result = await crawl(url, base);
-    return analyzeCrawl(result, kb, { ...base, probes: false });
-  };
-  const targetReport = await analyse(target);
-  const compReports = [];
-  for (const c of competitors) compReports.push(await analyse(c));
-  const allTerms = new Set(targetReport.content.pageTerms.flatMap((p) => p.terms).concat(targetReport.content.topTerms.map((t) => t.term)));
-  const research = {
-    target: profile(targetReport),
-    competitors: compReports.map(profile),
-    gaps: computeGaps(profile(targetReport), compReports.map(profile), allTerms),
-    limitations: [
-      "Competitor discovery, search volumes, rankings and SERP features require external data; Searvex does not fabricate them. Pass competitors explicitly with --competitor (the /searvex:research skill discovers them via web search).",
-      "Topic gaps compare on-page term statistics of crawled pages only; they indicate coverage differences, not demand.",
-      ...competitors.length ? [] : ["No competitors given: only the target profile was built."]
-    ]
-  };
-  store2.writeJson("meta.json", { kind: "research", target, competitors, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
-  store2.writeJson("research.json", research);
-  store2.writeJson("report.json", targetReport);
-  const mdPath = store2.writeText("research.md", renderResearchMarkdown(research));
-  if (v["json"]) process.stdout.write(JSON.stringify(research, null, 2) + "\n");
-  else {
-    console.log(renderResearchMarkdown(research));
-    console.log(`Saved: ${mdPath}`);
-  }
-  return 0;
-}
-
-// src/commands/run.ts
-import fs12 from "node:fs";
-import path17 from "node:path";
-
-// src/integrations/preferences.ts
-import fs11 from "node:fs";
-import path16 from "node:path";
-var file = () => path16.join(configDir(), "search-data.json");
-function siteKey(urlOrHost) {
-  let h = urlOrHost.trim().toLowerCase();
-  try {
-    h = new URL(/^[a-z]+:\/\//.test(h) ? h : `https://${h}`).hostname;
-  } catch {
-  }
-  return h.replace(/^www\./, "");
-}
-function readAll() {
-  try {
-    return JSON.parse(fs11.readFileSync(file(), "utf8"));
-  } catch {
-    return {};
-  }
-}
-function getSitePreference(site) {
-  return readAll()[siteKey(site)] ?? null;
-}
-function setSitePreference(site, pref) {
-  const all2 = readAll();
-  const value = { ...pref, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
-  all2[siteKey(site)] = value;
-  fs11.mkdirSync(configDir(), { recursive: true, mode: 448 });
-  fs11.writeFileSync(file(), JSON.stringify(all2, null, 2), { mode: 384 });
-  return value;
-}
-
-// src/commands/run.ts
-var top = (r, n = 5) => r.findings.filter((f) => f.severity !== "info").slice(0, n);
-function renderRunSummary(s) {
-  const L = ["# Searvex run summary", ""];
-  L.push("| Step | Status | Note |", "|---|---|---|");
-  for (const st of s.steps) L.push(`| ${st.step}. ${st.name} | ${st.status === "done" ? "\u2705" : "\u23ED\uFE0F skipped"} | ${md(st.note)} |`);
-  L.push("");
-  if (s.website) {
-    const r = s.website.report;
-    L.push("## 1. Website audit", "", `${md(r.target)} \u2014 health score **${scoreLabel(r.scores)}**, ${r.crawl.crawled} pages${r.crawl.truncated ? " (page limit reached)" : ""}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, "");
-    for (const f of top(r)) L.push(`- [${f.severity}] ${md(f.title)} \u2014 ${f.count} \xD7 (\`${f.ruleId}\`)`);
-    L.push("", `Full report: \`.searvex/runs/${s.website.runId}/report.md\``, "");
-    L.push("## 2. GEO / AI search readiness", "");
-    const blocked = r.geo.bots.filter((b) => !b.allowed);
-    L.push(`- Blocked crawlers: ${blocked.length ? blocked.map((b) => `${b.token} (${b.purpose})`).join(", ") : "none"}`);
-    L.push(`- Content clarity (heuristic): ${r.geo.answerability.average}/100 \xB7 AI citations: not measured`);
-    for (const f of r.findings.filter((x) => x.category === "geo" && x.severity !== "info")) L.push(`- [${f.severity}] ${md(f.title)}`);
-    L.push("");
-  }
-  if (s.website && s.searchData) {
-    const sd = s.searchData;
-    L.push("## Search performance data", "");
-    L.push("- Clicks, impressions, queries and positions: **Not measured** in this run (no Search Console or Bing data). Searvex does not estimate them.");
-    if (sd.preference?.choice === "skip") L.push(`- Skipped by choice on ${sd.preference.updatedAt.slice(0, 10)}. Change it any time: \`searvex connect ${md(s.website.report.target)}\`.`);
-    else if (sd.googleAuthorized) L.push("- Google authorization available: `searvex gsc report --audit latest` adds verified Search Console data.");
-    else L.push(`- Optional: \`searvex connect ${md(s.website.report.target)}\` \u2014 Google ile ba\u011Flan \xB7 CSV i\xE7e aktar \xB7 \u015Eimdilik ge\xE7.`);
-    L.push("");
-  }
-  if (s.diff) L.push("## 3. Change since previous run", "", renderDiffMarkdown(s.diff).split("\n").slice(2).join("\n"), "");
-  if (s.research) L.push("## 4. Competitor research", "", renderResearchMarkdown(s.research).split("\n").slice(2).join("\n"), "");
-  if (s.repository) {
-    L.push("## 5. Repository audit", "", `Framework: ${s.repository.framework} \u2014 health score **${scoreLabel(s.repository.report.scores)}**.`, "");
-    for (const f of top(s.repository.report)) L.push(`- [${f.severity}] ${md(f.title)} \u2014 ${f.count} \xD7 (\`${f.ruleId}\`)`);
-    L.push("");
-  }
-  if (s.plan) {
-    L.push("## 6. Fix plan (dry run \u2014 nothing was changed)", "", "```", renderPlan(s.plan), "```", "");
-  }
-  L.push("## Next steps", "");
-  if (s.plan?.fixes.length) L.push("- Review `plan.patch`, then apply with `searvex optimize <path> --apply` (verified, reversible).");
-  if (s.plan?.tasks.length) L.push("- Draft the judgement tasks (titles, descriptions, alt text\u2026) with your agent and review them.");
-  if (s.website && !s.research) L.push("- Add competitors (`--competitor <url>`) for content-gap research.");
-  if (s.website) L.push("- Re-run `searvex run` after deploying changes: step 3 will show what improved or regressed.");
-  return L.join("\n") + "\n";
-}
-async function commandRun(flags) {
-  const v = flags.values;
-  const targets = flags.positionals.slice(1);
-  const url = targets.find((t) => /^https?:\/\//i.test(t));
-  const repo = targets.find((t) => !/^https?:\/\//i.test(t));
-  if (!url && !repo) throw new UsageError("run requires a URL, a repository path, or both (e.g. searvex run https://example.com ./site)");
-  if (repo && !(fs12.existsSync(repo) && fs12.statSync(repo).isDirectory())) throw new UsageError(`Not a directory: ${repo}`);
-  const competitors = v["competitor"] ?? [];
-  if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
-  if (competitors.length && !url) throw new UsageError("--competitor requires a website URL");
-  const kb = loadKnowledge();
-  const workspace = path17.resolve(String(v["out"] ?? (repo ?? process.cwd())));
-  const opts = crawlOptionsFrom(v);
-  const summary = { steps: [] };
-  const step = (n, name, status, note) => {
-    summary.steps.push({ step: n, name, status, note });
-    log(v, `${status === "done" ? "\u2713" : "\xB7"} ${n}. ${name} \u2014 ${note}`);
-  };
-  if (url) {
-    log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)\u2026`);
-    const { report, store: store3 } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v["check-external"], cruxApiKey: process.env["SEARVEX_CRUX_API_KEY"] });
-    const files = writeReports(store3, report, kb, ["json", "md", "html"]);
-    summary.website = { report, runId: store3.runId, files };
-    summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!getCredential("gsc") || !!process.env["SEARVEX_GSC_TOKEN"] };
-    step(1, "Website audit", "done", `${report.crawl.crawled} pages, score ${report.scores.overall}/100`);
-    step(2, "GEO / AI search", "done", `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
-    const base = findBaseline(workspace, report.target, store3.runId);
-    if (base) {
-      summary.diff = diffReports(base.report, report, base.id);
-      step(3, "Change since previous run", "done", `${summary.diff.newFindings.length} new, ${summary.diff.resolved.length} resolved${summary.diff.regression ? " \u2014 regression" : ""}`);
-    } else step(3, "Change since previous run", "skipped", "first run for this site: saved as baseline");
-    if (competitors.length) {
-      const perSite = num(v["max-pages"], 100, 1, 1e5);
-      const compReports = [];
-      for (const c of competitors) {
-        log(v, `4. Crawling competitor ${c} (max ${perSite} pages)\u2026`);
-        compReports.push(await analyzeCrawl(await crawl(c, { ...opts, maxPages: perSite }), kb, { ...opts, probes: false }));
-      }
-      const allTerms = new Set(report.content.pageTerms.flatMap((p) => p.terms).concat(report.content.topTerms.map((t) => t.term)));
-      summary.research = {
-        target: profile(report),
-        competitors: compReports.map(profile),
-        gaps: computeGaps(profile(report), compReports.map(profile), allTerms),
-        limitations: ["Topic gaps compare on-page term statistics of crawled pages; they show coverage differences, not search demand."]
-      };
-      step(4, "Competitor research", "done", `${competitors.length} competitor(s), ${summary.research.gaps.topics.length} topic gaps`);
-    } else step(4, "Competitor research", "skipped", "no --competitor given");
-  } else {
-    step(1, "Website audit", "skipped", "no URL given");
-    step(2, "GEO / AI search", "skipped", "no URL given");
-    step(3, "Change since previous run", "skipped", "no URL given");
-    step(4, "Competitor research", "skipped", "no URL given");
-  }
-  if (repo) {
-    const root2 = fs12.realpathSync(repo);
-    const siteUrl = v["site-url"] ?? (url ? new URL(url).origin : void 0);
-    log(v, `5. Auditing repository ${root2}\u2026`);
-    const ra = auditRepository(root2, { siteUrl, kb });
-    summary.repository = { report: ra.report, framework: ra.scan.apps.map((a) => a.framework + (a.appRoot === "." ? "" : "@" + a.appRoot)).join(", ") };
-    step(5, "Repository audit", "done", `${summary.repository.framework}, score ${scoreLabel(ra.report.scores)}`);
-    summary.plan = planFixes(ra.report, ra.scan, { siteUrl, lang: v["lang"] });
-    step(6, "Fix plan (dry run)", "done", `${summary.plan.fixes.length} automatic fix(es), ${summary.plan.tasks.length} task(s); nothing applied`);
-  } else {
-    step(5, "Repository audit", "skipped", "no repository path given");
-    step(6, "Fix plan (dry run)", "skipped", "no repository path given");
-  }
-  const store2 = new RunStore(workspace, RunStore.newRunId("run"));
-  store2.writeJson("meta.json", { kind: "run", target: url ?? repo, repo, competitors, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
-  store2.writeJson("summary.json", {
-    steps: summary.steps,
-    websiteRun: summary.website?.runId,
-    searchData: summary.searchData,
-    diff: summary.diff,
-    research: summary.research,
-    repository: summary.repository && { framework: summary.repository.framework, report: summary.repository.report },
-    plan: summary.plan && { ...summary.plan, files: summary.plan.files.map((f) => ({ path: f.path, action: f.action })), fixes: summary.plan.fixes.map((f) => ({ ...f, changes: f.changes.map((c) => ({ path: c.path, action: c.action })) })) }
-  });
-  if (summary.plan) store2.writeText("plan.patch", summary.plan.files.map((c) => unifiedDiff(c.path, c.before, c.after)).join("\n") + "\n");
-  if (summary.repository) store2.writeText("repository-report.md", renderMarkdown(summary.repository.report));
-  const out = store2.writeText("summary.md", renderRunSummary(summary));
-  if (v["json"]) process.stdout.write(JSON.stringify(store2.readJson("summary.json"), null, 2) + "\n");
-  else if (!v["quiet"]) console.log("\n" + renderRunSummary(summary) + `
-Saved: ${out}`);
-  const codes = [summary.website && failOnExit(summary.website.report, v["fail-on"]), summary.repository && failOnExit(summary.repository.report, v["fail-on"])];
-  return codes.some((c) => c === 1) ? 1 : 0;
-}
-
-// src/commands/ecosystem.ts
-import fs13 from "node:fs";
-import path18 from "node:path";
-var hostOf = (u) => new URL(u).hostname.replace(/^www\./, "");
-var norm3 = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
-function snapshot(report, pages) {
-  const host = hostOf(report.target);
-  const outbound = {};
-  for (const p of pages) {
-    if (p.status !== 200 || p.redirects.length || !p.data) continue;
-    for (const l of (p.rendered ?? p.data).links) {
-      if (!l.url || l.internal) continue;
-      const h = hostOf(l.url);
-      if (h !== host) outbound[h] = (outbound[h] ?? 0) + 1;
-    }
-  }
-  const siteNames = /* @__PURE__ */ new Set();
-  const orgNames = /* @__PURE__ */ new Set();
-  for (const p of pages) {
-    const f = p.rendered ?? p.data;
-    if (!f || p.status !== 200 || p.redirects.length) continue;
-    if (f.openGraph["og:site_name"]) siteNames.add(f.openGraph["og:site_name"].trim());
-    for (const b of f.jsonLd) {
-      const data2 = b.data;
-      const roots = Array.isArray(data2) ? data2 : data2 && Array.isArray(data2["@graph"]) ? data2["@graph"] : [data2];
-      for (const n of roots) {
-        if (!n || typeof n !== "object") continue;
-        const node = n;
-        const t = [].concat(node["@type"] ?? []);
-        if (typeof node["name"] !== "string") continue;
-        if (t.includes("WebSite")) siteNames.add(node["name"].trim());
-        else if (t.some((x) => typeof x === "string" && /Organization|Corporation/.test(x))) orgNames.add(node["name"].trim());
-      }
-    }
-  }
-  const rel2 = report.inventory.relations ?? [];
-  return {
-    host,
-    url: report.target,
-    report,
-    outbound,
-    siteNames: [...siteNames],
-    orgNames: [...orgNames],
-    parents: rel2.filter((r) => r.relation === "parentOrganization" || r.relation === "memberOf").map((r) => ({ name: r.to, url: r.toUrl })),
-    children: rel2.filter((r) => ["subOrganization", "brand", "owns", "department"].includes(r.relation) && norm3(r.to) !== norm3(r.from)).map((r) => ({ name: r.to, url: r.toUrl, relation: r.relation })),
-    terms: report.content.topTerms.map((t) => t.term).slice(0, 40)
-  };
-}
-function analyzeEcosystem(snaps) {
-  const hosts = snaps.map((s) => s.host);
-  const obs = [];
-  const nameToHost = /* @__PURE__ */ new Map();
-  for (const s of snaps) for (const n of [...s.siteNames, ...s.orgNames]) if (!nameToHost.has(norm3(n))) nameToHost.set(norm3(n), s.host);
-  for (const s of snaps) {
-    for (const p of s.parents) {
-      const parentHost = p.url ? hostOf(p.url) : nameToHost.get(norm3(p.name));
-      const parent2 = snaps.find((x) => x.host === parentHost);
-      if (!parent2) continue;
-      if (!parent2.orgNames.some((n) => norm3(n) === norm3(p.name))) {
-        obs.push({ kind: "entity", confidence: "verified", sites: [s.host, parent2.host], message: `${s.host} names its parent "${p.name}", but ${parent2.host} declares its organisation as ${parent2.orgNames.map((n) => `"${n}"`).join(", ") || "(none)"}.`, recommendation: "Use the same organisation name and URL on both sites." });
-      }
-      const declared = parent2.children.some((c) => c.url && hostOf(c.url) === s.host || s.siteNames.concat(s.orgNames).some((n) => norm3(n) === norm3(c.name)));
-      if (!declared) {
-        obs.push({ kind: "entity", confidence: "verified", sites: [parent2.host, s.host], message: `${s.host} declares parentOrganization "${p.name}", but ${parent2.host} does not reference ${s.siteNames[0] ?? s.host} in its structured data (subOrganization / brand / owns).`, recommendation: `On ${parent2.host}, describe the relationship from the parent side too (schema.org subOrganization or brand on the Organization node), using names and URLs that match the product sites. This makes the family explicit to search engines and AI systems; it is not a rich-result feature.` });
-      }
-    }
-    if (!s.orgNames.length) obs.push({ kind: "entity", confidence: "verified", sites: [s.host], message: `${s.host} has no top-level Organization markup on the crawled pages.`, recommendation: "Add Organization structured data (name, url, logo, parentOrganization where applicable)." });
-    else {
-      const own = s.orgNames.filter((n) => s.siteNames.some((sn) => norm3(sn) === norm3(n)));
-      const parentNames = new Set(s.parents.flatMap((p) => {
-        const ph = p.url ? hostOf(p.url) : nameToHost.get(norm3(p.name));
-        return [norm3(p.name), ...(snaps.find((x) => x.host === ph)?.orgNames ?? []).map(norm3)];
-      }));
-      const other = s.orgNames.filter((n) => !own.includes(n) && !parentNames.has(norm3(n)));
-      if (!own.length && other.length) obs.push({ kind: "entity", confidence: "verified", sites: [s.host], message: `${s.host} (site name ${s.siteNames.map((n) => `"${n}"`).join(", ") || "unknown"}) describes its Organization as ${other.map((n) => `"${n}"`).join(", ")} \u2014 another family member's name.`, recommendation: "Use the product's own Organization (or Brand) node and reference the company via parentOrganization." });
-    }
-  }
-  const links = {};
-  for (const s of snaps) {
-    links[s.host] = {};
-    for (const h of hosts) if (h !== s.host) links[s.host][h] = s.outbound[h] ?? 0;
-  }
-  const parentHosts = new Set(snaps.flatMap((s) => s.parents.map((p) => p.url ? hostOf(p.url) : nameToHost.get(norm3(p.name))).filter((x) => !!x)));
-  for (const ph of parentHosts) {
-    const parent2 = snaps.find((s) => s.host === ph);
-    if (!parent2) continue;
-    const missing = snaps.filter((s) => s.host !== ph && !(links[ph]?.[s.host] ?? 0));
-    if (missing.length) obs.push({ kind: "linking", confidence: "verified", sites: [ph, ...missing.map((m) => m.host)], message: `${ph} has no crawled links to ${missing.map((m) => m.host).join(", ")}.`, recommendation: "Link the parent site to every product with descriptive anchor text so the family is discoverable." });
-    const noBack = snaps.filter((s) => s.host !== ph && !(links[s.host]?.[ph] ?? 0));
-    if (noBack.length) obs.push({ kind: "linking", confidence: "verified", sites: noBack.map((m) => m.host), message: `${noBack.map((m) => m.host).join(", ")} do not link back to ${ph} on the crawled pages.`, recommendation: 'Add a visible link to the parent company (e.g. footer "part of \u2026").' });
-  }
-  const overlap = [];
-  const primaryLang = (s) => Object.entries(s.report.inventory.languages).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
-  const brandTerms = new Set(snaps.flatMap((s) => [...s.siteNames, ...s.orgNames, s.host.split(".")[0]].map((n) => n.toLowerCase())));
-  for (let i = 0; i < snaps.length; i++)
-    for (let j = i + 1; j < snaps.length; j++) {
-      const a = snaps[i], b = snaps[j];
-      if (primaryLang(a) !== primaryLang(b)) continue;
-      const ta = new Set(a.terms.filter((t) => !brandTerms.has(t)));
-      const tb = new Set(b.terms.filter((t) => !brandTerms.has(t)));
-      const shared = [...ta].filter((t) => tb.has(t));
-      const sim = shared.length / Math.max(1, ta.size + tb.size - shared.length);
-      overlap.push({ a: a.host, b: b.host, similarity: Math.round(sim * 100) / 100, shared: shared.slice(0, 12) });
-    }
-  overlap.sort((x, y) => y.similarity - x.similarity);
-  for (const o of overlap.filter((x) => x.similarity >= 0.35)) {
-    obs.push({ kind: "overlap", confidence: "heuristic", sites: [o.a, o.b], message: `${o.a} and ${o.b} share ${Math.round(o.similarity * 100)}% of their prominent terms (${o.shared.slice(0, 6).join(", ")}).`, recommendation: "Check in Search Console whether both sites rank for the same queries; give each product a distinct primary topic and cross-link instead of duplicating explanations." });
-  }
-  const byRule = /* @__PURE__ */ new Map();
-  for (const s of snaps) for (const f of s.report.findings) {
-    if (f.severity === "info" || f.confidence === "unmeasurable") continue;
-    const e = byRule.get(f.ruleId) ?? { title: f.title, severity: f.severity, sites: 0, pages: 0 };
-    e.sites++;
-    e.pages += f.count;
-    byRule.set(f.ruleId, e);
-  }
-  const sharedIssues = [...byRule.entries()].filter(([, e]) => e.sites >= Math.max(2, Math.ceil(snaps.length / 2))).map(([ruleId, e]) => ({ ruleId, ...e })).sort((a, b) => b.sites - a.sites || b.pages - a.pages);
-  for (const i of sharedIssues.filter((x) => x.severity === "critical" || x.severity === "high" || x.severity === "medium")) {
-    obs.push({ kind: "shared-issue", confidence: "heuristic", sites: snaps.filter((s) => s.report.findings.some((f) => f.ruleId === i.ruleId)).map((s) => s.host), message: `"${i.title}" (${i.ruleId}) appears on ${i.sites} of ${snaps.length} sites (${i.pages} pages) \u2014 likely a shared template or component.`, recommendation: "Fix it once in the shared layout/package and re-audit all sites." });
-  }
-  const langs = snaps.map((s) => ({ host: s.host, langs: s.report.inventory.hreflangLanguages.filter((l) => l !== "x-default") }));
-  const all2 = new Set(langs.flatMap((l) => l.langs));
-  for (const l of langs) {
-    const missing = [...all2].filter((x) => !l.langs.includes(x));
-    if (all2.size > 1 && missing.length && l.langs.length) obs.push({ kind: "coverage", confidence: "verified", sites: [l.host], message: `${l.host} has no ${missing.join(", ")} alternate while other family sites do.`, recommendation: "Decide per product whether the market needs that language; if yes, add localized pages with reciprocal hreflang." });
-    if (all2.size > 1 && !l.langs.length) obs.push({ kind: "coverage", confidence: "verified", sites: [l.host], message: `${l.host} declares no hreflang alternates while other family sites are multilingual (${[...all2].join(", ")}).`, recommendation: "If localized versions exist or are planned, connect them with hreflang." });
-  }
-  return {
-    sites: snaps.map((s) => ({
-      host: s.host,
-      siteName: s.siteNames.join(" / ") || "\u2014",
-      organization: s.orgNames.join(" / ") || "\u2014",
-      parent: s.parents.map((p) => p.name).join(", ") || "\u2014",
-      children: s.children.map((c) => c.name),
-      model: `${s.report.inventory.businessModel.label}${s.report.inventory.businessModel.confidence ? ` (${s.report.inventory.businessModel.confidence})` : ""}`,
-      languages: Object.keys(s.report.inventory.languages),
-      pages: s.report.crawl.crawled,
-      score: s.report.scores.overall,
-      offerings: (s.report.inventory.offerings ?? []).map((o) => `${o.kind}: ${o.name}`)
-    })),
-    links,
-    overlap,
-    sharedIssues,
-    observations: obs,
-    limitations: [
-      "Based on the crawled pages of each site (page limits apply); links and markup on uncrawled pages are not seen.",
-      "Topic overlap compares on-page term statistics; it does not show search demand or actual ranking competition \u2014 confirm with Search Console."
-    ]
-  };
-}
-function renderEcosystemMarkdown(r) {
-  const L = ["# Searvex ecosystem analysis", ""];
-  L.push("## Sites", "", "| Site | Site name | Organization | Parent | Declares children | Model (heuristic) | Languages | Pages | Score |", "|---|---|---|---|---|---|---|---|---|");
-  for (const s of r.sites) L.push(`| ${md(s.host)} | ${md(s.siteName)} | ${md(s.organization)} | ${md(s.parent)} | ${s.children.map(md).join(", ") || "\u2014"} | ${md(s.model)} | ${s.languages.map(md).join(", ")} | ${s.pages} | ${s.score} |`);
-  L.push("", "## Cross-links (links from row site to column site, crawled pages)", "");
-  const hosts = r.sites.map((s) => s.host);
-  L.push(`| from \\ to | ${hosts.map(md).join(" | ")} |`, `|---|${hosts.map(() => "---").join("|")}|`);
-  for (const h of hosts) L.push(`| ${md(h)} | ${hosts.map((t) => t === h ? "\xB7" : String(r.links[h]?.[t] ?? 0)).join(" | ")} |`);
-  L.push("", "## Observations", "");
-  if (!r.observations.length) L.push("_No ecosystem issues found._");
-  for (const kind of ["entity", "linking", "shared-issue", "overlap", "coverage"]) {
-    const list = r.observations.filter((o) => o.kind === kind);
-    if (!list.length) continue;
-    L.push(`### ${{ entity: "Entity & brand graph", linking: "Cross-linking", "shared-issue": "Issues shared across the family", overlap: "Topic overlap", coverage: "Language coverage" }[kind]}`, "");
-    for (const o of list) L.push(`- ${o.confidence === "heuristic" ? "~ " : ""}${md(o.message)}${o.recommendation ? `
-  - **Recommendation:** ${md(o.recommendation)}` : ""}`);
-    L.push("");
-  }
-  if (r.overlap.length) {
-    L.push("## Topic similarity (same primary language)", "", "| Sites | Similarity | Shared prominent terms |", "|---|---|---|");
-    for (const o of r.overlap.slice(0, 15)) L.push(`| ${md(o.a)} \u2194 ${md(o.b)} | ${Math.round(o.similarity * 100)}% | ${o.shared.slice(0, 8).map(md).join(", ")} |`);
-    L.push("");
-  }
-  L.push("## Limitations", "", ...r.limitations.map((l) => `- ${md(l)}`), "", "`~` marks heuristic observations.", "");
-  return L.join("\n");
-}
-function reuseLatest(workspace, url) {
-  const target = new URL(url).toString();
-  for (const id of RunStore.list(workspace).reverse()) {
-    const store2 = new RunStore(workspace, id);
-    const report = store2.readJson("report.json");
-    if (report?.mode === "website" && hostOf(report.target) === hostOf(target)) {
-      const pages = store2.readLines("pages.jsonl");
-      if (pages.length) return { report, pages };
-    }
-  }
-  return null;
-}
-async function commandEcosystem(flags) {
-  const v = flags.values;
-  const urls = flags.positionals.slice(1);
-  if (urls.length < 2) throw new UsageError("ecosystem requires at least two site URLs");
-  if (urls.length > 20) throw new UsageError("At most 20 sites");
-  for (const u of urls) if (!/^https?:\/\//i.test(u)) throw new UsageError(`Invalid URL: ${u}`);
-  const kb = loadKnowledge();
-  const workspace = path18.resolve(String(v["out"] ?? process.cwd()));
-  const opts = { ...crawlOptionsFrom(v), maxPages: num(v["max-pages"], 60, 1, 1e5) };
-  const snaps = new Array(urls.length);
-  let next2 = 0;
-  const worker = async () => {
-    for (let i = next2++; i < urls.length; i = next2++) {
-      const u = urls[i];
-      const reused = v["reuse"] ? reuseLatest(workspace, u) : null;
-      if (reused) {
-        log(v, `Reusing stored run for ${u}`);
-        snaps[i] = snapshot(reused.report, reused.pages);
-        continue;
-      }
-      log(v, `Crawling ${u} (max ${opts.maxPages} pages)\u2026`);
-      const store3 = new RunStore(workspace, RunStore.newRunId("audit"));
-      const result = await crawl(u, opts, store3);
-      const report = await analyzeCrawl(result, kb, { ...opts, probes: true });
-      report.runId = store3.runId;
-      store3.writeJson("report.json", report);
-      snaps[i] = snapshot(report, result.pages);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(4, urls.length) }, worker));
-  const eco = analyzeEcosystem(snaps);
-  const store2 = new RunStore(workspace, RunStore.newRunId("ecosystem"));
-  store2.writeJson("meta.json", { kind: "ecosystem", sites: urls, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
-  store2.writeJson("ecosystem.json", eco);
-  const out = store2.writeText("ecosystem.md", renderEcosystemMarkdown(eco));
-  store2.writeText("ecosystem.html", renderEcosystemHtml(eco));
-  if (v["json"]) process.stdout.write(JSON.stringify(eco, null, 2) + "\n");
-  else if (!v["quiet"]) console.log(renderEcosystemMarkdown(eco) + `
-Saved: ${out}`);
-  if (!fs13.existsSync(out)) return 2;
-  return 0;
-}
-
 // src/commands/gsc.ts
 import { spawn } from "node:child_process";
-import path19 from "node:path";
+import path16 from "node:path";
 
 // src/analyze/search-performance.ts
 function rowsToQueryPage(rows) {
@@ -40681,6 +40209,37 @@ function analyzeSearchPerformance(input, opts) {
   };
 }
 
+// src/integrations/preferences.ts
+import fs11 from "node:fs";
+import path15 from "node:path";
+var file = () => path15.join(configDir(), "search-data.json");
+function siteKey(urlOrHost) {
+  let h = urlOrHost.trim().toLowerCase();
+  try {
+    h = new URL(/^[a-z]+:\/\//.test(h) ? h : `https://${h}`).hostname;
+  } catch {
+  }
+  return h.replace(/^www\./, "");
+}
+function readAll() {
+  try {
+    return JSON.parse(fs11.readFileSync(file(), "utf8"));
+  } catch {
+    return {};
+  }
+}
+function getSitePreference(site) {
+  return readAll()[siteKey(site)] ?? null;
+}
+function setSitePreference(site, pref) {
+  const all2 = readAll();
+  const value = { ...pref, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
+  all2[siteKey(site)] = value;
+  fs11.mkdirSync(configDir(), { recursive: true, mode: 448 });
+  fs11.writeFileSync(file(), JSON.stringify(all2, null, 2), { mode: 384 });
+  return value;
+}
+
 // src/commands/gsc.ts
 var pct = (x) => `${(x * 100).toFixed(1)}%`;
 var dash = (x) => x === null || x === void 0 ? "\u2014" : String(x);
@@ -40834,7 +40393,7 @@ function spawnDetached(cmd, args) {
 async function commandGsc(flags) {
   const v = flags.values;
   const sub = flags.positionals[1];
-  const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path16.resolve(String(v["out"] ?? process.cwd()));
   if (sub === "auth") {
     if (process.env["CI"]) throw new UsageError('gsc auth is interactive (browser consent) and is disabled in CI. Use "gsc import <export.zip>" or SEARVEX_GSC_TOKEN there.');
     const existing = getCredential("gsc");
@@ -41071,7 +40630,7 @@ async function bingReport(flags, key, api) {
     throw new UsageError(`${siteUrl} is ${site ? "not verified" : "not a site"} in this Bing Webmaster account.${similar.length ? ` Did you mean: ${similar.join(", ")}?` : sites.length ? ` Sites: ${sites.map((s) => s.url).join(", ")}` : " The account has no sites."}`);
   }
   const days = num(v["days"], 28, 1, 480);
-  const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path16.resolve(String(v["out"] ?? process.cwd()));
   const sel = resolveAudit(flags, workspace, property);
   const { rows, pages } = await bingQueryPageRows2(site.url, k.key, { days, maxPages: num(v["max-pages"], 25, 1, 200) });
   const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
@@ -41121,6 +40680,504 @@ async function commandConnect(flags) {
   return 0;
 }
 
+// src/commands/crux.ts
+function cruxKey() {
+  const env = process.env["SEARVEX_CRUX_API_KEY"];
+  if (env) return { key: env, source: "SEARVEX_CRUX_API_KEY" };
+  const stored = getCredential("crux");
+  return stored?.refreshToken ? { key: stored.refreshToken, source: defaultCredentialStore().describe() } : null;
+}
+var PROBE_ORIGIN = "https://developer.chrome.com";
+async function commandCrux(flags) {
+  const v = flags.values;
+  const sub = flags.positionals[1];
+  if (sub === "auth") {
+    if (getCredential("crux") && !v["force"]) {
+      console.log(`A CrUX API key is already stored in ${defaultCredentialStore().describe()}. Use --force to replace it, or "crux logout".`);
+      return 0;
+    }
+    const key = await readSecret("Chrome UX Report API key (Google Cloud \u2192 Credentials; input hidden): ");
+    if (!/^[A-Za-z0-9_-]{20,100}$/.test(key)) throw new UsageError("That does not look like a Google API key. Nothing was stored.");
+    const probe = await queryCrux(PROBE_ORIGIN, key);
+    if (probe.status === "error") throw new UsageError(`Google rejected the key; nothing was stored. ${maskCruxKey(probe.message, key)}`);
+    saveCredential("crux", { clientId: "crux-api-key", refreshToken: key, scope: "chromeuxreport", createdAt: (/* @__PURE__ */ new Date()).toISOString() });
+    console.log(`Stored the CrUX API key in ${defaultCredentialStore().describe()}. Website audits now include real-user Core Web Vitals when an origin has enough traffic.`);
+    return 0;
+  }
+  if (sub === "logout") {
+    const removed = deleteCredential("crux");
+    console.log(`${removed ? "Removed the stored CrUX API key." : "No stored CrUX API key."} The key stays valid until you delete or restrict it in Google Cloud Console.`);
+    return 0;
+  }
+  if (sub === "status") {
+    const k = cruxKey();
+    if (!k) throw new UsageError('No CrUX API key: run "searvex crux auth", or set SEARVEX_CRUX_API_KEY.');
+    const probe = await queryCrux(PROBE_ORIGIN, k.key);
+    const status = { key: k.source, valid: probe.status !== "error", ...probe.status === "error" ? { error: probe.message } : {} };
+    if (v["json"]) process.stdout.write(JSON.stringify(status, null, 2) + "\n");
+    else for (const [n, x] of Object.entries(status)) console.log(`${n}: ${String(x)}`);
+    return status.valid ? 0 : 1;
+  }
+  throw new UsageError("crux subcommands: auth [--force] | status | logout");
+}
+
+// src/commands/research.ts
+import path17 from "node:path";
+function profile(r) {
+  return {
+    url: r.target,
+    pages: r.crawl.crawled,
+    businessModel: r.inventory.businessModel.label,
+    byType: r.inventory.byType,
+    languages: Object.keys(r.inventory.languages),
+    topTerms: r.content.topTerms.map((t) => t.term),
+    sections: r.inventory.sections,
+    // Types actually present on crawled pages (JSON-LD, Microdata, RDFa).
+    schemaTypes: (r.inventory.structuredData?.types ?? []).map((t) => t.type),
+    truncated: r.crawl.truncated
+  };
+}
+function computeGaps(target, competitors, targetAllTerms) {
+  const half = Math.max(1, Math.ceil(competitors.length / 2));
+  const termCount = /* @__PURE__ */ new Map();
+  const typeCount = /* @__PURE__ */ new Map();
+  const schemaCount = /* @__PURE__ */ new Map();
+  const targetSchema = new Set(target.schemaTypes);
+  for (const c of competitors) for (const t of new Set(c.schemaTypes)) schemaCount.set(t, (schemaCount.get(t) ?? 0) + 1);
+  for (const c of competitors) {
+    for (const t of new Set(c.topTerms.slice(0, 40))) termCount.set(t, (termCount.get(t) ?? 0) + 1);
+    for (const t of Object.keys(c.byType)) typeCount.set(t, (typeCount.get(t) ?? 0) + 1);
+  }
+  return {
+    topics: [...termCount.entries()].filter(([t, n]) => n >= half && !targetAllTerms.has(t)).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([term, n]) => ({ term, competitors: n })),
+    pageTypes: [...typeCount.entries()].filter(([t, n]) => n >= half && !target.byType[t] && t !== "other").map(([type, n]) => ({ type, competitors: n })),
+    schemaTypes: [...schemaCount.entries()].filter(([t, n]) => n >= half && !targetSchema.has(t)).sort((a, b) => b[1] - a[1]).map(([type, n]) => ({ type, competitors: n }))
+  };
+}
+function renderResearchMarkdown(r) {
+  const L = [`# Searvex research \u2014 ${md(r.target.url)}`, ""];
+  const row = (p) => `| ${md(p.url)} | ${p.pages}${p.truncated ? "+" : ""} | ${md(p.businessModel)} | ${Object.entries(p.byType).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t, n]) => `${t} ${n}`).join(", ")} | ${p.languages.map(md).join(", ")} | ${p.schemaTypes.slice(0, 8).map(md).join(", ") || "\u2014"} |`;
+  L.push("## Site profiles", "", "| Site | Pages | Model (heuristic) | Main page types | Languages | Structured data |", "|---|---|---|---|---|---|", row(r.target), ...r.competitors.map(row), "");
+  L.push("## Target topics", "", r.target.topTerms.slice(0, 30).map(md).join(", ") || "\u2014", "");
+  if (r.competitors.length) {
+    L.push("## Content gaps (competitor topics missing on target)", "");
+    L.push(r.gaps.topics.length ? r.gaps.topics.map((t) => `- **${md(t.term)}** \u2014 prominent on ${t.competitors}/${r.competitors.length} competitors`).join("\n") : "_No consistent topic gaps found._", "");
+    L.push("## Page-type gaps", "");
+    L.push(r.gaps.pageTypes.length ? r.gaps.pageTypes.map((t) => `- **${t.type}** pages exist on ${t.competitors}/${r.competitors.length} competitors`).join("\n") : "_No page-type gaps._", "");
+    L.push("## Structured data gaps", "");
+    L.push(r.gaps.schemaTypes.length ? r.gaps.schemaTypes.map((t) => `- **${md(t.type)}** markup used by ${t.competitors}/${r.competitors.length} competitors \u2014 add only if it describes visible content on your pages`).join("\n") : "_No structured-data gaps._", "");
+  }
+  L.push("## Limitations", "", ...r.limitations.map((l) => `- ${md(l)}`), "");
+  return L.join("\n");
+}
+async function commandResearch(flags) {
+  const v = flags.values;
+  const target = flags.positionals[1];
+  if (!target || !/^https?:\/\//i.test(target)) throw new UsageError("research requires a URL");
+  const competitors = v["competitor"] ?? [];
+  if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
+  for (const c of competitors) if (!/^https?:\/\//i.test(c)) throw new UsageError(`Invalid competitor URL: ${c}`);
+  const kb = loadKnowledge();
+  const workspace = path17.resolve(String(v["out"] ?? process.cwd()));
+  const store2 = new RunStore(workspace, RunStore.newRunId("research"));
+  const perSite = num(v["max-pages"], 150, 1, 1e5);
+  const base = { ...crawlOptionsFrom(v), maxPages: perSite };
+  const analyse = async (url) => {
+    log(v, `Crawling ${url} (max ${perSite} pages)\u2026`);
+    const result = await crawl(url, base);
+    return analyzeCrawl(result, kb, { ...base, probes: false });
+  };
+  const targetReport = await analyse(target);
+  const compReports = [];
+  for (const c of competitors) compReports.push(await analyse(c));
+  const allTerms = new Set(targetReport.content.pageTerms.flatMap((p) => p.terms).concat(targetReport.content.topTerms.map((t) => t.term)));
+  const research = {
+    target: profile(targetReport),
+    competitors: compReports.map(profile),
+    gaps: computeGaps(profile(targetReport), compReports.map(profile), allTerms),
+    limitations: [
+      "Competitor discovery, search volumes, rankings and SERP features require external data; Searvex does not fabricate them. Pass competitors explicitly with --competitor (the /searvex:research skill discovers them via web search).",
+      "Topic gaps compare on-page term statistics of crawled pages only; they indicate coverage differences, not demand.",
+      ...competitors.length ? [] : ["No competitors given: only the target profile was built."]
+    ]
+  };
+  store2.writeJson("meta.json", { kind: "research", target, competitors, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
+  store2.writeJson("research.json", research);
+  store2.writeJson("report.json", targetReport);
+  const mdPath = store2.writeText("research.md", renderResearchMarkdown(research));
+  if (v["json"]) process.stdout.write(JSON.stringify(research, null, 2) + "\n");
+  else {
+    console.log(renderResearchMarkdown(research));
+    console.log(`Saved: ${mdPath}`);
+  }
+  return 0;
+}
+
+// src/commands/run.ts
+import fs12 from "node:fs";
+import path18 from "node:path";
+var top = (r, n = 5) => r.findings.filter((f) => f.severity !== "info").slice(0, n);
+function renderRunSummary(s) {
+  const L = ["# Searvex run summary", ""];
+  L.push("| Step | Status | Note |", "|---|---|---|");
+  for (const st of s.steps) L.push(`| ${st.step}. ${st.name} | ${st.status === "done" ? "\u2705" : "\u23ED\uFE0F skipped"} | ${md(st.note)} |`);
+  L.push("");
+  if (s.website) {
+    const r = s.website.report;
+    L.push("## 1. Website audit", "", `${md(r.target)} \u2014 health score **${scoreLabel(r.scores)}**, ${r.crawl.crawled} pages${r.crawl.truncated ? " (page limit reached)" : ""}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, "");
+    for (const f of top(r)) L.push(`- [${f.severity}] ${md(f.title)} \u2014 ${f.count} \xD7 (\`${f.ruleId}\`)`);
+    L.push("", `Full report: \`.searvex/runs/${s.website.runId}/report.md\``, "");
+    L.push("## 2. GEO / AI search readiness", "");
+    const blocked = r.geo.bots.filter((b) => !b.allowed);
+    L.push(`- Blocked crawlers: ${blocked.length ? blocked.map((b) => `${b.token} (${b.purpose})`).join(", ") : "none"}`);
+    L.push(`- Content clarity (heuristic): ${r.geo.answerability.average}/100 \xB7 AI citations: not measured`);
+    for (const f of r.findings.filter((x) => x.category === "geo" && x.severity !== "info")) L.push(`- [${f.severity}] ${md(f.title)}`);
+    L.push("");
+  }
+  if (s.website && s.searchData) {
+    const sd = s.searchData;
+    L.push("## Search performance data", "");
+    L.push("- Clicks, impressions, queries and positions: **Not measured** in this run (no Search Console or Bing data). Searvex does not estimate them.");
+    if (sd.preference?.choice === "skip") L.push(`- Skipped by choice on ${sd.preference.updatedAt.slice(0, 10)}. Change it any time: \`searvex connect ${md(s.website.report.target)}\`.`);
+    else if (sd.googleAuthorized) L.push("- Google authorization available: `searvex gsc report --audit latest` adds verified Search Console data.");
+    else L.push(`- Optional: \`searvex connect ${md(s.website.report.target)}\` \u2014 Google ile ba\u011Flan \xB7 CSV i\xE7e aktar \xB7 \u015Eimdilik ge\xE7.`);
+    L.push("");
+  }
+  if (s.diff) L.push("## 3. Change since previous run", "", renderDiffMarkdown(s.diff).split("\n").slice(2).join("\n"), "");
+  if (s.research) L.push("## 4. Competitor research", "", renderResearchMarkdown(s.research).split("\n").slice(2).join("\n"), "");
+  if (s.repository) {
+    L.push("## 5. Repository audit", "", `Framework: ${s.repository.framework} \u2014 health score **${scoreLabel(s.repository.report.scores)}**.`, "");
+    for (const f of top(s.repository.report)) L.push(`- [${f.severity}] ${md(f.title)} \u2014 ${f.count} \xD7 (\`${f.ruleId}\`)`);
+    L.push("");
+  }
+  if (s.plan) {
+    L.push("## 6. Fix plan (dry run \u2014 nothing was changed)", "", "```", renderPlan(s.plan), "```", "");
+  }
+  L.push("## Next steps", "");
+  if (s.plan?.fixes.length) L.push("- Review `plan.patch`, then apply with `searvex optimize <path> --apply` (verified, reversible).");
+  if (s.plan?.tasks.length) L.push("- Draft the judgement tasks (titles, descriptions, alt text\u2026) with your agent and review them.");
+  if (s.website && !s.research) L.push("- Add competitors (`--competitor <url>`) for content-gap research.");
+  if (s.website) L.push("- Re-run `searvex run` after deploying changes: step 3 will show what improved or regressed.");
+  return L.join("\n") + "\n";
+}
+async function commandRun(flags) {
+  const v = flags.values;
+  const targets = flags.positionals.slice(1);
+  const url = targets.find((t) => /^https?:\/\//i.test(t));
+  const repo = targets.find((t) => !/^https?:\/\//i.test(t));
+  if (!url && !repo) throw new UsageError("run requires a URL, a repository path, or both (e.g. searvex run https://example.com ./site)");
+  if (repo && !(fs12.existsSync(repo) && fs12.statSync(repo).isDirectory())) throw new UsageError(`Not a directory: ${repo}`);
+  const competitors = v["competitor"] ?? [];
+  if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
+  if (competitors.length && !url) throw new UsageError("--competitor requires a website URL");
+  const kb = loadKnowledge();
+  const workspace = path18.resolve(String(v["out"] ?? (repo ?? process.cwd())));
+  const opts = crawlOptionsFrom(v);
+  const summary = { steps: [] };
+  const step = (n, name, status, note) => {
+    summary.steps.push({ step: n, name, status, note });
+    log(v, `${status === "done" ? "\u2713" : "\xB7"} ${n}. ${name} \u2014 ${note}`);
+  };
+  if (url) {
+    log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)\u2026`);
+    const { report, store: store3 } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v["check-external"], cruxApiKey: cruxKey()?.key });
+    const files = writeReports(store3, report, kb, ["json", "md", "html"]);
+    summary.website = { report, runId: store3.runId, files };
+    summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!getCredential("gsc") || !!process.env["SEARVEX_GSC_TOKEN"] };
+    step(1, "Website audit", "done", `${report.crawl.crawled} pages, score ${report.scores.overall}/100`);
+    step(2, "GEO / AI search", "done", `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
+    const base = findBaseline(workspace, report.target, store3.runId);
+    if (base) {
+      summary.diff = diffReports(base.report, report, base.id);
+      step(3, "Change since previous run", "done", `${summary.diff.newFindings.length} new, ${summary.diff.resolved.length} resolved${summary.diff.regression ? " \u2014 regression" : ""}`);
+    } else step(3, "Change since previous run", "skipped", "first run for this site: saved as baseline");
+    if (competitors.length) {
+      const perSite = num(v["max-pages"], 100, 1, 1e5);
+      const compReports = [];
+      for (const c of competitors) {
+        log(v, `4. Crawling competitor ${c} (max ${perSite} pages)\u2026`);
+        compReports.push(await analyzeCrawl(await crawl(c, { ...opts, maxPages: perSite }), kb, { ...opts, probes: false }));
+      }
+      const allTerms = new Set(report.content.pageTerms.flatMap((p) => p.terms).concat(report.content.topTerms.map((t) => t.term)));
+      summary.research = {
+        target: profile(report),
+        competitors: compReports.map(profile),
+        gaps: computeGaps(profile(report), compReports.map(profile), allTerms),
+        limitations: ["Topic gaps compare on-page term statistics of crawled pages; they show coverage differences, not search demand."]
+      };
+      step(4, "Competitor research", "done", `${competitors.length} competitor(s), ${summary.research.gaps.topics.length} topic gaps`);
+    } else step(4, "Competitor research", "skipped", "no --competitor given");
+  } else {
+    step(1, "Website audit", "skipped", "no URL given");
+    step(2, "GEO / AI search", "skipped", "no URL given");
+    step(3, "Change since previous run", "skipped", "no URL given");
+    step(4, "Competitor research", "skipped", "no URL given");
+  }
+  if (repo) {
+    const root2 = fs12.realpathSync(repo);
+    const siteUrl = v["site-url"] ?? (url ? new URL(url).origin : void 0);
+    log(v, `5. Auditing repository ${root2}\u2026`);
+    const ra = auditRepository(root2, { siteUrl, kb });
+    summary.repository = { report: ra.report, framework: ra.scan.apps.map((a) => a.framework + (a.appRoot === "." ? "" : "@" + a.appRoot)).join(", ") };
+    step(5, "Repository audit", "done", `${summary.repository.framework}, score ${scoreLabel(ra.report.scores)}`);
+    summary.plan = planFixes(ra.report, ra.scan, { siteUrl, lang: v["lang"] });
+    step(6, "Fix plan (dry run)", "done", `${summary.plan.fixes.length} automatic fix(es), ${summary.plan.tasks.length} task(s); nothing applied`);
+  } else {
+    step(5, "Repository audit", "skipped", "no repository path given");
+    step(6, "Fix plan (dry run)", "skipped", "no repository path given");
+  }
+  const store2 = new RunStore(workspace, RunStore.newRunId("run"));
+  store2.writeJson("meta.json", { kind: "run", target: url ?? repo, repo, competitors, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
+  store2.writeJson("summary.json", {
+    steps: summary.steps,
+    websiteRun: summary.website?.runId,
+    searchData: summary.searchData,
+    diff: summary.diff,
+    research: summary.research,
+    repository: summary.repository && { framework: summary.repository.framework, report: summary.repository.report },
+    plan: summary.plan && { ...summary.plan, files: summary.plan.files.map((f) => ({ path: f.path, action: f.action })), fixes: summary.plan.fixes.map((f) => ({ ...f, changes: f.changes.map((c) => ({ path: c.path, action: c.action })) })) }
+  });
+  if (summary.plan) store2.writeText("plan.patch", summary.plan.files.map((c) => unifiedDiff(c.path, c.before, c.after)).join("\n") + "\n");
+  if (summary.repository) store2.writeText("repository-report.md", renderMarkdown(summary.repository.report));
+  const out = store2.writeText("summary.md", renderRunSummary(summary));
+  if (v["json"]) process.stdout.write(JSON.stringify(store2.readJson("summary.json"), null, 2) + "\n");
+  else if (!v["quiet"]) console.log("\n" + renderRunSummary(summary) + `
+Saved: ${out}`);
+  const codes = [summary.website && failOnExit(summary.website.report, v["fail-on"]), summary.repository && failOnExit(summary.repository.report, v["fail-on"])];
+  return codes.some((c) => c === 1) ? 1 : 0;
+}
+
+// src/commands/ecosystem.ts
+import fs13 from "node:fs";
+import path19 from "node:path";
+var hostOf = (u) => new URL(u).hostname.replace(/^www\./, "");
+var norm3 = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+function snapshot(report, pages) {
+  const host = hostOf(report.target);
+  const outbound = {};
+  for (const p of pages) {
+    if (p.status !== 200 || p.redirects.length || !p.data) continue;
+    for (const l of (p.rendered ?? p.data).links) {
+      if (!l.url || l.internal) continue;
+      const h = hostOf(l.url);
+      if (h !== host) outbound[h] = (outbound[h] ?? 0) + 1;
+    }
+  }
+  const siteNames = /* @__PURE__ */ new Set();
+  const orgNames = /* @__PURE__ */ new Set();
+  for (const p of pages) {
+    const f = p.rendered ?? p.data;
+    if (!f || p.status !== 200 || p.redirects.length) continue;
+    if (f.openGraph["og:site_name"]) siteNames.add(f.openGraph["og:site_name"].trim());
+    for (const b of f.jsonLd) {
+      const data2 = b.data;
+      const roots = Array.isArray(data2) ? data2 : data2 && Array.isArray(data2["@graph"]) ? data2["@graph"] : [data2];
+      for (const n of roots) {
+        if (!n || typeof n !== "object") continue;
+        const node = n;
+        const t = [].concat(node["@type"] ?? []);
+        if (typeof node["name"] !== "string") continue;
+        if (t.includes("WebSite")) siteNames.add(node["name"].trim());
+        else if (t.some((x) => typeof x === "string" && /Organization|Corporation/.test(x))) orgNames.add(node["name"].trim());
+      }
+    }
+  }
+  const rel2 = report.inventory.relations ?? [];
+  return {
+    host,
+    url: report.target,
+    report,
+    outbound,
+    siteNames: [...siteNames],
+    orgNames: [...orgNames],
+    parents: rel2.filter((r) => r.relation === "parentOrganization" || r.relation === "memberOf").map((r) => ({ name: r.to, url: r.toUrl })),
+    children: rel2.filter((r) => ["subOrganization", "brand", "owns", "department"].includes(r.relation) && norm3(r.to) !== norm3(r.from)).map((r) => ({ name: r.to, url: r.toUrl, relation: r.relation })),
+    terms: report.content.topTerms.map((t) => t.term).slice(0, 40)
+  };
+}
+function analyzeEcosystem(snaps) {
+  const hosts = snaps.map((s) => s.host);
+  const obs = [];
+  const nameToHost = /* @__PURE__ */ new Map();
+  for (const s of snaps) for (const n of [...s.siteNames, ...s.orgNames]) if (!nameToHost.has(norm3(n))) nameToHost.set(norm3(n), s.host);
+  for (const s of snaps) {
+    for (const p of s.parents) {
+      const parentHost = p.url ? hostOf(p.url) : nameToHost.get(norm3(p.name));
+      const parent2 = snaps.find((x) => x.host === parentHost);
+      if (!parent2) continue;
+      if (!parent2.orgNames.some((n) => norm3(n) === norm3(p.name))) {
+        obs.push({ kind: "entity", confidence: "verified", sites: [s.host, parent2.host], message: `${s.host} names its parent "${p.name}", but ${parent2.host} declares its organisation as ${parent2.orgNames.map((n) => `"${n}"`).join(", ") || "(none)"}.`, recommendation: "Use the same organisation name and URL on both sites." });
+      }
+      const declared = parent2.children.some((c) => c.url && hostOf(c.url) === s.host || s.siteNames.concat(s.orgNames).some((n) => norm3(n) === norm3(c.name)));
+      if (!declared) {
+        obs.push({ kind: "entity", confidence: "verified", sites: [parent2.host, s.host], message: `${s.host} declares parentOrganization "${p.name}", but ${parent2.host} does not reference ${s.siteNames[0] ?? s.host} in its structured data (subOrganization / brand / owns).`, recommendation: `On ${parent2.host}, describe the relationship from the parent side too (schema.org subOrganization or brand on the Organization node), using names and URLs that match the product sites. This makes the family explicit to search engines and AI systems; it is not a rich-result feature.` });
+      }
+    }
+    if (!s.orgNames.length) obs.push({ kind: "entity", confidence: "verified", sites: [s.host], message: `${s.host} has no top-level Organization markup on the crawled pages.`, recommendation: "Add Organization structured data (name, url, logo, parentOrganization where applicable)." });
+    else {
+      const own = s.orgNames.filter((n) => s.siteNames.some((sn) => norm3(sn) === norm3(n)));
+      const parentNames = new Set(s.parents.flatMap((p) => {
+        const ph = p.url ? hostOf(p.url) : nameToHost.get(norm3(p.name));
+        return [norm3(p.name), ...(snaps.find((x) => x.host === ph)?.orgNames ?? []).map(norm3)];
+      }));
+      const other = s.orgNames.filter((n) => !own.includes(n) && !parentNames.has(norm3(n)));
+      if (!own.length && other.length) obs.push({ kind: "entity", confidence: "verified", sites: [s.host], message: `${s.host} (site name ${s.siteNames.map((n) => `"${n}"`).join(", ") || "unknown"}) describes its Organization as ${other.map((n) => `"${n}"`).join(", ")} \u2014 another family member's name.`, recommendation: "Use the product's own Organization (or Brand) node and reference the company via parentOrganization." });
+    }
+  }
+  const links = {};
+  for (const s of snaps) {
+    links[s.host] = {};
+    for (const h of hosts) if (h !== s.host) links[s.host][h] = s.outbound[h] ?? 0;
+  }
+  const parentHosts = new Set(snaps.flatMap((s) => s.parents.map((p) => p.url ? hostOf(p.url) : nameToHost.get(norm3(p.name))).filter((x) => !!x)));
+  for (const ph of parentHosts) {
+    const parent2 = snaps.find((s) => s.host === ph);
+    if (!parent2) continue;
+    const missing = snaps.filter((s) => s.host !== ph && !(links[ph]?.[s.host] ?? 0));
+    if (missing.length) obs.push({ kind: "linking", confidence: "verified", sites: [ph, ...missing.map((m) => m.host)], message: `${ph} has no crawled links to ${missing.map((m) => m.host).join(", ")}.`, recommendation: "Link the parent site to every product with descriptive anchor text so the family is discoverable." });
+    const noBack = snaps.filter((s) => s.host !== ph && !(links[s.host]?.[ph] ?? 0));
+    if (noBack.length) obs.push({ kind: "linking", confidence: "verified", sites: noBack.map((m) => m.host), message: `${noBack.map((m) => m.host).join(", ")} do not link back to ${ph} on the crawled pages.`, recommendation: 'Add a visible link to the parent company (e.g. footer "part of \u2026").' });
+  }
+  const overlap = [];
+  const primaryLang = (s) => Object.entries(s.report.inventory.languages).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+  const brandTerms = new Set(snaps.flatMap((s) => [...s.siteNames, ...s.orgNames, s.host.split(".")[0]].map((n) => n.toLowerCase())));
+  for (let i = 0; i < snaps.length; i++)
+    for (let j = i + 1; j < snaps.length; j++) {
+      const a = snaps[i], b = snaps[j];
+      if (primaryLang(a) !== primaryLang(b)) continue;
+      const ta = new Set(a.terms.filter((t) => !brandTerms.has(t)));
+      const tb = new Set(b.terms.filter((t) => !brandTerms.has(t)));
+      const shared = [...ta].filter((t) => tb.has(t));
+      const sim = shared.length / Math.max(1, ta.size + tb.size - shared.length);
+      overlap.push({ a: a.host, b: b.host, similarity: Math.round(sim * 100) / 100, shared: shared.slice(0, 12) });
+    }
+  overlap.sort((x, y) => y.similarity - x.similarity);
+  for (const o of overlap.filter((x) => x.similarity >= 0.35)) {
+    obs.push({ kind: "overlap", confidence: "heuristic", sites: [o.a, o.b], message: `${o.a} and ${o.b} share ${Math.round(o.similarity * 100)}% of their prominent terms (${o.shared.slice(0, 6).join(", ")}).`, recommendation: "Check in Search Console whether both sites rank for the same queries; give each product a distinct primary topic and cross-link instead of duplicating explanations." });
+  }
+  const byRule = /* @__PURE__ */ new Map();
+  for (const s of snaps) for (const f of s.report.findings) {
+    if (f.severity === "info" || f.confidence === "unmeasurable") continue;
+    const e = byRule.get(f.ruleId) ?? { title: f.title, severity: f.severity, sites: 0, pages: 0 };
+    e.sites++;
+    e.pages += f.count;
+    byRule.set(f.ruleId, e);
+  }
+  const sharedIssues = [...byRule.entries()].filter(([, e]) => e.sites >= Math.max(2, Math.ceil(snaps.length / 2))).map(([ruleId, e]) => ({ ruleId, ...e })).sort((a, b) => b.sites - a.sites || b.pages - a.pages);
+  for (const i of sharedIssues.filter((x) => x.severity === "critical" || x.severity === "high" || x.severity === "medium")) {
+    obs.push({ kind: "shared-issue", confidence: "heuristic", sites: snaps.filter((s) => s.report.findings.some((f) => f.ruleId === i.ruleId)).map((s) => s.host), message: `"${i.title}" (${i.ruleId}) appears on ${i.sites} of ${snaps.length} sites (${i.pages} pages) \u2014 likely a shared template or component.`, recommendation: "Fix it once in the shared layout/package and re-audit all sites." });
+  }
+  const langs = snaps.map((s) => ({ host: s.host, langs: s.report.inventory.hreflangLanguages.filter((l) => l !== "x-default") }));
+  const all2 = new Set(langs.flatMap((l) => l.langs));
+  for (const l of langs) {
+    const missing = [...all2].filter((x) => !l.langs.includes(x));
+    if (all2.size > 1 && missing.length && l.langs.length) obs.push({ kind: "coverage", confidence: "verified", sites: [l.host], message: `${l.host} has no ${missing.join(", ")} alternate while other family sites do.`, recommendation: "Decide per product whether the market needs that language; if yes, add localized pages with reciprocal hreflang." });
+    if (all2.size > 1 && !l.langs.length) obs.push({ kind: "coverage", confidence: "verified", sites: [l.host], message: `${l.host} declares no hreflang alternates while other family sites are multilingual (${[...all2].join(", ")}).`, recommendation: "If localized versions exist or are planned, connect them with hreflang." });
+  }
+  return {
+    sites: snaps.map((s) => ({
+      host: s.host,
+      siteName: s.siteNames.join(" / ") || "\u2014",
+      organization: s.orgNames.join(" / ") || "\u2014",
+      parent: s.parents.map((p) => p.name).join(", ") || "\u2014",
+      children: s.children.map((c) => c.name),
+      model: `${s.report.inventory.businessModel.label}${s.report.inventory.businessModel.confidence ? ` (${s.report.inventory.businessModel.confidence})` : ""}`,
+      languages: Object.keys(s.report.inventory.languages),
+      pages: s.report.crawl.crawled,
+      score: s.report.scores.overall,
+      offerings: (s.report.inventory.offerings ?? []).map((o) => `${o.kind}: ${o.name}`)
+    })),
+    links,
+    overlap,
+    sharedIssues,
+    observations: obs,
+    limitations: [
+      "Based on the crawled pages of each site (page limits apply); links and markup on uncrawled pages are not seen.",
+      "Topic overlap compares on-page term statistics; it does not show search demand or actual ranking competition \u2014 confirm with Search Console."
+    ]
+  };
+}
+function renderEcosystemMarkdown(r) {
+  const L = ["# Searvex ecosystem analysis", ""];
+  L.push("## Sites", "", "| Site | Site name | Organization | Parent | Declares children | Model (heuristic) | Languages | Pages | Score |", "|---|---|---|---|---|---|---|---|---|");
+  for (const s of r.sites) L.push(`| ${md(s.host)} | ${md(s.siteName)} | ${md(s.organization)} | ${md(s.parent)} | ${s.children.map(md).join(", ") || "\u2014"} | ${md(s.model)} | ${s.languages.map(md).join(", ")} | ${s.pages} | ${s.score} |`);
+  L.push("", "## Cross-links (links from row site to column site, crawled pages)", "");
+  const hosts = r.sites.map((s) => s.host);
+  L.push(`| from \\ to | ${hosts.map(md).join(" | ")} |`, `|---|${hosts.map(() => "---").join("|")}|`);
+  for (const h of hosts) L.push(`| ${md(h)} | ${hosts.map((t) => t === h ? "\xB7" : String(r.links[h]?.[t] ?? 0)).join(" | ")} |`);
+  L.push("", "## Observations", "");
+  if (!r.observations.length) L.push("_No ecosystem issues found._");
+  for (const kind of ["entity", "linking", "shared-issue", "overlap", "coverage"]) {
+    const list = r.observations.filter((o) => o.kind === kind);
+    if (!list.length) continue;
+    L.push(`### ${{ entity: "Entity & brand graph", linking: "Cross-linking", "shared-issue": "Issues shared across the family", overlap: "Topic overlap", coverage: "Language coverage" }[kind]}`, "");
+    for (const o of list) L.push(`- ${o.confidence === "heuristic" ? "~ " : ""}${md(o.message)}${o.recommendation ? `
+  - **Recommendation:** ${md(o.recommendation)}` : ""}`);
+    L.push("");
+  }
+  if (r.overlap.length) {
+    L.push("## Topic similarity (same primary language)", "", "| Sites | Similarity | Shared prominent terms |", "|---|---|---|");
+    for (const o of r.overlap.slice(0, 15)) L.push(`| ${md(o.a)} \u2194 ${md(o.b)} | ${Math.round(o.similarity * 100)}% | ${o.shared.slice(0, 8).map(md).join(", ")} |`);
+    L.push("");
+  }
+  L.push("## Limitations", "", ...r.limitations.map((l) => `- ${md(l)}`), "", "`~` marks heuristic observations.", "");
+  return L.join("\n");
+}
+function reuseLatest(workspace, url) {
+  const target = new URL(url).toString();
+  for (const id of RunStore.list(workspace).reverse()) {
+    const store2 = new RunStore(workspace, id);
+    const report = store2.readJson("report.json");
+    if (report?.mode === "website" && hostOf(report.target) === hostOf(target)) {
+      const pages = store2.readLines("pages.jsonl");
+      if (pages.length) return { report, pages };
+    }
+  }
+  return null;
+}
+async function commandEcosystem(flags) {
+  const v = flags.values;
+  const urls = flags.positionals.slice(1);
+  if (urls.length < 2) throw new UsageError("ecosystem requires at least two site URLs");
+  if (urls.length > 20) throw new UsageError("At most 20 sites");
+  for (const u of urls) if (!/^https?:\/\//i.test(u)) throw new UsageError(`Invalid URL: ${u}`);
+  const kb = loadKnowledge();
+  const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
+  const opts = { ...crawlOptionsFrom(v), maxPages: num(v["max-pages"], 60, 1, 1e5) };
+  const snaps = new Array(urls.length);
+  let next2 = 0;
+  const worker = async () => {
+    for (let i = next2++; i < urls.length; i = next2++) {
+      const u = urls[i];
+      const reused = v["reuse"] ? reuseLatest(workspace, u) : null;
+      if (reused) {
+        log(v, `Reusing stored run for ${u}`);
+        snaps[i] = snapshot(reused.report, reused.pages);
+        continue;
+      }
+      log(v, `Crawling ${u} (max ${opts.maxPages} pages)\u2026`);
+      const store3 = new RunStore(workspace, RunStore.newRunId("audit"));
+      const result = await crawl(u, opts, store3);
+      const report = await analyzeCrawl(result, kb, { ...opts, probes: true });
+      report.runId = store3.runId;
+      store3.writeJson("report.json", report);
+      snaps[i] = snapshot(report, result.pages);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, urls.length) }, worker));
+  const eco = analyzeEcosystem(snaps);
+  const store2 = new RunStore(workspace, RunStore.newRunId("ecosystem"));
+  store2.writeJson("meta.json", { kind: "ecosystem", sites: urls, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
+  store2.writeJson("ecosystem.json", eco);
+  const out = store2.writeText("ecosystem.md", renderEcosystemMarkdown(eco));
+  store2.writeText("ecosystem.html", renderEcosystemHtml(eco));
+  if (v["json"]) process.stdout.write(JSON.stringify(eco, null, 2) + "\n");
+  else if (!v["quiet"]) console.log(renderEcosystemMarkdown(eco) + `
+Saved: ${out}`);
+  if (!fs13.existsSync(out)) return 2;
+  return 0;
+}
+
 // src/cli.ts
 var HELP = `Searvex ${SEARVEX_VERSION} \u2014 open-source search intelligence & optimization engine
 
@@ -41148,6 +41205,9 @@ Commands
                         in the credential store; "bing report <siteUrl>" checks the site is verified, then
                         analyses queries/pages
                         (bing is experimental: not yet verified against the live service)
+  crux <auth|status|logout>
+                        Chrome UX Report API key for real-user Core Web Vitals (hidden input, stored in the
+                        credential store; experimental)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and
@@ -41176,7 +41236,7 @@ Common options
   -h, --help            Show help
 
 Environment (all optional, read-only integrations)
-  SEARVEX_CRUX_API_KEY  Chrome UX Report API key \u2192 real Core Web Vitals field data
+  SEARVEX_CRUX_API_KEY  Chrome UX Report API key (instead of "searvex crux auth")
   SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
   SEARVEX_BING_API_KEY  Bing Webmaster Tools API key (instead of "searvex bing auth")
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
@@ -41315,7 +41375,7 @@ async function commandAudit(flags) {
       resumeRunId: v["resume"],
       kb,
       checkExternal: !!v["check-external"],
-      cruxApiKey: process.env["SEARVEX_CRUX_API_KEY"],
+      cruxApiKey: cruxKey()?.key,
       crawl: {
         ...opts,
         render: render3?.render,
@@ -41481,6 +41541,8 @@ Run "searvex --help" for usage.`);
         return await commandGsc(flags);
       case "bing":
         return await commandBing(flags);
+      case "crux":
+        return await commandCrux(flags);
       case "connect":
         return await commandConnect(flags);
       case "audit":

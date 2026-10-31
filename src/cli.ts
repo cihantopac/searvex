@@ -16,6 +16,7 @@ import { IMPLEMENTED_RULES } from './rules/implemented.js';
 import { commandRepo } from './commands/repo.js';
 import { commandOptimize, commandRollback } from './commands/optimize.js';
 import { commandMonitor } from './commands/monitor.js';
+import { commandCrux, cruxKey } from './commands/crux.js';
 import { commandResearch } from './commands/research.js';
 import { commandRun } from './commands/run.js';
 import { commandEcosystem } from './commands/ecosystem.js';
@@ -47,6 +48,9 @@ Commands
                         in the credential store; "bing report <siteUrl>" checks the site is verified, then
                         analyses queries/pages
                         (bing is experimental: not yet verified against the live service)
+  crux <auth|status|logout>
+                        Chrome UX Report API key for real-user Core Web Vitals (hidden input, stored in the
+                        credential store; experimental)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and
@@ -75,7 +79,7 @@ Common options
   -h, --help            Show help
 
 Environment (all optional, read-only integrations)
-  SEARVEX_CRUX_API_KEY  Chrome UX Report API key → real Core Web Vitals field data
+  SEARVEX_CRUX_API_KEY  Chrome UX Report API key (instead of "searvex crux auth")
   SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
   SEARVEX_BING_API_KEY  Bing Webmaster Tools API key (instead of "searvex bing auth")
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
@@ -225,7 +229,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
       resumeRunId: v['resume'] as string | undefined,
       kb,
       checkExternal: !!v['check-external'],
-      cruxApiKey: process.env['SEARVEX_CRUX_API_KEY'],
+      cruxApiKey: cruxKey()?.key,
       crawl: {
         ...opts,
         render: render?.render,
@@ -382,6 +386,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         return await commandGsc(flags);
       case 'bing':
         return await commandBing(flags);
+      case 'crux':
+        return await commandCrux(flags);
       case 'connect':
         return await commandConnect(flags);
       case 'audit':

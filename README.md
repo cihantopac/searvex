@@ -135,7 +135,7 @@ Full reference: [docs/cli.md](docs/cli.md).
 | `searvex gsc import export.zip` | Search Console Performance CSV/ZIP exports (no account access; no query × page data) | supported² |
 | `searvex gsc auth` (or `SEARVEX_GSC_TOKEN`) | Search Console query × page analysis, `monitor` performance | supported³ |
 | `searvex bing auth` (or `SEARVEX_BING_API_KEY`) | Bing Webmaster Tools query × page analysis | experimental¹ |
-| `SEARVEX_CRUX_API_KEY` | Real-user Core Web Vitals (Chrome UX Report API) | experimental¹ |
+| `searvex crux auth` (or `SEARVEX_CRUX_API_KEY`) | Real-user Core Web Vitals (Chrome UX Report API) | experimental¹ |
 | `SEARVEX_CREDENTIAL_STORE=keychain` | Keep the Search Console refresh token in the OS keychain instead of a 0600 file | supported |
 
 ¹ Experimental: implemented and tested against recorded API behaviour and synthetic exports, but not yet

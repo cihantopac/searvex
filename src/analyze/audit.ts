@@ -155,7 +155,7 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
         if (failing.length) sink.emit('perf.cwv-poor', { url: result.origin, observed: `${m.formFactor}: ${failing.join(', ')} (CrUX p75, ${m.collectionPeriod?.first ?? ''}–${m.collectionPeriod?.last ?? ''})` });
       }
     } else sink.emit('perf.cwv-unmeasured', { observed: fieldData.message });
-  } else sink.emit('perf.cwv-unmeasured', { observed: 'No CrUX API key configured (SEARVEX_CRUX_API_KEY)' });
+  } else sink.emit('perf.cwv-unmeasured', { observed: 'No CrUX API key configured (searvex crux auth, or SEARVEX_CRUX_API_KEY)' });
   const inventory = buildInventory(ctx);
   const findings = sink.findings();
   prioritise(findings, (id) => sink.affected(id), ctx);

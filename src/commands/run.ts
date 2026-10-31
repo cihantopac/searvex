@@ -1,3 +1,4 @@
+import { cruxKey } from './crux.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { analyzeCrawl, auditWebsite, scoreLabel, type AuditReport } from '../analyze/audit.js';
@@ -104,7 +105,7 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
   // 1–3: website
   if (url) {
     log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)…`);
-    const { report, store } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v['check-external'], cruxApiKey: process.env['SEARVEX_CRUX_API_KEY'] });
+    const { report, store } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v['check-external'], cruxApiKey: cruxKey()?.key });
     const files = writeReports(store, report, kb, ['json', 'md', 'html']);
     summary.website = { report, runId: store.runId, files };
     summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!getCredential('gsc') || !!process.env['SEARVEX_GSC_TOKEN'] };
