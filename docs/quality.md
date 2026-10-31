@@ -169,6 +169,26 @@ the keychain backend ignored `SEARVEX_CONFIG_DIR`, so a test run from a shell wi
 deleted the real credential — keychain entries are now isolated per config directory (sentinel-verified);
 `gsc auth` now opens the browser.
 
+## Real-world validation round 7 — permitted product family (2026-11-01)
+
+The 7 permitted sites (Laravel + Inertia SSR, Turkish/English), ≤ 60 pages each, 1 s per-host delay,
+2 connections, robots.txt honoured. 48–64 s and ≤ 139 MB RSS per site (run in parallel). Every suspect finding
+was checked against the live HTML before changing Searvex; raw captures stay outside the repository.
+
+| Defect in Searvex | Evidence | Fix | Effect (before → after) |
+|---|---|---|---|
+| Page linked only through redirects reported as orphan | the English home was linked 169× as `/en/` (301) and `/language/en` (302), never as `/en` | inlinks through internal redirects count for reachability (orphans, inlink counts, link opportunities); broken-link checks still use the linked URL | 1 → 0 |
+| Cannibalisation across languages | Turkish `/help` pages clustered with English `/en/help` pages | candidates must share a language | mixed clusters split by language |
+| Cannibalisation between legal documents | each product's privacy/refund policy on the company site | legal pages excluded | 3 → 0 on the company site |
+| Image dimensions flagged on aspect-ratio utility classes | `<img class="aspect-[16/9] w-full">` cannot shift layout | Tailwind `aspect-*` classes count as sized | 119 → 2 evidence items across 6 sites |
+
+Findings confirmed as real site defects (reported to the owner, not changed in Searvex): two `<title>`
+elements per page (Inertia root template + page title; the generic first title is what browsers use, which
+also explains "same title on 56–57 pages"); duplicate root-template meta descriptions; English blog pages
+with `lang="tr"`; English help pages with a Turkish H1; help category pages sharing one H1 and a generic
+first title; payment logos with only a height; server-side language selection by `Accept-Language` on the
+same URL (`lang.locale-adaptive`).
+
 ## Live Bing Webmaster validation (2026-11-01)
 
 Owner's Bing Webmaster account (8 verified sites of the permitted product family), key stored with

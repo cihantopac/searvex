@@ -30405,8 +30405,9 @@ var adapter = {
 };
 
 // src/extract/html.ts
-function sizedByLayout(style, nimg) {
+function sizedByLayout(style, nimg, cls) {
   if (nimg === "fill") return true;
+  if (/(^|\s)aspect-(video|square|\[\d+(\.\d+)?\/\d+(\.\d+)?\]|\d+\/\d+)(\s|$)/.test(cls ?? "")) return true;
   const s = (style ?? "").toLowerCase().replace(/\s+/g, "");
   return /aspect-ratio:/.test(s) || /position:absolute/.test(s) && /(^|;)width:100%/.test(s) && /(^|;)height:100%/.test(s);
 }
@@ -30496,7 +30497,7 @@ function extractPage(html3, pageUrl) {
     width: $2(el).attr("width"),
     height: $2(el).attr("height"),
     loading: $2(el).attr("loading"),
-    sizedByLayout: sizedByLayout($2(el).attr("style"), $2(el).attr("data-nimg"))
+    sizedByLayout: sizedByLayout($2(el).attr("style"), $2(el).attr("data-nimg"), $2(el).attr("class"))
   })).get();
   const jsonLd = [];
   $2('script[type="application/ld+json" i]').each((_, el) => {
@@ -35388,7 +35389,14 @@ function buildContext(crawl2) {
   const sitemapUrls = new Set(crawl2.sitemap.urls.map((u) => normalizeUrl(u.loc)).filter((x) => !!x));
   const startPath = new URL(crawl2.startUrl).pathname;
   const homepage = byUrl.get(new URL("/", crawl2.origin).toString()) ?? (/^\/([a-z]{2}(-[a-z]{2})?\/?)?$/i.test(startPath) ? byUrl.get(crawl2.startUrl) : void 0);
-  return { crawl: crawl2, pages: crawl2.pages, byUrl, inlinks, htmlPages, indexable, sitemapUrls, homepage };
+  const reachIn = /* @__PURE__ */ new Map();
+  for (const [target, sources] of inlinks) {
+    const rec = byUrl.get(target);
+    const final = rec?.redirects.length ? normalizeUrl(rec.finalUrl) ?? target : target;
+    const set = reachIn.get(final) ?? reachIn.set(final, /* @__PURE__ */ new Set()).get(final);
+    for (const s of sources) if (s !== final) set.add(s);
+  }
+  return { crawl: crawl2, pages: crawl2.pages, byUrl, inlinks, reachIn, htmlPages, indexable, sitemapUrls, homepage };
 }
 function resolveRecord(ctx, url) {
   const n = normalizeUrl(url);
@@ -35397,388 +35405,6 @@ function resolveRecord(ctx, url) {
 
 // src/analyze/content.ts
 import crypto2 from "node:crypto";
-var STOPWORDS = new Set(
-  // English
-  "a about above after again against all am an and any are as at be because been before being below between both but by can could did do does doing down during each few for from further had has have having he her here hers him his how i if in into is it its itself just me more most my no nor not now of off on once only or other our ours out over own same she should so some such than that the their them then there these they this those through to too under until up very was we were what when where which while who whom why will with you your yours get got also use using used new one two may like make many much via per vs etc com www http https home page ve ile bir bu da de i\xE7in gibi daha \xE7ok en mi mu m\xFC ne o \u015Fu ama veya ya ki her olan olarak sonra \xF6nce kadar ise de\u011Fil var yok nas\u0131l neden der die das und ist nicht mit f\xFCr auf ein eine den von zu im le la les et des un une du pour dans est el los las y en del por con para una".split(/\s+/)
-);
-function tokenize(text4) {
-  return text4.toLowerCase().replace(/\u0307/g, "").normalize("NFKC").split(/[^\p{L}\p{M}\p{N}]+/u).filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
-}
-function fnv1a(str, seed = 2166136261) {
-  let h = seed >>> 0;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return h >>> 0;
-}
-function shingles(words2, k = 5) {
-  const s = /* @__PURE__ */ new Set();
-  for (let i = 0; i + k <= words2.length; i++) s.add(fnv1a(words2.slice(i, i + k).join(" ")));
-  return s;
-}
-var MINHASH_N = 64;
-function minhash(sh) {
-  const sig = new Uint32Array(MINHASH_N).fill(4294967295);
-  for (const x of sh) {
-    const a = x >>> 0;
-    const b = Math.imul(x ^ 2654435769, 2246822507) >>> 0 | 1;
-    for (let i = 0; i < MINHASH_N; i++) {
-      const v = a + Math.imul(i, b) >>> 0;
-      if (v < sig[i]) sig[i] = v;
-    }
-  }
-  return sig;
-}
-function jaccard(a, b) {
-  let inter = 0;
-  for (const x of a) if (b.has(x)) inter++;
-  return inter / (a.size + b.size - inter || 1);
-}
-function runContentChecks(ctx, sink) {
-  const pages = ctx.indexable.map((p) => ({ p, f: factsOf(p) }));
-  const groupOf = (url) => {
-    const segs = new URL(url).pathname.split("/").filter(Boolean);
-    const locale = segs[0] && /^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0]) ? segs.shift() : "";
-    return `${locale}/${segs[0] ?? ""}`;
-  };
-  const docTerms = /* @__PURE__ */ new Map();
-  const df = /* @__PURE__ */ new Map();
-  for (const { p, f } of pages) {
-    const tf = /* @__PURE__ */ new Map();
-    const weighted = [
-      ...tokenize(f.title ?? "").flatMap((t) => [t, t, t]),
-      // Headings in site chrome (footer "Product family", "Legal"…) repeat on every page: not page topics.
-      ...f.headings.filter((h) => !h.chrome).flatMap((h) => tokenize(h.text).flatMap((t) => h.level === 1 ? [t, t, t] : [t, t])),
-      ...tokenize(f.mainText.slice(0, 2e4))
-    ];
-    for (const t of weighted) tf.set(t, (tf.get(t) ?? 0) + 1);
-    docTerms.set(p.url, tf);
-    for (const t of tf.keys()) df.set(t, (df.get(t) ?? 0) + 1);
-  }
-  const N = Math.max(1, pages.length);
-  const pageTerms = [];
-  const vectors = /* @__PURE__ */ new Map();
-  const secSize = /* @__PURE__ */ new Map();
-  const secDf = /* @__PURE__ */ new Map();
-  for (const [url, tf] of docTerms) {
-    const g = groupOf(url);
-    secSize.set(g, (secSize.get(g) ?? 0) + 1);
-    const m = secDf.get(g) ?? secDf.set(g, /* @__PURE__ */ new Map()).get(g);
-    for (const t of tf.keys()) m.set(t, (m.get(t) ?? 0) + 1);
-  }
-  for (const [url, tf] of docTerms) {
-    const g = groupOf(url);
-    const gs = secSize.get(g);
-    const sectionTemplate = (t) => gs >= 4 && (secDf.get(g).get(t) ?? 0) >= gs * 0.8;
-    const scored = [...tf.entries()].map(([t, c]) => [t, c * Math.log(1 + N / (df.get(t) ?? 1))]).sort((a, b) => b[1] - a[1]);
-    pageTerms.push({ url, terms: scored.slice(0, 8).map(([t]) => t) });
-    vectors.set(url, new Map(scored.filter(([t]) => (df.get(t) ?? 0) <= Math.max(3, N * 0.5) && !sectionTemplate(t)).slice(0, 20)));
-  }
-  const langOf = new Map(pages.map(({ p, f }) => [p.url, (f.lang ?? "").toLowerCase().split("-")[0]]));
-  const linkOpportunities = findLinkOpportunities(ctx, vectors, langOf);
-  if (linkOpportunities.length) {
-    sink.emit("links.internal-opportunity", linkOpportunities.slice(0, 50).map((o) => ({ url: o.to, observed: `link from ${o.from} (topic similarity ${Math.round(o.similarity * 100)}%: ${o.sharedTerms.slice(0, 4).join(", ")}); target has ${o.toInlinks} internal inlink(s)` })));
-  }
-  const topTerms = [...df.entries()].filter(([, c]) => c >= Math.min(2, N) && c <= Math.max(2, N * 0.8)).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([term, n]) => ({ term, pages: n }));
-  const utility = /\/(contact|login|signin|sign-in|register|signup|cart|checkout|account|search|404|privacy|terms|legal|cookie|impressum|iletisim|giris)(\/|$|\?)/i;
-  for (const { p, f } of pages) {
-    const linkDensity = f.mainWordCount ? (f.mainLinkWordCount ?? 0) / f.mainWordCount : 0;
-    if (f.mainWordCount < 100 && linkDensity < 0.5 && !utility.test(new URL(p.finalUrl).pathname) && p !== ctx.homepage) {
-      sink.emit("content.low-text", { url: p.url, observed: `${f.mainWordCount} words of main content (${f.wordCount} incl. navigation/footer)` });
-    }
-  }
-  const byHash = /* @__PURE__ */ new Map();
-  for (const { p, f } of pages) {
-    if (f.mainWordCount < 30) continue;
-    const h = crypto2.createHash("sha1").update(f.mainText.toLowerCase()).digest("hex");
-    const a = byHash.get(h);
-    if (a) a.push(p.url);
-    else byHash.set(h, [p.url]);
-  }
-  const exactDuplicates = [...byHash.values()].filter((g) => g.length > 1);
-  for (const g of exactDuplicates) sink.emit("duplicate.content", { url: g[0], observed: `identical text on ${g.length} URLs: ${g.slice(0, 5).join(", ")}` });
-  const allSh = /* @__PURE__ */ new Map();
-  for (const { p, f } of pages) {
-    const words2 = f.mainText.toLowerCase().split(/\s+/).filter(Boolean);
-    if (words2.length >= 50) allSh.set(p.url, shingles(words2));
-  }
-  const siteDf = /* @__PURE__ */ new Map();
-  const groupDf = /* @__PURE__ */ new Map();
-  const groupSize = /* @__PURE__ */ new Map();
-  for (const [url, s] of allSh) {
-    const g = groupOf(url);
-    groupSize.set(g, (groupSize.get(g) ?? 0) + 1);
-    const gm = groupDf.get(g) ?? /* @__PURE__ */ new Map();
-    groupDf.set(g, gm);
-    for (const x of s) {
-      siteDf.set(x, (siteDf.get(x) ?? 0) + 1);
-      gm.set(x, (gm.get(x) ?? 0) + 1);
-    }
-  }
-  const siteMin = Math.max(3, Math.ceil(allSh.size * 0.3));
-  const sh = /* @__PURE__ */ new Map();
-  const sigs = /* @__PURE__ */ new Map();
-  for (const [url, s] of allSh) {
-    const g = groupOf(url);
-    const gSize = groupSize.get(g) ?? 0;
-    const gMin = Math.max(3, Math.ceil(gSize * 0.3));
-    const gm = groupDf.get(g);
-    const isBoilerplate = (x) => allSh.size >= 5 && (siteDf.get(x) ?? 0) >= siteMin || gSize >= 5 && (gm.get(x) ?? 0) >= gMin;
-    const unique = new Set([...s].filter((x) => !isBoilerplate(x)));
-    if (unique.size < 20) continue;
-    sh.set(url, unique);
-    sigs.set(url, minhash(unique));
-  }
-  const buckets = /* @__PURE__ */ new Map();
-  for (const [url, sig] of sigs) {
-    for (let b = 0; b < 16; b++) {
-      const key = `${b}:${sig.slice(b * 4, b * 4 + 4).join(",")}`;
-      const arr = buckets.get(key);
-      if (arr) arr.push(url);
-      else buckets.set(key, [url]);
-    }
-  }
-  const exactSet = new Set(exactDuplicates.flat());
-  const seenPairs = /* @__PURE__ */ new Set();
-  const nearDuplicates = [];
-  for (const urls of buckets.values()) {
-    if (urls.length < 2 || urls.length > 200) continue;
-    for (let i = 0; i < urls.length; i++)
-      for (let j = i + 1; j < urls.length; j++) {
-        const a = urls[i], b = urls[j];
-        const key = a < b ? `${a}|${b}` : `${b}|${a}`;
-        if (seenPairs.has(key)) continue;
-        seenPairs.add(key);
-        if (exactSet.has(a) && exactSet.has(b)) continue;
-        const sim = jaccard(sh.get(a), sh.get(b));
-        if (sim >= 0.9) nearDuplicates.push({ a, b, similarity: Math.round(sim * 100) / 100 });
-      }
-  }
-  if (nearDuplicates.length) sink.emit("content.near-duplicate", nearDuplicates.slice(0, 50).map((d) => ({ url: d.a, observed: `${Math.round(d.similarity * 100)}% similar to ${d.b}` })));
-  const groups = /* @__PURE__ */ new Map();
-  const titleTerms = /* @__PURE__ */ new Map();
-  const specificTerms = /* @__PURE__ */ new Map();
-  const sectionTermDf = /* @__PURE__ */ new Map();
-  const sectionPages = /* @__PURE__ */ new Map();
-  for (const { p, f } of pages) {
-    const terms = [.../* @__PURE__ */ new Set([...tokenize(f.title ?? ""), ...tokenize(f.headings.find((h) => h.level === 1 && !h.chrome)?.text ?? "")])];
-    titleTerms.set(p.url, terms);
-    const g = groupOf(p.url);
-    sectionPages.set(g, (sectionPages.get(g) ?? 0) + 1);
-    const m = sectionTermDf.get(g) ?? /* @__PURE__ */ new Map();
-    sectionTermDf.set(g, m);
-    for (const t of terms) m.set(t, (m.get(t) ?? 0) + 1);
-  }
-  for (const { p } of pages) {
-    const terms = titleTerms.get(p.url);
-    const section = groupOf(p.url);
-    const gSize = sectionPages.get(section) ?? 0;
-    const specific = terms.filter((t) => ((df.get(t) ?? 0) < N * 0.5 || N < 4) && !(gSize >= 4 && (sectionTermDf.get(section).get(t) ?? 0) >= gSize * 0.5));
-    if (specific.length >= 2) specificTerms.set(p.url, new Set(specific));
-  }
-  const index2 = /* @__PURE__ */ new Map();
-  for (const [url, set] of specificTerms) for (const t of set) (index2.get(t) ?? index2.set(t, []).get(t)).push(url);
-  const parent2 = /* @__PURE__ */ new Map();
-  const find5 = (x) => {
-    const px = parent2.get(x) ?? x;
-    if (px === x) return x;
-    const r = find5(px);
-    parent2.set(x, r);
-    return r;
-  };
-  const checked = /* @__PURE__ */ new Set();
-  for (const urls of index2.values()) {
-    if (urls.length > 100) continue;
-    for (let i = 0; i < urls.length; i++)
-      for (let j = i + 1; j < urls.length; j++) {
-        const a = urls[i], b = urls[j];
-        const key = a < b ? a + "|" + b : b + "|" + a;
-        if (checked.has(key)) continue;
-        checked.add(key);
-        const sa = specificTerms.get(a), sb = specificTerms.get(b);
-        let shared = 0;
-        for (const t of sa) if (sb.has(t)) shared++;
-        if (shared >= 2 && shared / (sa.size + sb.size - shared) >= 0.6) parent2.set(find5(a), find5(b));
-      }
-  }
-  for (const url of specificTerms.keys()) {
-    const root2 = find5(url);
-    (groups.get(root2) ?? groups.set(root2, []).get(root2)).push(url);
-  }
-  const cannibalization = [...groups.values()].filter((g) => g.length > 1).map((g) => {
-    const sets = g.map((u) => specificTerms.get(u));
-    const common = [...sets[0]].filter((t) => sets.every((x) => x.has(t)));
-    return { terms: (common.length ? common : [...sets[0]]).slice(0, 4), pages: g };
-  });
-  for (const c of cannibalization) sink.emit("content.cannibalization", { url: c.pages[0], observed: `"${c.terms.join(" ")}" shared by ${c.pages.length} pages: ${c.pages.slice(0, 5).join(", ")}` });
-  const clusterMap = /* @__PURE__ */ new Map();
-  for (const { p } of pages) {
-    const seg = new URL(p.finalUrl).pathname.split("/").filter(Boolean)[0] ?? "(root)";
-    const a = clusterMap.get(seg);
-    if (a) a.push(p.url);
-    else clusterMap.set(seg, [p.url]);
-  }
-  const clusters = [...clusterMap.entries()].map(([key, urls]) => {
-    const counts = /* @__PURE__ */ new Map();
-    for (const u of urls) for (const t of pageTerms.find((x) => x.url === u)?.terms ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
-    return { key, pages: urls, terms: [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([t]) => t) };
-  }).sort((a, b) => b.pages.length - a.pages.length);
-  return { topTerms, pageTerms, clusters, cannibalization, nearDuplicates, exactDuplicates, linkOpportunities: linkOpportunities.slice(0, 200) };
-}
-function findLinkOpportunities(ctx, vectors, langOf) {
-  const otherLanguage = (a, b) => {
-    const la = langOf?.get(a), lb = langOf?.get(b);
-    return !!la && !!lb && la !== lb;
-  };
-  const norm4 = /* @__PURE__ */ new Map();
-  for (const [u, v] of vectors) norm4.set(u, Math.sqrt([...v.values()].reduce((a, x) => a + x * x, 0)) || 1);
-  const index2 = /* @__PURE__ */ new Map();
-  for (const [u, v] of vectors) for (const t of v.keys()) (index2.get(t) ?? index2.set(t, []).get(t)).push(u);
-  const outlinks = /* @__PURE__ */ new Map();
-  for (const [target, sources] of ctx.inlinks) for (const s of sources) (outlinks.get(s) ?? outlinks.set(s, /* @__PURE__ */ new Set()).get(s)).add(target);
-  const links = (a, b) => outlinks.get(a)?.has(b) || outlinks.get(b)?.has(a);
-  const inl = (u) => ctx.inlinks.get(u)?.size ?? 0;
-  const seen = /* @__PURE__ */ new Set();
-  const out = [];
-  for (const urls of index2.values()) {
-    if (urls.length > 200) continue;
-    for (let i = 0; i < urls.length; i++)
-      for (let j = i + 1; j < urls.length; j++) {
-        const a = urls[i], b = urls[j];
-        const key = a < b ? a + "|" + b : b + "|" + a;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        if (otherLanguage(a, b)) continue;
-        const va = vectors.get(a), vb = vectors.get(b);
-        let dot = 0;
-        const shared = [];
-        for (const [t, w] of va) {
-          const w2 = vb.get(t);
-          if (w2 !== void 0) {
-            dot += w * w2;
-            shared.push(t);
-          }
-        }
-        const sim = dot / (norm4.get(a) * norm4.get(b));
-        if (shared.length < 2 || sim < 0.3 || sim > 0.9 || links(a, b)) continue;
-        const [from, to] = inl(a) >= inl(b) ? [a, b] : [b, a];
-        out.push({ from, to, similarity: Math.round(sim * 100) / 100, sharedTerms: shared.slice(0, 6), toInlinks: inl(to) });
-      }
-  }
-  out.sort((x, y) => x.toInlinks - y.toInlinks || y.similarity - x.similarity);
-  const perTarget = /* @__PURE__ */ new Map();
-  return out.filter((o) => {
-    const n = perTarget.get(o.to) ?? 0;
-    if (n >= 3) return false;
-    perTarget.set(o.to, n + 1);
-    return true;
-  });
-}
-
-// src/analyze/geo.ts
-function answerability(ctx) {
-  const out = [];
-  for (const p of ctx.indexable) {
-    const f = factsOf(p);
-    const s = f.structure;
-    const signals = {
-      descriptiveTitle: !!f.title && f.title.split(/\s+/).length >= 3,
-      hasH1: f.headings.some((h) => h.level === 1),
-      sectioned: f.headings.filter((h) => h.level === 2).length >= 2,
-      questionHeadings: s.questionHeadings > 0,
-      conciseParagraphs: s.paragraphs > 0 && s.avgParagraphWords <= 80,
-      listsOrTables: s.lists + s.tables > 0,
-      datedOrAuthored: s.hasPublishedDate || s.hasAuthor,
-      structuredData: f.jsonLd.some((b) => !b.error),
-      substantiveText: f.mainWordCount >= 150
-    };
-    const vals = Object.values(signals);
-    out.push({ url: p.url, score: Math.round(vals.filter(Boolean).length / vals.length * 100), signals });
-  }
-  return out;
-}
-function runGeoChecks(ctx, sink, llms) {
-  const notes = [];
-  const matrix = ctx.crawl.robots.state === "ok" || ctx.crawl.robots.state === "missing" ? botAccessMatrix(ctx.crawl.robots, ctx.crawl.startUrl) : [];
-  for (const b of matrix) {
-    if (b.homepageAllowed) continue;
-    if (b.bot.token === "Googlebot" || b.bot.token === "Bingbot") sink.emit("geo.search-bot-blocked", { url: ctx.crawl.robots.url, observed: `${b.bot.token} disallowed` });
-    if (b.bot.purpose === "ai-search" && ["OAI-SearchBot", "Claude-SearchBot", "PerplexityBot"].includes(b.bot.token)) {
-      sink.emit("geo.ai-search-bot-blocked", { url: ctx.crawl.robots.url, observed: `${b.bot.token} (${b.bot.operator}) disallowed${b.explicit ? "" : " via * group"}` });
-    }
-  }
-  const training = matrix.filter((b) => b.bot.purpose === "ai-training");
-  if (training.length) {
-    sink.emit("geo.training-bots", {
-      url: ctx.crawl.robots.url,
-      observed: training.map((b) => `${b.bot.token}: ${b.homepageAllowed ? "allowed" : "blocked"}`).join(", ")
-    });
-  }
-  if (ctx.crawl.robots.state === "unreachable") notes.push("robots.txt unreachable: AI crawler access could not be evaluated (RFC 9309 treats this as full disallow).");
-  const snippetRestricted = [];
-  for (const p of ctx.htmlPages) {
-    if (isNoindex(p)) continue;
-    const d = robotsDirectives(p, ["googlebot", "bingbot"]);
-    const restricted = d.filter((x) => x === "nosnippet" || x === "max-snippet:0" || x === "noarchive" || x === "nocache");
-    if (restricted.length) {
-      snippetRestricted.push(p.url);
-      sink.emit("geo.snippet-restricted", { url: p.url, observed: restricted.join(", ") });
-    }
-  }
-  if (llms) sink.emit("geo.llms-txt", { url: llms.url, observed: llms.present ? `present (${llms.bytes} bytes) \u2014 not used by Google; no scoring impact` : `absent (HTTP ${llms.status}) \u2014 no scoring impact` });
-  const entityNames = {};
-  const roles = { site: /* @__PURE__ */ new Map(), organization: /* @__PURE__ */ new Map() };
-  const norm4 = (n) => n.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
-  const note = (role, name, url) => {
-    const k = norm4(name);
-    if (!k) return;
-    entityNames[name] = (entityNames[name] ?? 0) + 1;
-    const set = roles[role].get(k) ?? /* @__PURE__ */ new Set();
-    set.add(`${name}|${url}`);
-    roles[role].set(k, set);
-  };
-  for (const p of ctx.htmlPages) {
-    const f = factsOf(p);
-    for (const b of f.jsonLd) {
-      const data2 = b.data;
-      const roots = Array.isArray(data2) ? data2 : data2 && Array.isArray(data2["@graph"]) ? data2["@graph"] : [data2];
-      for (const n of roots) {
-        if (!n || typeof n !== "object") continue;
-        const node = n;
-        const t = [].concat(node["@type"] ?? []);
-        if (typeof node["name"] !== "string") continue;
-        if (t.includes("WebSite")) note("site", node["name"].trim(), p.url);
-        else if (t.some((x) => typeof x === "string" && /Organization|Corporation|LocalBusiness|OnlineStore|OnlineBusiness/.test(x))) note("organization", node["name"].trim(), p.url);
-      }
-    }
-    if (f.openGraph["og:site_name"]) note("site", f.openGraph["og:site_name"].trim(), p.url);
-  }
-  for (const role of ["site", "organization"]) {
-    if (roles[role].size > 1) {
-      const variants = [...roles[role].values()].map((set) => {
-        const [name, url] = [...set][0].split("|");
-        return `"${name}" on ${set.size} page(s), e.g. ${url}`;
-      });
-      sink.emit("geo.entity-inconsistent", { observed: `${role === "site" ? "site name (WebSite / og:site_name)" : "organization name"}: ${variants.join("; ")}` });
-    }
-  }
-  const pages = answerability(ctx);
-  const average = pages.length ? Math.round(pages.reduce((a, p) => a + p.score, 0) / pages.length) : 0;
-  const weak = pages.filter((p) => p.score < 50);
-  if (weak.length) sink.emit("geo.answerability", weak.slice(0, 50).map((p) => ({ url: p.url, observed: `clarity signals ${p.score}/100; missing: ${Object.entries(p.signals).filter(([, v]) => !v).map(([k]) => k).join(", ")}` })));
-  sink.emit("geo.citations-unmeasured", { observed: "No AI citation data source configured" });
-  notes.push("Answerability is a heuristic clarity signal. Google states AI Overviews/AI Mode require no special optimisation; no citation or ranking prediction is made.");
-  return {
-    bots: matrix.map((b) => ({ token: b.bot.token, operator: b.bot.operator, purpose: b.bot.purpose, allowed: b.homepageAllowed, explicit: b.explicit, docs: b.bot.docs })),
-    llmsTxt: llms,
-    entityNames,
-    answerability: { average, pages: pages.sort((a, b) => a.score - b.score).slice(0, 200) },
-    snippetRestricted,
-    citations: { measured: false, reason: "No AI citation integration configured (Bing AI Performance export or Search Console data can be imported)." },
-    notes
-  };
-}
 
 // src/analyze/structured-data.ts
 var BASE = "https://developers.google.com/search/docs/appearance/structured-data/";
@@ -36176,7 +35802,7 @@ function buildInventory(ctx) {
       status: p.status,
       indexable: !isNoindex(p),
       depth: p.depth,
-      inlinks: ctx.inlinks.get(p.url)?.size ?? 0,
+      inlinks: ctx.reachIn.get(p.url)?.size ?? 0,
       words: f.wordCount,
       intent: pageIntent({ type, basis })?.intent
     });
@@ -36299,6 +35925,393 @@ function classifyBusiness(ctx, byType, sd) {
     businessModel: { label: best[0], evidence: why[best[0]].filter((r) => r !== "default"), confidence, alternatives: ranked.slice(1, 3).map(([label, s]) => ({ label, score: s })) },
     offerings: [...offers.values()].sort((a, b) => b.pages - a.pages).slice(0, 50),
     relations: [...relations.values()]
+  };
+}
+
+// src/analyze/content.ts
+var STOPWORDS = new Set(
+  // English
+  "a about above after again against all am an and any are as at be because been before being below between both but by can could did do does doing down during each few for from further had has have having he her here hers him his how i if in into is it its itself just me more most my no nor not now of off on once only or other our ours out over own same she should so some such than that the their them then there these they this those through to too under until up very was we were what when where which while who whom why will with you your yours get got also use using used new one two may like make many much via per vs etc com www http https home page ve ile bir bu da de i\xE7in gibi daha \xE7ok en mi mu m\xFC ne o \u015Fu ama veya ya ki her olan olarak sonra \xF6nce kadar ise de\u011Fil var yok nas\u0131l neden der die das und ist nicht mit f\xFCr auf ein eine den von zu im le la les et des un une du pour dans est el los las y en del por con para una".split(/\s+/)
+);
+function tokenize(text4) {
+  return text4.toLowerCase().replace(/\u0307/g, "").normalize("NFKC").split(/[^\p{L}\p{M}\p{N}]+/u).filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
+}
+function fnv1a(str, seed = 2166136261) {
+  let h = seed >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+function shingles(words2, k = 5) {
+  const s = /* @__PURE__ */ new Set();
+  for (let i = 0; i + k <= words2.length; i++) s.add(fnv1a(words2.slice(i, i + k).join(" ")));
+  return s;
+}
+var MINHASH_N = 64;
+function minhash(sh) {
+  const sig = new Uint32Array(MINHASH_N).fill(4294967295);
+  for (const x of sh) {
+    const a = x >>> 0;
+    const b = Math.imul(x ^ 2654435769, 2246822507) >>> 0 | 1;
+    for (let i = 0; i < MINHASH_N; i++) {
+      const v = a + Math.imul(i, b) >>> 0;
+      if (v < sig[i]) sig[i] = v;
+    }
+  }
+  return sig;
+}
+function jaccard(a, b) {
+  let inter = 0;
+  for (const x of a) if (b.has(x)) inter++;
+  return inter / (a.size + b.size - inter || 1);
+}
+function runContentChecks(ctx, sink) {
+  const pages = ctx.indexable.map((p) => ({ p, f: factsOf(p) }));
+  const groupOf = (url) => {
+    const segs = new URL(url).pathname.split("/").filter(Boolean);
+    const locale = segs[0] && /^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0]) ? segs.shift() : "";
+    return `${locale}/${segs[0] ?? ""}`;
+  };
+  const docTerms = /* @__PURE__ */ new Map();
+  const df = /* @__PURE__ */ new Map();
+  for (const { p, f } of pages) {
+    const tf = /* @__PURE__ */ new Map();
+    const weighted = [
+      ...tokenize(f.title ?? "").flatMap((t) => [t, t, t]),
+      // Headings in site chrome (footer "Product family", "Legal"…) repeat on every page: not page topics.
+      ...f.headings.filter((h) => !h.chrome).flatMap((h) => tokenize(h.text).flatMap((t) => h.level === 1 ? [t, t, t] : [t, t])),
+      ...tokenize(f.mainText.slice(0, 2e4))
+    ];
+    for (const t of weighted) tf.set(t, (tf.get(t) ?? 0) + 1);
+    docTerms.set(p.url, tf);
+    for (const t of tf.keys()) df.set(t, (df.get(t) ?? 0) + 1);
+  }
+  const N = Math.max(1, pages.length);
+  const pageTerms = [];
+  const vectors = /* @__PURE__ */ new Map();
+  const secSize = /* @__PURE__ */ new Map();
+  const secDf = /* @__PURE__ */ new Map();
+  for (const [url, tf] of docTerms) {
+    const g = groupOf(url);
+    secSize.set(g, (secSize.get(g) ?? 0) + 1);
+    const m = secDf.get(g) ?? secDf.set(g, /* @__PURE__ */ new Map()).get(g);
+    for (const t of tf.keys()) m.set(t, (m.get(t) ?? 0) + 1);
+  }
+  for (const [url, tf] of docTerms) {
+    const g = groupOf(url);
+    const gs = secSize.get(g);
+    const sectionTemplate = (t) => gs >= 4 && (secDf.get(g).get(t) ?? 0) >= gs * 0.8;
+    const scored = [...tf.entries()].map(([t, c]) => [t, c * Math.log(1 + N / (df.get(t) ?? 1))]).sort((a, b) => b[1] - a[1]);
+    pageTerms.push({ url, terms: scored.slice(0, 8).map(([t]) => t) });
+    vectors.set(url, new Map(scored.filter(([t]) => (df.get(t) ?? 0) <= Math.max(3, N * 0.5) && !sectionTemplate(t)).slice(0, 20)));
+  }
+  const langOf = new Map(pages.map(({ p, f }) => [p.url, (f.lang ?? "").toLowerCase().split("-")[0]]));
+  const linkOpportunities = findLinkOpportunities(ctx, vectors, langOf);
+  if (linkOpportunities.length) {
+    sink.emit("links.internal-opportunity", linkOpportunities.slice(0, 50).map((o) => ({ url: o.to, observed: `link from ${o.from} (topic similarity ${Math.round(o.similarity * 100)}%: ${o.sharedTerms.slice(0, 4).join(", ")}); target has ${o.toInlinks} internal inlink(s)` })));
+  }
+  const topTerms = [...df.entries()].filter(([, c]) => c >= Math.min(2, N) && c <= Math.max(2, N * 0.8)).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([term, n]) => ({ term, pages: n }));
+  const utility = /\/(contact|login|signin|sign-in|register|signup|cart|checkout|account|search|404|privacy|terms|legal|cookie|impressum|iletisim|giris)(\/|$|\?)/i;
+  for (const { p, f } of pages) {
+    const linkDensity = f.mainWordCount ? (f.mainLinkWordCount ?? 0) / f.mainWordCount : 0;
+    if (f.mainWordCount < 100 && linkDensity < 0.5 && !utility.test(new URL(p.finalUrl).pathname) && p !== ctx.homepage) {
+      sink.emit("content.low-text", { url: p.url, observed: `${f.mainWordCount} words of main content (${f.wordCount} incl. navigation/footer)` });
+    }
+  }
+  const byHash = /* @__PURE__ */ new Map();
+  for (const { p, f } of pages) {
+    if (f.mainWordCount < 30) continue;
+    const h = crypto2.createHash("sha1").update(f.mainText.toLowerCase()).digest("hex");
+    const a = byHash.get(h);
+    if (a) a.push(p.url);
+    else byHash.set(h, [p.url]);
+  }
+  const exactDuplicates = [...byHash.values()].filter((g) => g.length > 1);
+  for (const g of exactDuplicates) sink.emit("duplicate.content", { url: g[0], observed: `identical text on ${g.length} URLs: ${g.slice(0, 5).join(", ")}` });
+  const allSh = /* @__PURE__ */ new Map();
+  for (const { p, f } of pages) {
+    const words2 = f.mainText.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words2.length >= 50) allSh.set(p.url, shingles(words2));
+  }
+  const siteDf = /* @__PURE__ */ new Map();
+  const groupDf = /* @__PURE__ */ new Map();
+  const groupSize = /* @__PURE__ */ new Map();
+  for (const [url, s] of allSh) {
+    const g = groupOf(url);
+    groupSize.set(g, (groupSize.get(g) ?? 0) + 1);
+    const gm = groupDf.get(g) ?? /* @__PURE__ */ new Map();
+    groupDf.set(g, gm);
+    for (const x of s) {
+      siteDf.set(x, (siteDf.get(x) ?? 0) + 1);
+      gm.set(x, (gm.get(x) ?? 0) + 1);
+    }
+  }
+  const siteMin = Math.max(3, Math.ceil(allSh.size * 0.3));
+  const sh = /* @__PURE__ */ new Map();
+  const sigs = /* @__PURE__ */ new Map();
+  for (const [url, s] of allSh) {
+    const g = groupOf(url);
+    const gSize = groupSize.get(g) ?? 0;
+    const gMin = Math.max(3, Math.ceil(gSize * 0.3));
+    const gm = groupDf.get(g);
+    const isBoilerplate = (x) => allSh.size >= 5 && (siteDf.get(x) ?? 0) >= siteMin || gSize >= 5 && (gm.get(x) ?? 0) >= gMin;
+    const unique = new Set([...s].filter((x) => !isBoilerplate(x)));
+    if (unique.size < 20) continue;
+    sh.set(url, unique);
+    sigs.set(url, minhash(unique));
+  }
+  const buckets = /* @__PURE__ */ new Map();
+  for (const [url, sig] of sigs) {
+    for (let b = 0; b < 16; b++) {
+      const key = `${b}:${sig.slice(b * 4, b * 4 + 4).join(",")}`;
+      const arr = buckets.get(key);
+      if (arr) arr.push(url);
+      else buckets.set(key, [url]);
+    }
+  }
+  const exactSet = new Set(exactDuplicates.flat());
+  const seenPairs = /* @__PURE__ */ new Set();
+  const nearDuplicates = [];
+  for (const urls of buckets.values()) {
+    if (urls.length < 2 || urls.length > 200) continue;
+    for (let i = 0; i < urls.length; i++)
+      for (let j = i + 1; j < urls.length; j++) {
+        const a = urls[i], b = urls[j];
+        const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+        if (seenPairs.has(key)) continue;
+        seenPairs.add(key);
+        if (exactSet.has(a) && exactSet.has(b)) continue;
+        const sim = jaccard(sh.get(a), sh.get(b));
+        if (sim >= 0.9) nearDuplicates.push({ a, b, similarity: Math.round(sim * 100) / 100 });
+      }
+  }
+  if (nearDuplicates.length) sink.emit("content.near-duplicate", nearDuplicates.slice(0, 50).map((d) => ({ url: d.a, observed: `${Math.round(d.similarity * 100)}% similar to ${d.b}` })));
+  const groups = /* @__PURE__ */ new Map();
+  const titleTerms = /* @__PURE__ */ new Map();
+  const specificTerms = /* @__PURE__ */ new Map();
+  const sectionTermDf = /* @__PURE__ */ new Map();
+  const sectionPages = /* @__PURE__ */ new Map();
+  for (const { p, f } of pages) {
+    const terms = [.../* @__PURE__ */ new Set([...tokenize(f.title ?? ""), ...tokenize(f.headings.find((h) => h.level === 1 && !h.chrome)?.text ?? "")])];
+    titleTerms.set(p.url, terms);
+    const g = groupOf(p.url);
+    sectionPages.set(g, (sectionPages.get(g) ?? 0) + 1);
+    const m = sectionTermDf.get(g) ?? /* @__PURE__ */ new Map();
+    sectionTermDf.set(g, m);
+    for (const t of terms) m.set(t, (m.get(t) ?? 0) + 1);
+  }
+  const legal = URL_RULES.find(([, t]) => t === "legal")[0];
+  for (const { p } of pages) {
+    if (legal.test(new URL(p.url).pathname)) continue;
+    const terms = titleTerms.get(p.url);
+    const section = groupOf(p.url);
+    const gSize = sectionPages.get(section) ?? 0;
+    const specific = terms.filter((t) => ((df.get(t) ?? 0) < N * 0.5 || N < 4) && !(gSize >= 4 && (sectionTermDf.get(section).get(t) ?? 0) >= gSize * 0.5));
+    if (specific.length >= 2) specificTerms.set(p.url, new Set(specific));
+  }
+  const index2 = /* @__PURE__ */ new Map();
+  for (const [url, set] of specificTerms) for (const t of set) (index2.get(t) ?? index2.set(t, []).get(t)).push(url);
+  const parent2 = /* @__PURE__ */ new Map();
+  const find5 = (x) => {
+    const px = parent2.get(x) ?? x;
+    if (px === x) return x;
+    const r = find5(px);
+    parent2.set(x, r);
+    return r;
+  };
+  const checked = /* @__PURE__ */ new Set();
+  for (const urls of index2.values()) {
+    if (urls.length > 100) continue;
+    for (let i = 0; i < urls.length; i++)
+      for (let j = i + 1; j < urls.length; j++) {
+        const a = urls[i], b = urls[j];
+        const key = a < b ? a + "|" + b : b + "|" + a;
+        if (checked.has(key)) continue;
+        checked.add(key);
+        if (langOf.get(a) !== langOf.get(b)) continue;
+        const sa = specificTerms.get(a), sb = specificTerms.get(b);
+        let shared = 0;
+        for (const t of sa) if (sb.has(t)) shared++;
+        if (shared >= 2 && shared / (sa.size + sb.size - shared) >= 0.6) parent2.set(find5(a), find5(b));
+      }
+  }
+  for (const url of specificTerms.keys()) {
+    const root2 = find5(url);
+    (groups.get(root2) ?? groups.set(root2, []).get(root2)).push(url);
+  }
+  const cannibalization = [...groups.values()].filter((g) => g.length > 1).map((g) => {
+    const sets = g.map((u) => specificTerms.get(u));
+    const common = [...sets[0]].filter((t) => sets.every((x) => x.has(t)));
+    return { terms: (common.length ? common : [...sets[0]]).slice(0, 4), pages: g };
+  });
+  for (const c of cannibalization) sink.emit("content.cannibalization", { url: c.pages[0], observed: `"${c.terms.join(" ")}" shared by ${c.pages.length} pages: ${c.pages.slice(0, 5).join(", ")}` });
+  const clusterMap = /* @__PURE__ */ new Map();
+  for (const { p } of pages) {
+    const seg = new URL(p.finalUrl).pathname.split("/").filter(Boolean)[0] ?? "(root)";
+    const a = clusterMap.get(seg);
+    if (a) a.push(p.url);
+    else clusterMap.set(seg, [p.url]);
+  }
+  const clusters = [...clusterMap.entries()].map(([key, urls]) => {
+    const counts = /* @__PURE__ */ new Map();
+    for (const u of urls) for (const t of pageTerms.find((x) => x.url === u)?.terms ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+    return { key, pages: urls, terms: [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([t]) => t) };
+  }).sort((a, b) => b.pages.length - a.pages.length);
+  return { topTerms, pageTerms, clusters, cannibalization, nearDuplicates, exactDuplicates, linkOpportunities: linkOpportunities.slice(0, 200) };
+}
+function findLinkOpportunities(ctx, vectors, langOf) {
+  const otherLanguage = (a, b) => {
+    const la = langOf?.get(a), lb = langOf?.get(b);
+    return !!la && !!lb && la !== lb;
+  };
+  const norm4 = /* @__PURE__ */ new Map();
+  for (const [u, v] of vectors) norm4.set(u, Math.sqrt([...v.values()].reduce((a, x) => a + x * x, 0)) || 1);
+  const index2 = /* @__PURE__ */ new Map();
+  for (const [u, v] of vectors) for (const t of v.keys()) (index2.get(t) ?? index2.set(t, []).get(t)).push(u);
+  const outlinks = /* @__PURE__ */ new Map();
+  for (const [target, sources] of ctx.inlinks) for (const s of sources) (outlinks.get(s) ?? outlinks.set(s, /* @__PURE__ */ new Set()).get(s)).add(target);
+  const links = (a, b) => outlinks.get(a)?.has(b) || outlinks.get(b)?.has(a);
+  const inl = (u) => ctx.reachIn.get(u)?.size ?? 0;
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const urls of index2.values()) {
+    if (urls.length > 200) continue;
+    for (let i = 0; i < urls.length; i++)
+      for (let j = i + 1; j < urls.length; j++) {
+        const a = urls[i], b = urls[j];
+        const key = a < b ? a + "|" + b : b + "|" + a;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (otherLanguage(a, b)) continue;
+        const va = vectors.get(a), vb = vectors.get(b);
+        let dot = 0;
+        const shared = [];
+        for (const [t, w] of va) {
+          const w2 = vb.get(t);
+          if (w2 !== void 0) {
+            dot += w * w2;
+            shared.push(t);
+          }
+        }
+        const sim = dot / (norm4.get(a) * norm4.get(b));
+        if (shared.length < 2 || sim < 0.3 || sim > 0.9 || links(a, b)) continue;
+        const [from, to] = inl(a) >= inl(b) ? [a, b] : [b, a];
+        out.push({ from, to, similarity: Math.round(sim * 100) / 100, sharedTerms: shared.slice(0, 6), toInlinks: inl(to) });
+      }
+  }
+  out.sort((x, y) => x.toInlinks - y.toInlinks || y.similarity - x.similarity);
+  const perTarget = /* @__PURE__ */ new Map();
+  return out.filter((o) => {
+    const n = perTarget.get(o.to) ?? 0;
+    if (n >= 3) return false;
+    perTarget.set(o.to, n + 1);
+    return true;
+  });
+}
+
+// src/analyze/geo.ts
+function answerability(ctx) {
+  const out = [];
+  for (const p of ctx.indexable) {
+    const f = factsOf(p);
+    const s = f.structure;
+    const signals = {
+      descriptiveTitle: !!f.title && f.title.split(/\s+/).length >= 3,
+      hasH1: f.headings.some((h) => h.level === 1),
+      sectioned: f.headings.filter((h) => h.level === 2).length >= 2,
+      questionHeadings: s.questionHeadings > 0,
+      conciseParagraphs: s.paragraphs > 0 && s.avgParagraphWords <= 80,
+      listsOrTables: s.lists + s.tables > 0,
+      datedOrAuthored: s.hasPublishedDate || s.hasAuthor,
+      structuredData: f.jsonLd.some((b) => !b.error),
+      substantiveText: f.mainWordCount >= 150
+    };
+    const vals = Object.values(signals);
+    out.push({ url: p.url, score: Math.round(vals.filter(Boolean).length / vals.length * 100), signals });
+  }
+  return out;
+}
+function runGeoChecks(ctx, sink, llms) {
+  const notes = [];
+  const matrix = ctx.crawl.robots.state === "ok" || ctx.crawl.robots.state === "missing" ? botAccessMatrix(ctx.crawl.robots, ctx.crawl.startUrl) : [];
+  for (const b of matrix) {
+    if (b.homepageAllowed) continue;
+    if (b.bot.token === "Googlebot" || b.bot.token === "Bingbot") sink.emit("geo.search-bot-blocked", { url: ctx.crawl.robots.url, observed: `${b.bot.token} disallowed` });
+    if (b.bot.purpose === "ai-search" && ["OAI-SearchBot", "Claude-SearchBot", "PerplexityBot"].includes(b.bot.token)) {
+      sink.emit("geo.ai-search-bot-blocked", { url: ctx.crawl.robots.url, observed: `${b.bot.token} (${b.bot.operator}) disallowed${b.explicit ? "" : " via * group"}` });
+    }
+  }
+  const training = matrix.filter((b) => b.bot.purpose === "ai-training");
+  if (training.length) {
+    sink.emit("geo.training-bots", {
+      url: ctx.crawl.robots.url,
+      observed: training.map((b) => `${b.bot.token}: ${b.homepageAllowed ? "allowed" : "blocked"}`).join(", ")
+    });
+  }
+  if (ctx.crawl.robots.state === "unreachable") notes.push("robots.txt unreachable: AI crawler access could not be evaluated (RFC 9309 treats this as full disallow).");
+  const snippetRestricted = [];
+  for (const p of ctx.htmlPages) {
+    if (isNoindex(p)) continue;
+    const d = robotsDirectives(p, ["googlebot", "bingbot"]);
+    const restricted = d.filter((x) => x === "nosnippet" || x === "max-snippet:0" || x === "noarchive" || x === "nocache");
+    if (restricted.length) {
+      snippetRestricted.push(p.url);
+      sink.emit("geo.snippet-restricted", { url: p.url, observed: restricted.join(", ") });
+    }
+  }
+  if (llms) sink.emit("geo.llms-txt", { url: llms.url, observed: llms.present ? `present (${llms.bytes} bytes) \u2014 not used by Google; no scoring impact` : `absent (HTTP ${llms.status}) \u2014 no scoring impact` });
+  const entityNames = {};
+  const roles = { site: /* @__PURE__ */ new Map(), organization: /* @__PURE__ */ new Map() };
+  const norm4 = (n) => n.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const note = (role, name, url) => {
+    const k = norm4(name);
+    if (!k) return;
+    entityNames[name] = (entityNames[name] ?? 0) + 1;
+    const set = roles[role].get(k) ?? /* @__PURE__ */ new Set();
+    set.add(`${name}|${url}`);
+    roles[role].set(k, set);
+  };
+  for (const p of ctx.htmlPages) {
+    const f = factsOf(p);
+    for (const b of f.jsonLd) {
+      const data2 = b.data;
+      const roots = Array.isArray(data2) ? data2 : data2 && Array.isArray(data2["@graph"]) ? data2["@graph"] : [data2];
+      for (const n of roots) {
+        if (!n || typeof n !== "object") continue;
+        const node = n;
+        const t = [].concat(node["@type"] ?? []);
+        if (typeof node["name"] !== "string") continue;
+        if (t.includes("WebSite")) note("site", node["name"].trim(), p.url);
+        else if (t.some((x) => typeof x === "string" && /Organization|Corporation|LocalBusiness|OnlineStore|OnlineBusiness/.test(x))) note("organization", node["name"].trim(), p.url);
+      }
+    }
+    if (f.openGraph["og:site_name"]) note("site", f.openGraph["og:site_name"].trim(), p.url);
+  }
+  for (const role of ["site", "organization"]) {
+    if (roles[role].size > 1) {
+      const variants = [...roles[role].values()].map((set) => {
+        const [name, url] = [...set][0].split("|");
+        return `"${name}" on ${set.size} page(s), e.g. ${url}`;
+      });
+      sink.emit("geo.entity-inconsistent", { observed: `${role === "site" ? "site name (WebSite / og:site_name)" : "organization name"}: ${variants.join("; ")}` });
+    }
+  }
+  const pages = answerability(ctx);
+  const average = pages.length ? Math.round(pages.reduce((a, p) => a + p.score, 0) / pages.length) : 0;
+  const weak = pages.filter((p) => p.score < 50);
+  if (weak.length) sink.emit("geo.answerability", weak.slice(0, 50).map((p) => ({ url: p.url, observed: `clarity signals ${p.score}/100; missing: ${Object.entries(p.signals).filter(([, v]) => !v).map(([k]) => k).join(", ")}` })));
+  sink.emit("geo.citations-unmeasured", { observed: "No AI citation data source configured" });
+  notes.push("Answerability is a heuristic clarity signal. Google states AI Overviews/AI Mode require no special optimisation; no citation or ranking prediction is made.");
+  return {
+    bots: matrix.map((b) => ({ token: b.bot.token, operator: b.bot.operator, purpose: b.bot.purpose, allowed: b.homepageAllowed, explicit: b.explicit, docs: b.bot.docs })),
+    llmsTxt: llms,
+    entityNames,
+    answerability: { average, pages: pages.sort((a, b) => a.score - b.score).slice(0, 200) },
+    snippetRestricted,
+    citations: { measured: false, reason: "No AI citation integration configured (Bing AI Performance export or Search Console data can be imported)." },
+    notes
   };
 }
 
@@ -36508,7 +36521,7 @@ function runTechnicalChecks(ctx, sink) {
   for (const u of ctx.sitemapUrls) {
     const rec = ctx.byUrl.get(u);
     if (!rec || rec.status !== 200 || u === crawl2.startUrl) continue;
-    if (!ctx.inlinks.get(u)?.size && !ctx.inlinks.get(rec.finalUrl)?.size) sink.emit("crawl.sitemap-orphan", { url: u });
+    if (!ctx.reachIn.get(u)?.size && !ctx.reachIn.get(rec.finalUrl)?.size) sink.emit("crawl.sitemap-orphan", { url: u });
   }
 }
 function push(m, k, v) {

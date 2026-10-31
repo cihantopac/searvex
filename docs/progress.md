@@ -32,6 +32,11 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Session log
 
+### 2026-11-01 — product-family round 7 (raw)
+- 7 permitted sites re-audited; 4 Searvex defects fixed (orphans through redirects, cross-language and legal
+  cannibalisation, aspect-ratio utility classes), regression fixtures in `website-realworld.test.ts`; re-run
+  compared before/after. Real site defects listed in quality.md for the owner. `--render` round still open.
+
 ### 2026-11-01 — live Bing Webmaster API
 - `bing auth/status/sites/logout` added (hidden key input, credential store); reports require a verified
   site; totals from the daily site series; empty data explained; actionable InvalidApiKey/quota errors.

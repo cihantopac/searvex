@@ -14,8 +14,10 @@ export interface LinkInfo {
   uncrawlable: boolean;
 }
 
-function sizedByLayout(style: string | undefined, nimg: string | undefined): boolean {
+function sizedByLayout(style: string | undefined, nimg: string | undefined, cls: string | undefined): boolean {
   if (nimg === 'fill') return true;
+  // Utility classes that set aspect-ratio (Tailwind aspect-video, aspect-square, aspect-[16/9]) with a width.
+  if (/(^|\s)aspect-(video|square|\[\d+(\.\d+)?\/\d+(\.\d+)?\]|\d+\/\d+)(\s|$)/.test(cls ?? '')) return true;
   const s = (style ?? '').toLowerCase().replace(/\s+/g, '');
   return /aspect-ratio:/.test(s) || (/position:absolute/.test(s) && /(^|;)width:100%/.test(s) && /(^|;)height:100%/.test(s));
 }
@@ -27,8 +29,8 @@ export interface ImageInfo {
   height?: string;
   loading?: string;
   /**
-   * Sized by its container or an inline aspect-ratio, so missing width/height cannot shift the layout
-   * (Next.js `<Image fill>` renders `position:absolute` at 100% of a sized parent).
+   * Sized by its container or an aspect-ratio (inline style or utility class), so missing width/height cannot
+   * shift the layout (Next.js `<Image fill>` renders `position:absolute` at 100% of a sized parent).
    */
   sizedByLayout?: boolean;
 }
@@ -227,7 +229,7 @@ export function extractPage(html: string, pageUrl: string): PageData {
       width: $(el).attr('width'),
       height: $(el).attr('height'),
       loading: $(el).attr('loading'),
-      sizedByLayout: sizedByLayout($(el).attr('style'), $(el).attr('data-nimg')),
+      sizedByLayout: sizedByLayout($(el).attr('style'), $(el).attr('data-nimg'), $(el).attr('class')),
     }))
     .get();
 

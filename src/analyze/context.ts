@@ -9,8 +9,14 @@ export interface SiteContext {
   crawl: CrawlResult;
   pages: PageRecord[];
   byUrl: Map<string, PageRecord>;
-  /** Internal inlinks per target URL (normalised). */
+  /** Internal inlinks per target URL (normalised), exactly as linked. */
   inlinks: Map<string, Set<string>>;
+  /**
+   * Inlinks per page that a visitor or crawler reaches, including links through internal redirects
+   * (`/en/` → `/en`, a language switch `/language/en` → `/en`). Use for reachability (orphans, inlink counts);
+   * use `inlinks` for checks about the linked URL itself (broken links).
+   */
+  reachIn: Map<string, Set<string>>;
   /** HTML pages with a direct 200 response (not reached via redirect) and parsed data. */
   htmlPages: PageRecord[];
   /** HTML 200 pages that are indexable (no noindex) and self-canonical (or no canonical). */
@@ -65,7 +71,14 @@ export function buildContext(crawl: CrawlResult): SiteContext {
   // The site homepage (origin root), or the start URL when it is a root / locale root such as /en/.
   const startPath = new URL(crawl.startUrl).pathname;
   const homepage = byUrl.get(new URL('/', crawl.origin).toString()) ?? (/^\/([a-z]{2}(-[a-z]{2})?\/?)?$/i.test(startPath) ? byUrl.get(crawl.startUrl) : undefined);
-  return { crawl, pages: crawl.pages, byUrl, inlinks, htmlPages, indexable, sitemapUrls, homepage };
+  const reachIn = new Map<string, Set<string>>();
+  for (const [target, sources] of inlinks) {
+    const rec = byUrl.get(target);
+    const final = rec?.redirects.length ? (normalizeUrl(rec.finalUrl) ?? target) : target;
+    const set = reachIn.get(final) ?? reachIn.set(final, new Set()).get(final)!;
+    for (const s of sources) if (s !== final) set.add(s);
+  }
+  return { crawl, pages: crawl.pages, byUrl, inlinks, reachIn, htmlPages, indexable, sitemapUrls, homepage };
 }
 
 /** Look up the crawled record for a URL (normalised). */

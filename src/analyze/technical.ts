@@ -210,7 +210,7 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
   for (const u of ctx.sitemapUrls) {
     const rec = ctx.byUrl.get(u);
     if (!rec || rec.status !== 200 || u === crawl.startUrl) continue;
-    if (!ctx.inlinks.get(u)?.size && !ctx.inlinks.get(rec.finalUrl)?.size) sink.emit('crawl.sitemap-orphan', { url: u });
+    if (!ctx.reachIn.get(u)?.size && !ctx.reachIn.get(rec.finalUrl)?.size) sink.emit('crawl.sitemap-orphan', { url: u });
   }
 }
 
