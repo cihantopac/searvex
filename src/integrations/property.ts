@@ -99,6 +99,46 @@ export function matchAuditToProperty(audit: Pick<AuditReport, 'target' | 'crawl'
   };
 }
 
+/** Throws when the audit does not describe a site inside the property. */
+export function assertAuditInProperty(audit: Pick<AuditReport, 'target' | 'crawl' | 'inventory'>, p: SearchProperty, source: string): AuditPropertyMatch {
+  const match = matchAuditToProperty(audit, p);
+  if (!match.matches) throw new PropertyError(`${source} belongs to the ${describeProperty(p)}, but the audit of ${audit.target} does not: ${match.reason}. Search data of another website is never combined with this audit.`);
+  return match;
+}
+
+/** Hosts in a list of page URLs, most common first. */
+export function hostsOf(urls: string[]): Array<{ host: string; pages: number }> {
+  const m = new Map<string, number>();
+  for (const url of urls) {
+    const h = safeHost(url);
+    if (h) m.set(h, (m.get(h) ?? 0) + 1);
+  }
+  return [...m].map(([host, pages]) => ({ host, pages })).sort((a, b) => b.pages - a.pages);
+}
+
+/**
+ * Property of an imported export (Search Console CSV/ZIP). Exports carry no property name, so the scope comes
+ * from an explicit `raw` property (checked against the pages table when there is one) or, without it, from
+ * the single host in the pages table. Returns undefined when neither is available: the export can then not be
+ * attributed to any website.
+ */
+export function propertyForExport(raw: string | undefined, pageUrls: string[] | undefined): SearchProperty | undefined {
+  const urls = pageUrls ?? [];
+  const hosts = hostsOf(urls);
+  if (raw) {
+    const p = parseProperty(raw);
+    if (urls.length) {
+      const inside = urls.filter((u) => urlInProperty(u, p)).length;
+      if (inside / urls.length < MIN_COVERAGE) throw new PropertyError(`The export's pages (${hosts.slice(0, 3).map((h) => h.host).join(', ')}) do not belong to the ${describeProperty(p)}. Check that you exported the right property.`);
+    }
+    return p;
+  }
+  if (!hosts.length) return undefined;
+  const total = hosts.reduce((a, h) => a + h.pages, 0);
+  if (hosts.length > 1 && hosts[0]!.pages / total < 0.9) throw new PropertyError(`The export contains pages from several hosts (${hosts.slice(0, 5).map((h) => h.host).join(', ')}): pass --property (e.g. sc-domain:example.com).`);
+  return parseProperty(`https://${hosts[0]!.host}/`, { anyProtocol: true });
+}
+
 function safeHost(url: string): string | null {
   try {
     return new URL(url).host.toLowerCase();

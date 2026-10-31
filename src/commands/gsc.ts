@@ -5,8 +5,8 @@ import { RunStore } from '../crawl/store.js';
 import { authorize, accessToken, deleteCredential, gscAccessToken, GSC_SCOPE, loadClientFile, OAuthClientFileError, readCredentials, revokeToken, saveCredential } from '../integrations/google-oauth.js';
 import { defaultCredentialStore } from '../integrations/credentials.js';
 import { listSites, querySearchConsole } from '../integrations/gsc.js';
-import { GscImportError, importGscFiles, pageHosts, type GscExport } from '../integrations/gsc-csv.js';
-import { describeProperty, parseProperty, PropertyError, selectAuditForProperty, urlInProperty, type SearchProperty, type SelectedAudit } from '../integrations/property.js';
+import { GscImportError, importGscFiles, type GscExport } from '../integrations/gsc-csv.js';
+import { parseProperty, propertyForExport, PropertyError, selectAuditForProperty, urlInProperty, type SearchProperty, type SelectedAudit } from '../integrations/property.js';
 import { getSitePreference, setSitePreference, siteKey, type SearchDataChoice } from '../integrations/preferences.js';
 import { md } from '../report/markdown.js';
 import { log, num, UsageError, type GlobalFlags } from '../cli.js';
@@ -280,20 +280,12 @@ export async function commandGsc(flags: GlobalFlags): Promise<number> {
 
 /** Explicit --property, or the single host seen in the pages table (any protocol, whole host). */
 function resolveImportProperty(raw: string | undefined, exp: GscExport): SearchProperty | undefined {
-  const hosts = pageHosts(exp);
-  if (raw) {
-    const p = propertyOrUsage(raw);
-    const pages = exp.tables.pages ?? [];
-    if (pages.length) {
-      const inside = pages.filter((x) => urlInProperty(x.key, p)).length;
-      if (inside / pages.length < 0.5) throw new UsageError(`The export's pages (${hosts.slice(0, 3).map((h) => h.host).join(', ')}) do not belong to the ${describeProperty(p)}. Check that you exported the right property.`);
-    }
-    return p;
+  try {
+    return propertyForExport(raw, exp.tables.pages?.map((p) => p.key));
+  } catch (e) {
+    if (e instanceof PropertyError) throw new UsageError(e.message);
+    throw e;
   }
-  if (!hosts.length) return undefined;
-  const total = hosts.reduce((a, h) => a + h.pages, 0);
-  if (hosts.length > 1 && hosts[0]!.pages / total < 0.9) throw new UsageError(`The export contains pages from several hosts (${hosts.slice(0, 5).map((h) => h.host).join(', ')}): pass --property (e.g. sc-domain:example.com).`);
-  return parseProperty(`https://${hosts[0]!.host}/`, { anyProtocol: true });
 }
 
 /** `searvex bing report <siteUrl>`: same analysis on Bing Webmaster data (API key, read-only). */

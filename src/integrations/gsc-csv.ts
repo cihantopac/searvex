@@ -223,17 +223,3 @@ export function importGscFiles(files: string[]): GscExport {
   }
   return out;
 }
-
-/** Hosts seen in the pages table, most common first. */
-export function pageHosts(exp: GscExport): Array<{ host: string; pages: number }> {
-  const m = new Map<string, number>();
-  for (const p of exp.tables.pages ?? []) {
-    try {
-      const h = new URL(p.key).host.toLowerCase();
-      m.set(h, (m.get(h) ?? 0) + 1);
-    } catch {
-      /* ignore */
-    }
-  }
-  return [...m].map(([host, pages]) => ({ host, pages })).sort((a, b) => b.pages - a.pages);
-}
