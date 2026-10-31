@@ -32,6 +32,14 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Session log
 
+### 2026-11-01 — local repository round
+- Audited 5 local repositories read-only (quality.md round 6); fixed 11 repository-mode defects (non-site
+  folders, workspace static sites, clean URLs, missing sitemap URLs vs routes of other apps, all Laravel route
+  files, Blade expressions in tag regexes, admin views, error pages, Next.js fill images, personal-site
+  Organization exception, n/a score when there is nothing to audit). The product-family repositories are on
+  the owner's Windows PC; audit them there or copy them here.
+- Live integrations: still waiting for the owner's accounts (owner guide).
+
 ### 2026-10-31 — v1.0.0 readiness round (branch `release/v1.0-readiness`)
 - Release checklist with evidence per criterion: [release-checklist.md](release-checklist.md).
 - Fixed (P0): `monitor --import` accepted exports of any website (and queries-only exports with no way to

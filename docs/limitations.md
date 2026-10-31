@@ -40,6 +40,16 @@ Searvex reports what it can observe and labels everything else. Known limits (v0
 
 ## Repository mode
 
+- Not treated as site content: `test(s)`, `__tests__`, `spec(s)`, `e2e`, `fixture(s)`, `testdata`, `bench(marks)`,
+  `example(s)`, `sample(s)`, `eval(s)`, `snapshot(s)`, `stories`, `coverage` folders; HTML fragments without a
+  document element; `.html` files in template folders (`templates/`, `layouts/`, `partials/` …); Filament admin
+  views. Point Searvex at such a folder directly to audit it. A repository with nothing else reports the health
+  score as **n/a**.
+- Login-protected server views (e.g. Laravel routes behind `auth` middleware) are not recognised statically;
+  metadata findings on such layouts can be ignored.
+- Static sites: `about.html` is treated as `/about` when its canonical or the sitemap uses that clean URL. URLs in
+  the sitemap that no file serves are reported only when no other app in the repository has a matching route,
+  and then as heuristic (a server rewrite outside the repository may still serve them).
 - Static analysis: JS/TS/JSX/TSX sources are parsed into an AST (@babel/parser). Next.js `metadata` /
   `generateMetadata` objects are read key by key: a key in another object does not count, and branches that
   throw (`notFound()`, `redirect()`) are ignored. Metadata computed at runtime (CMS content, i18n

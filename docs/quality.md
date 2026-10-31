@@ -146,6 +146,33 @@ was **synthetic**: Turkish headers and number formats, URLs taken from the real 
   active (macOS), ~1.7 s per page. A 15-page `--render` audit reproduced the locale-adaptive canonical
   switch and the Inertia duplicate titles found by hand in round 3.
 
+## Real-world validation round 6 — local repositories (2026-11-01)
+
+Five of the owner's local repositories, audited read-only in repository mode (`--out` outside the repository;
+`git status` and the file list before and after are identical). Types: a Next.js 16 personal site with a
+static export, a monorepo (static TR/EN site + Laravel 12 API/creator portal + Flutter app) behind a Caddy
+proxy, and three TypeScript CLI tools whose only HTML is test data. Project names and content are withheld;
+regression fixtures are anonymised reconstructions (`test/integration/repo-realworld.test.ts`).
+
+| Defect in Searvex | Evidence (verified against the source) | Fix | Effect |
+|---|---|---|---|
+| HTML in `fixtures/`, `tests/`, `bench/`, `examples/`, `evals/` audited as the website | CLI tools scored 73–95 with "missing title/viewport" on test fixtures | those folders are not site content; fragments without `<html>`/doctype and server template folders are not pages | 3 repos: 13–80 false findings → 0; score now **n/a (nothing to audit)** instead of 100 |
+| Static site in a workspace folder (`apps/site/public/{en,tr}/`) not found | 0 pages reported for a 16-file site with a sitemap | static detection in workspace folders and locale sub-folders; `services/*` searched | 0 → 14 pages audited |
+| `about.html` mapped to `/about.html` while canonical and sitemap use `/about` | every non-home page silently non-canonical → excluded from indexable checks | clean-URL mapping when the canonical or sitemap uses it | page checks run on all 14 pages |
+| Sitemap URLs without a file were ignored | `/en/heroes` linked from 7 pages, in the sitemap, no file | recorded as missing; dropped when another app in the repository routes it (here Laravel `routes/public.php`, proxied by Caddy); otherwise reported as heuristic | real gap would be shown; this case correctly not reported |
+| Laravel routes read from `routes/web.php` only | routes in `routes/public.php` (required from web.php) | all route files except api/console/channels | — |
+| `alt=""` hidden by Blade expressions (`=>`, `?->` end the tag in the regex) | 14 "image without alt" on decorative images with `alt=""` | template expressions blanked before tag matching | 14 → 4 → 0 false findings |
+| Admin-panel (Filament) views and PHP tests checked as public pages | uncrawlable-link findings in `tests/Feature/*.php` and Filament views | excluded | 4 → 0 |
+| Error pages (`404.html`, `_not-found/`) checked as pages | "noindex + canonical conflict", underscore URL on Next.js error pages | modelled with the status a host serves (404/500) | 3 + 1 false findings → 0 |
+| Next.js `<Image fill>` flagged for missing width/height | 23 images on 3 pages; `position:absolute` at 100% of a sized parent cannot shift layout | images sized by layout (fill, inline aspect-ratio) are exempt | 3 findings → 0 |
+| Organization markup requested on a personal site | homepage describes a `Person` | Person/ProfilePage homepages exempt (rule exception recorded) | 1 → 0 |
+| `noindex, noindex` in evidence | Googlebot and Bingbot directives concatenated | de-duplicated | — |
+
+Remaining findings were checked: the default Laravel welcome view without description/canonical and two short
+imprint pages are real; "canonical/description missing" on two creator-portal layouts is technically true but
+irrelevant, because those pages are behind a login — Searvex does not resolve auth middleware statically
+(documented limitation, low severity). Repository audits took 0.1–0.5 s and ≤ 135 MB RSS each.
+
 ## Benchmarks
 
 `npm run build && node scripts/benchmark.mjs <pages> <concurrency>` — synthetic site on localhost

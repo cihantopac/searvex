@@ -49,7 +49,7 @@ supported) rather than delaying the release — owner decision 2026-10-31. Marke
 |---|---|---|---|
 | P1 | Real-world audit round on the permitted 7-site product family (raw + render) | ⬜ | quality.md round 6 |
 | P2 | Independent sites (not the product family) audited and reviewed for false positives | ⬜ | ≥ 5 sites of different types |
-| P3 | Local repositories audited (Laravel, React, Next.js, monorepo) | ⬜ | owner's local projects, results anonymised |
+| P3 | Local repositories audited (Laravel, React, Next.js, monorepo) | 🔄 | 5 local repositories (Next.js, Laravel + static monorepo, 3 CLI tools): 11 defects fixed, quality.md round 6. The product-family repositories are on another machine (Windows) |
 | P4 | Facet / pagination / parameter-explosion detection documented with its limits | ✅ | `crawl.facet-explosion`, `pagination.canonical-to-first` |
 | P5 | Research distinguishes market hypotheses from verified demand | 🔄 | labels in research output; review in this round |
 | P6 | GEO: no score is presented as a prediction of AI citations | 🔄 | wording review of reports and skills |
