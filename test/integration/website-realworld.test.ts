@@ -72,3 +72,17 @@ describe('image dimensions', () => {
     expect(f?.evidence.map((e) => [new URL(e.url!).pathname, e.observed])).toEqual([['/about', '1 image(s) without width/height attributes']]);
   });
 });
+
+describe('truncated crawls', () => {
+  it('do not report orphans, and say why', async () => {
+    const ws2 = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-rw-trunc-'));
+    try {
+      const { report: r } = await auditWebsite(server.url + '/', { workspace: ws2, kb: loadKnowledge(), crawl: { policy: { ...DEFAULT_POLICY, allowPrivate: true }, delayMs: 0, maxPages: 3 } });
+      expect(r.crawl.truncated).toBe(true);
+      expect(r.findings.map((f) => f.ruleId)).not.toContain('crawl.sitemap-orphan');
+      expect(r.limitations[0]).toMatch(/orphan pages are not reported/);
+    } finally {
+      fs.rmSync(ws2, { recursive: true, force: true });
+    }
+  });
+});

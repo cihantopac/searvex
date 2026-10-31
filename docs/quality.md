@@ -189,6 +189,22 @@ with `lang="tr"`; English help pages with a Turkish H1; help category pages shar
 first title; payment logos with only a height; server-side language selection by `Accept-Language` on the
 same URL (`lang.locale-adaptive`).
 
+### Round 7 — JavaScript rendering (`--render`)
+
+Same 7 sites, ≤ 25 pages each, 1 s delay, Chromium with its OS sandbox through the policy proxy (0 requests
+blocked, no page hit the hard deadline); 29–34 s per site, two batches in parallel.
+
+Main result, confirmed in a real browser: on 6 of 7 sites the Turkish URLs switch to English in a browser
+whose locale is en-US (Googlebot renders as en-US) — title, `lang` and canonical (→ `/en`) change, and Turkish
+blog posts on one site render **"Böyle bir sayfa yok"** (not found) instead of the article; with a tr-TR
+browser the same URL shows the article.
+
+| Defect in Searvex | Evidence | Fix |
+|---|---|---|
+| Soft 404 not detected for Turkish wording | "Böyle bir sayfa yok" was missing, and `sayfa bulunamadı` could never match: JavaScript's `\b` treats `ı` as a non-word character | Unicode-aware boundaries; Turkish and other-language patterns; tests with near-misses ("bulunamadık", "Sayfa yoklama") |
+| One root cause spread over many findings without a link | render mismatch, hreflang target errors, non-canonical sitemap URLs, soft 404s all followed from the client-side switch, and the consequence ranked above the cause | consequences name their likely root cause; the root cause is ranked first ("likely root cause of N other findings") |
+| Orphans reported on crawls stopped at the page limit | uncrawled pages may link to them | not reported on truncated crawls; the limitation says why |
+
 ## Live Bing Webmaster validation (2026-11-01)
 
 Owner's Bing Webmaster account (8 verified sites of the permitted product family), key stored with

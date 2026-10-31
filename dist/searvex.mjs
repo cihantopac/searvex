@@ -36480,8 +36480,7 @@ function runTechnicalChecks(ctx, sink) {
     if (empty2.length) sink.emit("links.empty-anchor", { url: p.url, observed: `${empty2.length} link(s), e.g. ${empty2[0].href}` });
     const sessionLinks = f.links.filter((l) => l.internal && SESSION_PARAM.test(l.href));
     if (sessionLinks.length) sink.emit("url.session-params", { url: p.url, observed: sessionLinks[0].href });
-    const errorish = /\b(404|not found|page not found|sayfa bulunamadı|nicht gefunden|introuvable|no encontrada)\b/i;
-    if (!noindex && (f.title && errorish.test(f.title) || f.headings.some((h) => h.level === 1 && errorish.test(h.text)))) {
+    if (!noindex && (isErrorText(f.title) || f.headings.some((h) => h.level === 1 && isErrorText(h.text)))) {
       sink.emit("index.soft-404", { url: p.url, observed: f.title ?? "" });
     }
     if (p.data?.likelyClientRendered && !p.rendered) sink.emit("index.client-rendered", { url: p.url, observed: `${p.data.wordCount} words in raw HTML, ${p.data.scriptCount} scripts` });
@@ -36518,11 +36517,15 @@ function runTechnicalChecks(ctx, sink) {
     }
   }
   checkFacetsAndPagination(ctx, sink);
-  for (const u of ctx.sitemapUrls) {
+  for (const u of crawl2.truncated ? [] : ctx.sitemapUrls) {
     const rec = ctx.byUrl.get(u);
     if (!rec || rec.status !== 200 || u === crawl2.startUrl) continue;
     if (!ctx.reachIn.get(u)?.size && !ctx.reachIn.get(rec.finalUrl)?.size) sink.emit("crawl.sitemap-orphan", { url: u });
   }
+}
+var ERROR_TEXT = /(?<![\p{L}\p{N}])(404|not found|page not found|sayfa bulunamadı|bulunamadı|(böyle bir )?sayfa yok|nicht gefunden|introuvable|no encontrada|non trovata|niet gevonden|não encontrada)(?![\p{L}\p{N}])/iu;
+function isErrorText(text4) {
+  return !!text4 && ERROR_TEXT.test(text4);
 }
 function push(m, k, v) {
   const a = m.get(k);
@@ -36680,6 +36683,30 @@ function prioritise(findings, affected, ctx, totalUnits) {
     const score = Math.round(Math.min(1, SEVERITY[f.severity] * confidence * (0.35 + 0.65 * reach) / effortFactor) * 100);
     const bucket = score >= 45 ? "P1" : score >= 15 ? "P2" : "P3";
     f.priority = { score, bucket, reach: Math.round(reach * 1e3) / 1e3, effort, reasons };
+  }
+  linkRootCauses(findings);
+}
+var CONSEQUENCES = [
+  {
+    cause: "lang.locale-adaptive",
+    when: /client-side switch during rendering/,
+    effects: ["index.render-mismatch", "index.soft-404", "hreflang.target-error", "index.sitemap-non-canonical", "crawl.sitemap-orphan", "duplicate.content", "duplicate.title", "lang.mixed-navigation", "canonical.target-error"],
+    why: "the page switches language in the browser (en-US), which changes its title, canonical and links for renderers such as Googlebot"
+  }
+];
+function linkRootCauses(findings) {
+  for (const c of CONSEQUENCES) {
+    const cause = findings.find((f) => f.ruleId === c.cause && f.evidence.some((e) => c.when.test(e.observed ?? "")));
+    if (!cause) continue;
+    const effects = findings.filter((f) => c.effects.includes(f.ruleId) && f.priority);
+    if (!effects.length || !cause.priority) continue;
+    for (const f of effects) f.priority.reasons.push(`likely a consequence of ${c.cause} \u2014 ${c.why}; fix that first, then re-run`);
+    const top2 = Math.max(...effects.map((f) => f.priority.score));
+    if (cause.priority.score <= top2) {
+      cause.priority.score = Math.min(100, top2 + 1);
+      cause.priority.bucket = cause.priority.score >= 45 ? "P1" : cause.priority.score >= 15 ? "P2" : "P3";
+    }
+    cause.priority.reasons.push(`likely root cause of ${effects.length} other finding(s): ${effects.map((f) => f.ruleId).join(", ")}`);
   }
 }
 
@@ -36856,7 +36883,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
     "Website mode sees only publicly reachable pages; it has no access to real traffic, rankings, Search Console or analytics data unless an integration is configured.",
     "Response times are single-location lab samples, not Core Web Vitals field data."
   ];
-  if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (orphans, duplicates, hreflang return links) are based on the crawled subset.`);
+  if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
   if (!opts.checkExternal) limitations.push("Outbound links were not checked (use --check-external).");
   if (!result.pages.some((p) => p.rendered)) limitations.push("JavaScript was not executed (run with --render to compare rendered DOM); client-rendered content is only detected heuristically.");
   return {

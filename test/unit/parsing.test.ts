@@ -187,3 +187,11 @@ describe('language detection', async () => {
     expect(detectShortLanguage('What B.O.S.S. does not do')).not.toBe('pt'); // real-world false positive
   });
 });
+
+describe('error-page wording (soft 404)', () => {
+  it('matches Turkish and other languages with Unicode-aware boundaries', async () => {
+    const { isErrorText } = await import('../../src/analyze/technical.js');
+    for (const t of ['Sayfa bulunamadı', 'Böyle bir sayfa yok', 'Sayfa yok · Ürün', '404 — Not found', 'Seite nicht gefunden', 'Página não encontrada']) expect(isErrorText(t), t).toBe(true);
+    for (const t of ['Sayfa yoklama listesi', 'Kayıp eşyalar bulunamadık mı?', 'Founders', '4040 Linz', 'Notfound brand']) expect(isErrorText(t), t).toBe(false);
+  });
+});

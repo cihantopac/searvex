@@ -32,6 +32,11 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Session log
 
+### 2026-11-01 — product-family round 7 (render)
+- `--render` on the 7 sites: client-side switch to English for en-US browsers on 6 sites (Turkish blog posts
+  render "not found" on one), confirmed in a real browser. Fixed: Turkish soft-404 wording (Unicode
+  boundaries), root-cause linking in "Fix first", no orphans on truncated crawls.
+
 ### 2026-11-01 — product-family round 7 (raw)
 - 7 permitted sites re-audited; 4 Searvex defects fixed (orphans through redirects, cross-language and legal
   cannibalisation, aspect-ratio utility classes), regression fixtures in `website-realworld.test.ts`; re-run

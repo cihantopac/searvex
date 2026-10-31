@@ -147,10 +147,9 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     const sessionLinks = f.links.filter((l) => l.internal && SESSION_PARAM.test(l.href));
     if (sessionLinks.length) sink.emit('url.session-params', { url: p.url, observed: sessionLinks[0]!.href });
 
-    // Soft 404 heuristic
-    const errorish = /\b(404|not found|page not found|sayfa bulunamadı|nicht gefunden|introuvable|no encontrada)\b/i;
+    // Soft 404 heuristic (wording in ERROR_TEXT)
     // A noindexed error page is already excluded from the index, so the soft-404 label adds nothing.
-    if (!noindex && ((f.title && errorish.test(f.title)) || f.headings.some((h) => h.level === 1 && errorish.test(h.text)))) {
+    if (!noindex && (isErrorText(f.title) || f.headings.some((h) => h.level === 1 && isErrorText(h.text)))) {
       sink.emit('index.soft-404', { url: p.url, observed: f.title ?? '' });
     }
     if (p.data?.likelyClientRendered && !p.rendered) sink.emit('index.client-rendered', { url: p.url, observed: `${p.data.wordCount} words in raw HTML, ${p.data.scriptCount} scripts` });
@@ -206,12 +205,23 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
 
   checkFacetsAndPagination(ctx, sink);
 
-  // Orphans: sitemap URLs that were crawled fine but have no internal inlinks.
-  for (const u of ctx.sitemapUrls) {
+  // Orphans: sitemap URLs that were crawled fine but have no internal inlinks. A crawl stopped at the page
+  // limit has not seen every page that might link to them, so it cannot call a page an orphan.
+  for (const u of crawl.truncated ? [] : ctx.sitemapUrls) {
     const rec = ctx.byUrl.get(u);
     if (!rec || rec.status !== 200 || u === crawl.startUrl) continue;
     if (!ctx.reachIn.get(u)?.size && !ctx.reachIn.get(rec.finalUrl)?.size) sink.emit('crawl.sitemap-orphan', { url: u });
   }
+}
+
+/**
+ * Error-page wording in titles and H1s. Boundaries are Unicode-aware: JavaScript's \\b treats letters such as
+ * "ı" as non-word characters, so "sayfa bulunamadı" never matched with \\b.
+ */
+const ERROR_TEXT = /(?<![\p{L}\p{N}])(404|not found|page not found|sayfa bulunamadı|bulunamadı|(böyle bir )?sayfa yok|nicht gefunden|introuvable|no encontrada|non trovata|niet gevonden|não encontrada)(?![\p{L}\p{N}])/iu;
+
+export function isErrorText(text: string | null | undefined): boolean {
+  return !!text && ERROR_TEXT.test(text);
 }
 
 function push(m: Map<string, string[]>, k: string, v: string) {

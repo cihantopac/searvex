@@ -163,7 +163,7 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
     'Website mode sees only publicly reachable pages; it has no access to real traffic, rankings, Search Console or analytics data unless an integration is configured.',
     'Response times are single-location lab samples, not Core Web Vitals field data.',
   ];
-  if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (orphans, duplicates, hreflang return links) are based on the crawled subset.`);
+  if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
   if (!opts.checkExternal) limitations.push('Outbound links were not checked (use --check-external).');
   if (!result.pages.some((p) => p.rendered)) limitations.push('JavaScript was not executed (run with --render to compare rendered DOM); client-rendered content is only detected heuristically.');
   return {
