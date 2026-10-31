@@ -38946,6 +38946,7 @@ import http3 from "node:http";
 import https4 from "node:https";
 
 // src/integrations/credentials.ts
+import { spawnSync } from "node:child_process";
 import fs8 from "node:fs";
 import os from "node:os";
 import path12 from "node:path";
@@ -38993,7 +38994,123 @@ var FileCredentialStore = class {
     fs8.renameSync(tmp, this.file);
   }
 };
-var defaultCredentialStore = () => new FileCredentialStore();
+var CredentialStoreError = class extends Error {
+};
+var runTool = (cmd, args, input) => {
+  const r = spawnSync(cmd, args, { input, encoding: "utf8", timeout: 15e3, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+  if (r.error) return { status: null, stdout: "", stderr: r.error.code ?? r.error.message };
+  return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+};
+function keychainKind(platform = process.platform) {
+  if (platform === "darwin") return "macos";
+  if (platform === "win32") return "windows-dpapi";
+  if (platform === "linux" || platform === "freebsd" || platform === "openbsd") return "secret-service";
+  return null;
+}
+var SERVICE = "searvex";
+var PS_PROTECT = "$ErrorActionPreference='Stop';Add-Type -AssemblyName System.Security;$s=[Console]::In.ReadToEnd();[Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($s),$null,'CurrentUser'))";
+var PS_UNPROTECT = "$ErrorActionPreference='Stop';Add-Type -AssemblyName System.Security;$s=[Console]::In.ReadToEnd().Trim();[Console]::Out.Write([Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($s),$null,'CurrentUser')))";
+var KeychainCredentialStore = class {
+  constructor(kind, run = runTool, dir = configDir()) {
+    this.kind = kind;
+    this.run = run;
+    this.dir = dir;
+    this.legacy = new FileCredentialStore(dir);
+  }
+  kind;
+  run;
+  dir;
+  legacy;
+  get(name) {
+    const raw = this.read(checkName(name));
+    if (raw === null) return this.legacy.get(name);
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new CredentialStoreError(`The ${this.label()} entry "${SERVICE}/${name}" is not a Searvex credential; remove it and authorize again.`);
+    }
+  }
+  set(name, cred) {
+    const json = JSON.stringify(cred);
+    this.write(checkName(name), json);
+    if (this.read(name) !== json) throw new CredentialStoreError(`The ${this.label()} did not store the credential. Unlock it, or use SEARVEX_CREDENTIAL_STORE=file.`);
+    this.legacy.delete(name);
+  }
+  delete(name) {
+    const removed = this.remove(checkName(name));
+    return this.legacy.delete(name) || removed;
+  }
+  describe() {
+    return `${this.label()} (service "${SERVICE}")`;
+  }
+  label() {
+    return { macos: "macOS Keychain", "secret-service": "Secret Service keyring (libsecret)", "windows-dpapi": "Windows DPAPI (current user)" }[this.kind];
+  }
+  dpapiFile(name) {
+    return path12.join(this.dir, "credentials.dpapi", `${name}.b64`);
+  }
+  fail(action, r) {
+    const tool = { macos: "security", "secret-service": "secret-tool", "windows-dpapi": "powershell.exe" }[this.kind];
+    const why = r.status === null ? `${tool} is not available (${r.stderr})` : `${tool} exited with ${r.status}`;
+    throw new CredentialStoreError(`Cannot ${action} the credential in the ${this.label()}: ${why}. Use SEARVEX_CREDENTIAL_STORE=file to keep it in the config directory instead.`);
+  }
+  read(name) {
+    if (this.kind === "windows-dpapi") {
+      const f = this.dpapiFile(name);
+      if (!fs8.existsSync(f)) return null;
+      const r2 = this.run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", PS_UNPROTECT], fs8.readFileSync(f, "utf8"));
+      if (r2.status !== 0) this.fail("read", r2);
+      return r2.stdout;
+    }
+    const r = this.kind === "macos" ? this.run("security", ["find-generic-password", "-s", SERVICE, "-a", name, "-w"]) : this.run("secret-tool", ["lookup", "service", SERVICE, "account", name]);
+    if (r.status === null) this.fail("read", r);
+    if (r.status !== 0) return null;
+    const out = r.stdout.replace(/\n$/, "");
+    if (this.kind === "macos" && /^(?:[0-9a-f]{2})+$/i.test(out) && !out.startsWith("{")) return Buffer.from(out, "hex").toString("utf8");
+    return out || null;
+  }
+  write(name, json) {
+    if (this.kind === "windows-dpapi") {
+      const r2 = this.run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", PS_PROTECT], json);
+      if (r2.status !== 0 || !r2.stdout.trim()) this.fail("store", r2);
+      const f = this.dpapiFile(name);
+      fs8.mkdirSync(path12.dirname(f), { recursive: true, mode: 448 });
+      const tmp = `${f}.${process.pid}.tmp`;
+      fs8.writeFileSync(tmp, r2.stdout.trim(), { mode: 384 });
+      fs8.renameSync(tmp, f);
+      return;
+    }
+    const r = this.kind === "macos" ? this.run("security", ["-i"], `add-generic-password -U -s ${SERVICE} -a ${name} -l Searvex-${name} -X ${Buffer.from(json, "utf8").toString("hex")}
+`) : this.run("secret-tool", ["store", `--label=Searvex ${name}`, "service", SERVICE, "account", name], json);
+    if (r.status !== 0) this.fail("store", r);
+  }
+  remove(name) {
+    if (this.kind === "windows-dpapi") {
+      const f = this.dpapiFile(name);
+      if (!fs8.existsSync(f)) return false;
+      fs8.rmSync(f);
+      return true;
+    }
+    if (this.read(name) === null) return false;
+    const r = this.kind === "macos" ? this.run("security", ["delete-generic-password", "-s", SERVICE, "-a", name]) : this.run("secret-tool", ["clear", "service", SERVICE, "account", name]);
+    if (r.status !== 0) this.fail("delete", r);
+    return true;
+  }
+};
+function checkName(name) {
+  if (!/^[a-z0-9][a-z0-9-]{0,40}$/.test(name)) throw new CredentialStoreError(`Invalid credential name: ${name}`);
+  return name;
+}
+function defaultCredentialStore() {
+  const choice = (process.env["SEARVEX_CREDENTIAL_STORE"] ?? "file").toLowerCase();
+  if (choice === "file") return new FileCredentialStore();
+  if (choice === "keychain") {
+    const kind = keychainKind();
+    if (!kind) throw new CredentialStoreError(`No OS keychain support on ${process.platform}; use SEARVEX_CREDENTIAL_STORE=file.`);
+    return new KeychainCredentialStore(kind);
+  }
+  throw new CredentialStoreError(`SEARVEX_CREDENTIAL_STORE must be "file" or "keychain" (got "${choice}").`);
+}
 
 // src/integrations/google-oauth.ts
 var GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
@@ -39015,9 +39132,8 @@ function loadClientFile(file2) {
   return { clientId: c.client_id, clientSecret: c.client_secret };
 }
 var store = () => defaultCredentialStore();
-function readCredentials() {
-  const s = store();
-  return s instanceof FileCredentialStore ? s.readAll() : {};
+function getCredential(name) {
+  return store().get(name);
 }
 function saveCredential(name, cred) {
   const s = store();
@@ -39875,7 +39991,7 @@ async function commandRun(flags) {
     const { report, store: store3 } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v["check-external"], cruxApiKey: process.env["SEARVEX_CRUX_API_KEY"] });
     const files = writeReports(store3, report, kb, ["json", "md", "html"]);
     summary.website = { report, runId: store3.runId, files };
-    summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!readCredentials()["gsc"] || !!process.env["SEARVEX_GSC_TOKEN"] };
+    summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!getCredential("gsc") || !!process.env["SEARVEX_GSC_TOKEN"] };
     step(1, "Website audit", "done", `${report.crawl.crawled} pages, score ${report.scores.overall}/100`);
     step(2, "GEO / AI search", "done", `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
     const base = findBaseline(workspace, report.target, store3.runId);
@@ -40503,7 +40619,7 @@ async function commandGsc(flags) {
   const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
   if (sub === "auth") {
     if (process.env["CI"]) throw new UsageError('gsc auth is interactive (browser consent) and is disabled in CI. Use "gsc import <export.zip>" or SEARVEX_GSC_TOKEN there.');
-    const existing = readCredentials()["gsc"];
+    const existing = getCredential("gsc");
     if (existing && !v["force"]) {
       try {
         await accessToken(existing);
@@ -40532,7 +40648,7 @@ async function commandGsc(flags) {
     return 0;
   }
   if (sub === "status") {
-    const cred = readCredentials()["gsc"];
+    const cred = getCredential("gsc");
     const envToken = !!process.env["SEARVEX_GSC_TOKEN"];
     const status = { credential: cred ? "stored" : "none", envToken, store: defaultCredentialStore().describe() };
     if (cred) {
@@ -40551,7 +40667,7 @@ async function commandGsc(flags) {
     return cred || envToken ? 0 : 1;
   }
   if (sub === "logout") {
-    const cred = readCredentials()["gsc"];
+    const cred = getCredential("gsc");
     if (!cred) {
       console.log("No stored Search Console credential.");
       return 0;
@@ -40652,7 +40768,7 @@ async function commandConnect(flags) {
   const choice = v["choice"];
   if (choice && !["google", "csv", "skip"].includes(choice)) throw new UsageError("--choice must be google, csv or skip");
   if (choice) setSitePreference(site, { choice, property: v["property"] });
-  const cred = readCredentials()["gsc"];
+  const cred = getCredential("gsc");
   const state = {
     site: siteKey(site),
     preference: getSitePreference(site),
@@ -40699,6 +40815,7 @@ Commands
                         property check, query/page analysis with a property-matched --audit join;
                         "gsc import <export.zip>" reads a Performance CSV export without any account access
   bing report <siteUrl> Bing Webmaster Tools query/page analysis (SEARVEX_BING_API_KEY, read-only)
+                        (gsc and bing are experimental: not yet verified against the live services)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and
@@ -40731,6 +40848,8 @@ Environment (all optional, read-only integrations)
   SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
   SEARVEX_BING_API_KEY  Bing Webmaster Tools API key \u2192 "searvex bing report"
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
+  SEARVEX_CREDENTIAL_STORE  file (default, 0600 file in the config dir) or keychain (macOS Keychain,
+                        Secret Service via secret-tool, Windows DPAPI)
 
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
 `;
@@ -40878,7 +40997,7 @@ async function commandAudit(flags) {
     if (render3) {
       const st = render3.stats;
       report.limitations.push(
-        `JavaScript rendering: Chromium ${st.sandbox ? "with" : "WITHOUT"} its OS sandbox${st.sandbox ? "" : " (not available on this system)"}, all traffic through Searvex's policy proxy; ${st.blockedRequests + st.proxy.blocked} browser request(s) blocked by the network policy${st.proxy.blockedTargets.length ? ` (${st.proxy.blockedTargets.slice(0, 5).join(", ")})` : ""}${st.proxy.budgetExceeded ? `; ${st.proxy.budgetExceeded} connection(s) cut at the per-page transfer limit` : ""}.`
+        `JavaScript rendering: Chromium ${st.sandbox ? "with" : "WITHOUT"} its OS sandbox${st.sandbox ? "" : " (not available on this system)"}, all traffic through Searvex's policy proxy; ${st.blockedRequests + st.proxy.blocked} browser request(s) blocked by the network policy${st.proxy.blockedTargets.length ? ` (${st.proxy.blockedTargets.slice(0, 5).join(", ")})` : ""}${st.proxy.budgetExceeded ? `; ${st.proxy.budgetExceeded} connection(s) cut at the per-page transfer limit` : ""}${st.deadlineExceeded ? `; ${st.deadlineExceeded} page(s) stopped at the hard time limit (scripts kept the browser busy)` : ""}.`
       );
     }
     const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));

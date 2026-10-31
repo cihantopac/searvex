@@ -42,7 +42,7 @@ Each item lists how it will be verified; nothing is marked done without that ver
 | 27 | Search Console CSV/ZIP import (localised headers, decimal commas, filters/period metadata, limits) | ✅ v0.7.0 — TR wording to confirm with a real export |
 | 28 | Onboarding: `connect` with Google / CSV / skip, per-site preference, "Not measured" in summaries | ✅ v0.7.0 |
 | 29 | OAuth hardening: revoke on logout, CI guard, Desktop-client check, invalid_grant guidance, credential store interface | ✅ v0.7.0 (mock-tested; live pending) |
-| 30 | OS keychain credential backend (macOS Keychain, Windows Credential Manager, libsecret) | ⬜ v1.0 candidate |
+| 30 | OS keychain credential backend (macOS Keychain, Windows DPAPI, libsecret) | ✅ v1.0 round — opt-in `SEARVEX_CREDENTIAL_STORE=keychain` |
 | 33 | `monitor --import/--site-url/--baseline` property checks (tech debt #17) | ✅ v1.0 round |
 | 34 | Renderer hard deadline for busy-loop / memory-growth pages | ✅ v1.0 round |
 | 35 | Optimizer journal (interrupted apply), no forced auto-undo, CRLF and file modes | ✅ v1.0 round |

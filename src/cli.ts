@@ -42,6 +42,7 @@ Commands
                         property check, query/page analysis with a property-matched --audit join;
                         "gsc import <export.zip>" reads a Performance CSV export without any account access
   bing report <siteUrl> Bing Webmaster Tools query/page analysis (SEARVEX_BING_API_KEY, read-only)
+                        (gsc and bing are experimental: not yet verified against the live services)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and
@@ -74,6 +75,8 @@ Environment (all optional, read-only integrations)
   SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
   SEARVEX_BING_API_KEY  Bing Webmaster Tools API key → "searvex bing report"
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
+  SEARVEX_CREDENTIAL_STORE  file (default, 0600 file in the config dir) or keychain (macOS Keychain,
+                        Secret Service via secret-tool, Windows DPAPI)
 
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
 `;
@@ -232,7 +235,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
     if (render) {
       const st = render.stats;
       report.limitations.push(
-        `JavaScript rendering: Chromium ${st.sandbox ? 'with' : 'WITHOUT'} its OS sandbox${st.sandbox ? '' : ' (not available on this system)'}, all traffic through Searvex's policy proxy; ${st.blockedRequests + st.proxy.blocked} browser request(s) blocked by the network policy${st.proxy.blockedTargets.length ? ` (${st.proxy.blockedTargets.slice(0, 5).join(', ')})` : ''}${st.proxy.budgetExceeded ? `; ${st.proxy.budgetExceeded} connection(s) cut at the per-page transfer limit` : ''}.`,
+        `JavaScript rendering: Chromium ${st.sandbox ? 'with' : 'WITHOUT'} its OS sandbox${st.sandbox ? '' : ' (not available on this system)'}, all traffic through Searvex's policy proxy; ${st.blockedRequests + st.proxy.blocked} browser request(s) blocked by the network policy${st.proxy.blockedTargets.length ? ` (${st.proxy.blockedTargets.slice(0, 5).join(', ')})` : ''}${st.proxy.budgetExceeded ? `; ${st.proxy.budgetExceeded} connection(s) cut at the per-page transfer limit` : ''}${st.deadlineExceeded ? `; ${st.deadlineExceeded} page(s) stopped at the hard time limit (scripts kept the browser busy)` : ''}.`,
       );
     }
     const files = writeReports(store, report, kb, String(v['format'] ?? 'md,html,json').split(','));

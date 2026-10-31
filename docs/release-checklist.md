@@ -22,7 +22,8 @@ Status: ✅ verified · 🔄 in progress · ⬜ open · ⛔ blocked on the owner
 | GA4, Yandex Webmaster, PSI/Lighthouse, AI-search performance data | ➖ (documented as not implemented) | — |
 
 An integration without a live run is shipped as **experimental** (documented, not advertised as
-supported) rather than delaying the release.
+supported) rather than delaying the release — owner decision 2026-10-31. Marked in the README table,
+`searvex --help` and [limitations.md](limitations.md).
 
 ## P0 — security, correctness, data integrity (blocking)
 
@@ -37,8 +38,8 @@ supported) rather than delaying the release.
 | S7 | Optimizer: failed verification never overwrites edits made after apply | ✅ | auto-undo no longer uses `force`; conflicting files are listed instead |
 | S8 | Optimizer: partial write failures leave the tree byte-identical | ✅ | `repository.test.ts` "undoes a partially applied change" |
 | S9 | Optimizer: line endings and file modes preserved | ✅ | CRLF and permission-bit tests |
-| S10 | Credentials never appear in logs, reports or run directories | ⬜ | planned: test that greps every output file of an authorised run for token values |
-| S11 | Credential storage reviewed (file 0600 + OS keychain option) | ⬜ | keychain backend via OS tools, no new dependencies (see [security.md](security.md)) |
+| S10 | Credentials never appear in logs, reports or run directories | ✅ | `gsc.test.ts` leak scan: all console output + every run file of an authorised session; 0 occurrences |
+| S11 | Credential storage reviewed (file 0600 + OS keychain option) | ✅ | opt-in keychain via OS tools, no new dependencies; `credentials.test.ts`; real macOS Keychain run locally; real DPAPI in Windows CI |
 | S12 | Rule base re-verified against current official sources; heuristics labelled | 🔄 | `rules check-sources` run + manual review of changed sources |
 | S13 | Dependency audit and licence check clean | ⬜ | `npm audit --omit=dev`, licence list in the release notes |
 

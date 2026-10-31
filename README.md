@@ -37,8 +37,8 @@ Competitor research and differentiation notes: [docs/research/competitors-2026-1
   (`research`).
 - Fix a small set of problems in code automatically (9 rule types: e.g. missing `lang`, viewport, robots.txt
   sitemap line, invalid hreflang codes), always as a dry-run diff first, then apply → re-verify → rollback.
-- Read Search Console or Bing data when you connect them yourself, and keep measured data separate from
-  inference.
+- Read Search Console or Bing data when you connect them yourself (experimental integrations), and keep
+  measured data separate from inference.
 
 **Searvex does not:**
 
@@ -129,13 +129,18 @@ Full reference: [docs/cli.md](docs/cli.md).
 
 ### Optional integrations (read-only, opt-in)
 
-| Variable | Enables |
-|---|---|
-| `SEARVEX_CRUX_API_KEY` | Real-user Core Web Vitals (Chrome UX Report API) |
-| `searvex gsc auth` (or `SEARVEX_GSC_TOKEN`) | Search Console query × page analysis, `monitor` performance |
-| `SEARVEX_BING_API_KEY` | Bing Webmaster Tools query × page analysis |
-| `searvex gsc import export.zip` | Search Console Performance CSV/ZIP exports (no account access; no query × page data) |
-| `npm i -D playwright` | `--render`: JavaScript rendering and raw-vs-rendered comparison |
+| Variable | Enables | Status |
+|---|---|---|
+| `npm i -D playwright` | `--render`: JavaScript rendering and raw-vs-rendered comparison | supported |
+| `searvex gsc import export.zip` | Search Console Performance CSV/ZIP exports (no account access; no query × page data) | experimental¹ |
+| `searvex gsc auth` (or `SEARVEX_GSC_TOKEN`) | Search Console query × page analysis, `monitor` performance | experimental¹ |
+| `SEARVEX_BING_API_KEY` | Bing Webmaster Tools query × page analysis | experimental¹ |
+| `SEARVEX_CRUX_API_KEY` | Real-user Core Web Vitals (Chrome UX Report API) | experimental¹ |
+| `SEARVEX_CREDENTIAL_STORE=keychain` | Keep the Search Console refresh token in the OS keychain instead of a 0600 file | supported |
+
+¹ Experimental: implemented and tested against recorded API behaviour and synthetic exports, but not yet
+verified against the live service or real exports in every UI language. Interfaces may change; please report
+problems. See [docs/release-checklist.md](docs/release-checklist.md).
 
 Without them, Searvex reports these metrics as **not measured** — it never estimates them.
 

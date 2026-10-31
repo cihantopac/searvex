@@ -66,6 +66,7 @@ Exit codes: `0` success · `1` `--fail-on` threshold met, optimize verification 
 | `SEARVEX_GSC_TOKEN` | OAuth access token with `webmasters.readonly` scope |
 | `SEARVEX_GSC_SITE` | Search Console property for `monitor`, e.g. `sc-domain:example.com` |
 | `SEARVEX_BING_API_KEY` | Bing Webmaster Tools API key for `bing report` |
+| `SEARVEX_CREDENTIAL_STORE` | `file` (default: 0600 JSON file in the config dir) or `keychain`: macOS Keychain (`security`), Secret Service (`secret-tool`, libsecret) or Windows DPAPI (`powershell.exe`). Secrets go to the tools on stdin, never as arguments. Credentials saved by the file store remain readable and move to the keychain on the next save. |
 | `SEARVEX_CONFIG_DIR` | Override the user config directory (credentials, search-data choices) |
 
 ## Output files (`.searvex/runs/<runId>/`)
