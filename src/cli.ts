@@ -43,8 +43,7 @@ Commands
                         property check, query/page analysis with a property-matched --audit join;
                         "gsc import <export.zip>" reads a Performance CSV export without any account access
   bing report <siteUrl> Bing Webmaster Tools query/page analysis (SEARVEX_BING_API_KEY, read-only)
-                        (gsc auth/report and bing are experimental: not yet verified against the live
-                        services; gsc import is verified with real Turkish and English exports)
+                        (bing is experimental: not yet verified against the live service)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and

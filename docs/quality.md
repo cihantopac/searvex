@@ -34,7 +34,7 @@ Last updated: 2026-10-30 (v0.7.0). Environment: macOS (Apple M4), Node 22.23.2; 
 | Reports | HTML inert embedding of hostile content, Markdown escaping, SARIF structure |
 
 Coverage (v8, `src/**`, without the Playwright job): **lines 88.3% · statements 83.7% · functions 87.8% · branches 72.9%**.
-Not covered: live Search Console / CrUX API calls.
+Live Search Console calls are validated manually (section below); live CrUX and Bing calls are not covered yet.
 
 ## Real-world validation (2026-10-30)
 
@@ -145,6 +145,29 @@ was **synthetic**: Turkish headers and number formats, URLs taken from the real 
 - Three permitted HTTPS sites rendered through the proxy: 6 tunnels, 0 blocked requests, Chromium sandbox
   active (macOS), ~1.7 s per page. A 15-page `--render` audit reproduced the locale-adaptive canonical
   switch and the Inertia duplicate titles found by hand in round 3.
+
+## Live Search Console validation (2026-11-01)
+
+Owner's own Desktop OAuth client and Google account (5 properties), credential in the macOS Keychain
+(`SEARVEX_CREDENTIAL_STORE=keychain`). Property data is not reproduced here.
+
+| Check | Result |
+|---|---|
+| Authorization (loopback + PKCE, read-only scope) and storage | ✅ token in the Keychain; no credentials file on disk |
+| Refresh-token → access-token exchange (`gsc status`) | ✅ valid |
+| Property discovery (`gsc sites`) | ✅ 5 properties with permission levels; the domain property matches what the CSV import inferred |
+| Same period via API vs. the real CSV exports (TR + EN) | ✅ identical rows and sums for date, device, country, query and page tables (512 clicks / 13,818 impressions) |
+| Pagination (`startRow`, 100 rows/page) | ✅ 544 query × page rows, identical set to one request, 0 duplicates; `max-rows` cap respected |
+| `gsc report` with `--audit` join, other-site audit, unknown property, URL-prefix look-alike | ✅ joined / refused / lists accessible properties / "Did you mean sc-domain:…?" |
+| Re-running `gsc auth` with a valid grant | ✅ reuses it ("Already authorized") |
+| Secrets in output | ✅ 10 commands, ~155 KB of output and run files scanned for the refresh token, a fresh access token, the client secret and Google token patterns: 0 matches |
+| `gsc logout` revocation at Google | ⏸ not run live (owner kept the grant); covered by the mock-server test and the documented endpoint; on failure the CLI says so and explains manual removal |
+
+Defects found and fixed in this round: API reports summed only query × page rows (322 clicks, anonymised
+queries excluded) while CSV reports showed property totals (512) — API reports now add the daily series;
+the keychain backend ignored `SEARVEX_CONFIG_DIR`, so a test run from a shell with the keychain selected
+deleted the real credential — keychain entries are now isolated per config directory (sentinel-verified);
+`gsc auth` now opens the browser.
 
 ## Real-world validation round 6 — local repositories (2026-11-01)
 

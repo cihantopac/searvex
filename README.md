@@ -38,7 +38,7 @@ Competitor research and differentiation notes: [docs/research/competitors-2026-1
 - Fix a small set of problems in code automatically (9 rule types: e.g. missing `lang`, viewport, robots.txt
   sitemap line, invalid hreflang codes), always as a dry-run diff first, then apply → re-verify → rollback.
 - Read Search Console data from a CSV export you download (no account needed), or from the Search Console
-  and Bing APIs when you connect them yourself (experimental), and keep measured data separate from inference.
+  API (your own OAuth client) and the Bing API (experimental) when you connect them yourself, and keep measured data separate from inference.
 
 **Searvex does not:**
 
@@ -133,7 +133,7 @@ Full reference: [docs/cli.md](docs/cli.md).
 |---|---|---|
 | `npm i -D playwright` | `--render`: JavaScript rendering and raw-vs-rendered comparison | supported |
 | `searvex gsc import export.zip` | Search Console Performance CSV/ZIP exports (no account access; no query × page data) | supported² |
-| `searvex gsc auth` (or `SEARVEX_GSC_TOKEN`) | Search Console query × page analysis, `monitor` performance | experimental¹ |
+| `searvex gsc auth` (or `SEARVEX_GSC_TOKEN`) | Search Console query × page analysis, `monitor` performance | supported³ |
 | `SEARVEX_BING_API_KEY` | Bing Webmaster Tools query × page analysis | experimental¹ |
 | `SEARVEX_CRUX_API_KEY` | Real-user Core Web Vitals (Chrome UX Report API) | experimental¹ |
 | `SEARVEX_CREDENTIAL_STORE=keychain` | Keep the Search Console refresh token in the OS keychain instead of a 0600 file | supported |
@@ -144,6 +144,10 @@ problems. See [docs/release-checklist.md](docs/release-checklist.md).
 
 ² Verified with real exports downloaded in the Turkish and English Search Console UI (both give identical
 results); other UI languages are recognised from published UI terms.
+
+³ Verified against the live Search Console API (authorization, refresh, property discovery, pagination,
+reports; totals identical to the CSV export of the same period). Revocation on `gsc logout` is tested against a
+mock server only.
 
 Without them, Searvex reports these metrics as **not measured** — it never estimates them.
 

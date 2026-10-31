@@ -32,6 +32,14 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Session log
 
+### 2026-11-01 — live Search Console API
+- Owner authorised with their own Desktop client; credential in the macOS Keychain. Verified live (quality.md):
+  refresh, property list, report, pagination, CSV parity, audit join, error messages, 0 secrets in output.
+- Fixed: API totals now include anonymised queries (daily series); keychain entries isolated per config dir
+  (a test run had deleted the real credential — owner re-authorised); `gsc auth` opens the browser.
+- Not run live: `gsc logout` revocation (owner kept the grant). Search Console API is now **supported**;
+  Bing and CrUX remain experimental.
+
 ### 2026-11-01 — first real Search Console export (Turkish UI)
 - Real domain-property export ("Son 3 ay", 7 CSVs) imported end to end; totals cross-checked against the
   devices and countries tables (identical), row counts against Python's csv module (identical).
