@@ -66,7 +66,7 @@ supported) rather than delaying the release — owner decision 2026-10-31. Marke
 | D5 | Performance and memory measured for small / medium / large sites | ✅ | 500 / 5,000 / 20,000 / 50,000 pages (1.1 GB at 50k); no regression vs v0.7.0 under identical load; real sites 13–111 s at polite settings (quality.md) |
 | D6 | Reproducible package: two builds produce the same tarball contents | ✅ | two clean builds + `npm pack`: 202 files, identical SHA-256; no private files in the package |
 | D7 | Release notes, changelog, security assessment, final readiness report | ✅ | [release-notes-1.0.0.md](release-notes-1.0.0.md), CHANGELOG 1.0.0, [security.md](security.md), readiness report below |
-| D8 | Owner approval for npm publish and GitHub release | ⛔ | never done without explicit approval |
+| D8 | Owner approval for npm publish and GitHub release | ✅ | approved 2026-11-01; `searvex-seo@1.0.0` published by the owner, GitHub release v1.0.0 created |
 
 ## Readiness report (2026-11-01)
 

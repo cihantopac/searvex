@@ -4,10 +4,13 @@ Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Current state — 2026-11-01
 
-- Version **1.0.0 release candidate** on branch `release/v1.0-readiness` (PR #4). All blocking criteria in
-  [release-checklist.md](release-checklist.md) are ✅; readiness report at its end. Waiting for the owner to
-  merge and to approve `npm publish` and the GitHub release. Bing is experimental; the plugin directory icon
-  waits for the owner's brand decision.
+- **1.0.0 released** on 2026-11-01: PR #4 merged into `main` (CI 15/15 green), `searvex-seo@1.0.0` on npm
+  (installed from the registry and smoke-tested; tarball shasum equal to a local `npm pack`), GitHub release
+  [v1.0.0](https://github.com/cihantopac/searvex/releases/tag/v1.0.0) with the release notes and tarball.
+  Evidence: [release-checklist.md](release-checklist.md).
+- Open after 1.0.0: Bing is experimental until the owner's sites have Bing data; the plugin directory icon
+  waits for the owner's final brand mark (required before directory submission); next items in
+  [roadmap.md](roadmap.md).
 - Live integrations configured on the owner's machine (macOS Keychain): Search Console OAuth, Bing API key,
   CrUX API key. Private exports and captures in `.searvex/` (git-ignored).
 
