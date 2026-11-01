@@ -59,10 +59,10 @@ if(D.search)tabs.push(['search',T('nav.search')]);if(D.diff)tabs.push(['changes'
 overview(panel('overview'),issues);priorities(panel('priorities'),issues);issuesPanel(panel('issues'));if(hasGeo)geo(panel('geo'));if(D.search)search(panel('search'));if(D.diff)changes(panel('changes'));evidence(panel('evidence'));
 mkTabs(tabs);actionbar()}
 function overview(P,issues){
-var lim=[];if(R.crawl.truncated)lim.push(T('warn.truncated',{n:fmt(R.crawl.queuedRemaining)}));if(R.scores.notApplicable)lim.push(T('warn.notApplicable')+': '+R.scores.notApplicable);
-if(!D.search&&R.mode==='website')lim.push(T('sp.notConnected'));R.findings.filter(function(f){return f.confidence==='unmeasurable'}).forEach(function(f){lim.push(rt(f.ruleId).title+(f.evidence[0]&&f.evidence[0].observed?' — '+f.evidence[0].observed:''))});
-if(R.mode==='website'&&!R.rendered)lim.push(T('warn.noRender'));
-lim=lim.filter(Boolean);
+function TT(k,fb){var s=T(k);return s===k?fb:s}
+var lim=[];if(R.crawl.truncated)lim.push([T('lim.truncated'),T('warn.truncated',{n:fmt(R.crawl.queuedRemaining)})]);if(R.scores.notApplicable)lim.push([T('warn.notApplicable'),T('warn.notApplicable')+': '+R.scores.notApplicable]);
+if(!D.search&&R.mode==='website')lim.push([T('lim.search'),T('sp.notConnected')]);R.findings.filter(function(f){return f.confidence==='unmeasurable'}).forEach(function(f){var t=rt(f.ruleId).title,o=f.evidence[0]&&f.evidence[0].observed;lim.push([TT('lim.'+f.ruleId,t),t+(o?' — '+TT('limd.'+f.ruleId,o):'')])});
+if(R.mode==='website'&&!R.rendered)lim.push([T('lim.render'),T('warn.noRender')]);
 var groups=0;issues.forEach(function(f){groups+=groupsOf(f).length});
 var auto=issues.filter(function(f){return D.rem[f.ruleId]==='auto'}),optOnly=issues.filter(function(f){return D.rem[f.ruleId]!=='auto'&&D.opt[f.ruleId]});
 var ch=null;if(D.diff){var dd=D.diff.scoreBefore===null?null:D.diff.scoreAfter-D.diff.scoreBefore;ch=card(T('kpi.change'),dd===null?'—':(dd>=0?'+':'')+dd,'+'+D.diff.newFindings.length+' / −'+D.diff.resolved.length)}
@@ -72,13 +72,13 @@ card(T('kpi.groups'),fmt(groups),T('kpi.types',{n:fmt(issues.length)})),
 card(T(R.mode==='website'?'kpi.affected':'kpi.affectedFiles'),fmt(R.affectedUrls!==undefined?R.affectedUrls:0),(R.mode==='website'?T('kpi.pages'):T('kpi.routes'))+': '+fmt(R.crawl.crawled)),
 card(T('kpi.critical'),fmt(issues.filter(function(f){return f.severity==='critical'||f.severity==='high'}).length),null,null,issues.some(function(f){return f.severity==='critical'})?'alert':''),
 card(T('kpi.auto'),fmt(auto.length),auto.length?null:optOnly.length?T('kpi.autoRepo')+' ('+optOnly.length+')':T('kpi.autoNone')),ch||card(T('kpi.change'),'—',T('kpi.noBaseline'))]));
-if(lim.length)P.appendChild(el('div',{class:'notice',role:'note'},[el('b',{text:T('ov.limits')}),el('ul',{},lim.slice(0,6).map(function(l){return el('li',{text:l})}))]));
+if(lim.length)P.appendChild(el('div',{class:'limits',role:'note'},[el('b',{text:T('ov.limits')}),el('span',{class:'lim',text:lim.map(function(l){return l[0]}).join(' · ')}),el('details',{},[el('summary',{text:T('ov.limitsMore')}),el('ul',{},lim.map(function(l){return el('li',{text:l[1]})}))])]));
+var top=issues.slice().sort(function(a,b){return((b.priority&&b.priority.score)||0)-((a.priority&&a.priority.score)||0)}).slice(0,3);
+P.appendChild(h2(T('pri.title'),T('pri.note')));P.appendChild(top.length?el('div',{class:'prio'},top.map(prioCard)):el('p',{class:'muted',text:T('pri.none')}));
 var pil=el('div',{class:'pillars'});PILLARS.forEach(function(p){var cats=p[1],fs=issues.filter(function(f){return cats.indexOf(f.category)>=0});var sc=cats.map(function(c){return R.scores.byCategory[c]}).filter(function(x){return typeof x==='number'});var v=sc.length?Math.min.apply(null,sc):100;
 if(p[0]==='geo'&&R.mode==='repository'&&!fs.length)return;var cls=v>=90?'good':v>=70?'medium':'critical';
 pil.appendChild(el('button',{type:'button',class:'pillar '+cls,title:cats.map(function(c){return T('cat.'+c)}).join(', ')},[el('span',{class:'label',text:T('pillar.'+p[0])}),el('b',{text:String(v)}),el('span',{class:'sub',text:fs.length?T('pillar.issues',{n:fs.length}):T('pillar.noIssues')})]));pil.lastChild.onclick=function(){FILT.cat=cats.length===1?cats[0]:'';FILT.q='';FILT.pillar=cats;showTab('issues');issuesPanel(document.getElementById('p-issues'))}});
 P.appendChild(h2(T('ov.pillars')));P.appendChild(pil);
-var top=issues.slice().sort(function(a,b){return((b.priority&&b.priority.score)||0)-((a.priority&&a.priority.score)||0)}).slice(0,3);
-P.appendChild(h2(T('pri.title'),T('pri.note')));P.appendChild(top.length?el('div',{class:'prio'},top.map(prioCard)):el('p',{class:'muted',text:T('pri.none')}));
 var c=el('div',{class:'charts'});
 c.appendChild(stacked(T('ov.severity'),SEVS.slice(0,4).map(function(s){return[T('sev.'+s),issues.filter(function(f){return f.severity===s}).length,s]})));
 c.appendChild(stacked(T('ov.remediation'),[['auto','good'],['agent','low'],['manual','medium']].map(function(r){return[T('rem.'+r[0]),issues.filter(function(f){return D.rem[f.ruleId]===r[0]}).length,r[1]]}),T('rem.auto.help')));

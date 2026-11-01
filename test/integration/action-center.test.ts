@@ -190,7 +190,7 @@ describe.runIf(browserType)('action center in a browser', () => {
       await p.goto('file://' + file);
       // Browser language detection: Turkish.
       expect(await p.locator('#tab-overview').innerText()).toBe('Genel bakış');
-      expect(await p.evaluate<string>('getComputedStyle(document.body).backgroundColor')).toBe('rgb(14, 22, 21)');
+      expect(await p.evaluate<string>('getComputedStyle(document.body).backgroundColor')).toBe('rgb(17, 27, 26)');
       await p.click('#tab-issues');
       await p.locator('.finding > input').first().click();
       expect(await p.locator('#actionbar').innerText()).toContain('1 seçili');
@@ -206,7 +206,7 @@ describe.runIf(browserType)('action center in a browser', () => {
       await p.locator('.seg button:text-is("EN")').first().click();
       await p.locator('.seg button:text-is("Light")').first().click();
       expect(await p.locator('#tab-overview').innerText()).toBe('Overview');
-      expect(await p.evaluate<string>('getComputedStyle(document.body).backgroundColor')).toBe('rgb(245, 247, 246)');
+      expect(await p.evaluate<string>('getComputedStyle(document.body).backgroundColor')).toBe('rgb(246, 241, 231)');
       expect(await p.locator('#actionbar').innerText()).toContain('1 selected');
       await p.goto('file://' + file);
       expect(await p.locator('#tab-overview').innerText()).toBe('Overview');

@@ -5,6 +5,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-01
+
+Visual polish; the analysis engine, rules, evidence and CLI are unchanged. Release notes:
+[docs/release-notes-1.1.1.md](docs/release-notes-1.1.1.md).
+
+### Changed
+- HTML report themes follow the Searvex brand palette (warm paper / ink / teal; coral only in the logo caret),
+  with light and dark variants checked for WCAG AA contrast. Severity colours are unchanged in meaning.
+- Overview: "Fix these first" moved directly below the key numbers; the limits of a run are a one-line summary
+  with expandable details instead of a large notice.
+- Turkish: the limits summary is fully translated; clearer wording for shared layouts, automatic fixes and
+  informational findings.
+- Mobile: two-column KPI grid with a full-width score card and a smaller gauge.
+- README shortened and refocused; workflow diagrams and screenshots refreshed from the final report.
+
 ## [1.1.0] - 2026-11-01
 
 A product-experience release: the analysis engine and its evidence are unchanged; how results are presented,

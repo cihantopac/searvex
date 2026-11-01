@@ -1,5 +1,7 @@
 # Progress log (resume point)
 
+- **1.1.1** on 2026-11-01: visual polish only — brand palette in report themes, diagrams and screenshots;
+  overview leads with priorities; one-line limits summary; Turkish wording; shorter README.
 - **1.1.0 prepared** on 2026-11-01 (branch `release/v1.1.0`): action-center HTML report (EN/TR, light/dark/system,
   root-cause groups, selection, repair prompts), `review` and `open` commands, concise skills, 3 new fixers, monorepo
   sitemap fix, visual README. Not yet published: npm and the GitHub release wait for the owner's approval.

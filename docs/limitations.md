@@ -1,6 +1,6 @@
 # Limitations & unsupported scenarios
 
-Searvex reports what it can observe and labels everything else. Known limits (v1.1.0):
+Searvex reports what it can observe and labels everything else. Known limits (v1.1.1):
 
 ## Data Searvex does not have
 
