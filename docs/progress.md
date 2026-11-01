@@ -1,5 +1,9 @@
 # Progress log (resume point)
 
+- **1.1.0 prepared** on 2026-11-01 (branch `release/v1.1.0`): action-center HTML report (EN/TR, light/dark/system,
+  root-cause groups, selection, repair prompts), `review` and `open` commands, concise skills, 3 new fixers, monorepo
+  sitemap fix, visual README. Not yet published: npm and the GitHub release wait for the owner's approval.
+
 Use this file to resume work after an interrupted session. Newest entries first.
 
 ## Current state — 2026-11-01

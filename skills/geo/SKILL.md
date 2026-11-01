@@ -4,7 +4,8 @@ argument-hint: "<url>"
 allowed-tools: Bash(node *) Bash(searvex *) Read
 ---
 
-Run `node "${CLAUDE_PLUGIN_ROOT}/dist/searvex.mjs" geo $ARGUMENTS` and explain:
+Run `node "${CLAUDE_PLUGIN_ROOT}/dist/searvex.mjs" geo $ARGUMENTS`. Answer in 80–150 words with the points
+below and the `report.html` path (its GEO tab has the full crawler matrix); do not paste the whole matrix:
 
 1. **Crawler access matrix.** Separate classic search crawlers (Googlebot, Bingbot), AI *search*
    crawlers (OAI-SearchBot, Claude-SearchBot, PerplexityBot…), AI *training* crawlers (GPTBot, ClaudeBot,

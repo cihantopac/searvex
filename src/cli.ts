@@ -8,6 +8,10 @@ import { RunStore } from './crawl/store.js';
 import { SEARVEX_VERSION } from './net/fetcher.js';
 import { DEFAULT_POLICY } from './net/ssrf.js';
 import { renderHtml } from './report/html.js';
+import { loadExtras } from './report/extras.js';
+import { remediationOf } from './report/remediation.js';
+import { commandOpen, commandReview, openFile } from './commands/review.js';
+import { pathToFileURL } from 'node:url';
 import { renderMarkdown } from './report/markdown.js';
 import { renderSarif } from './report/sarif.js';
 import { defaultKnowledgeDir, loadKnowledge, validateKnowledge, type KnowledgeBase } from './rules/engine.js';
@@ -56,6 +60,9 @@ Commands
                         Inspect/validate the rule base; check-sources re-fetches official sources and
                         reports changed, redirected or broken pages (--update records a new snapshot)
   report <runId|latest>  Re-render a stored report (--format)
+  open [runId|latest]   Open a stored HTML report in the default browser
+  review <runId|latest> <ref|ruleId> <confirmed|rejected|fixed> [--note text]
+                        Record an agent/human review of a finding next to the audit (evidence is kept)
   runs                  List stored runs
 
 Common options
@@ -74,6 +81,7 @@ Common options
   --apply / --yes       optimize: write changes (after confirmation) / skip the prompt
   --only <ruleId>       optimize: restrict fixes to a rule (repeatable)
   --competitor <url>    research: competitor site to compare (repeatable, max 10)
+  --open                Open the HTML report in the default browser when done
   --json                Print the JSON report to stdout
   -q, --quiet           Less output
   -h, --help            Show help
@@ -141,6 +149,8 @@ function parse(argv: string[]): GlobalFlags {
       property: { type: 'string' },
       choice: { type: 'string' },
       'no-browser': { type: 'boolean' },
+      open: { type: 'boolean' },
+      note: { type: 'string' },
     },
   });
   return { values, positionals };
@@ -178,7 +188,7 @@ export function writeReports(store: RunStore, report: AuditReport, kb: Knowledge
   for (const f of formats) {
     if (f === 'json') out.push((store.writeJson('report.json', report), store.file('report.json')));
     else if (f === 'md') out.push(store.writeText('report.md', renderMarkdown(report)));
-    else if (f === 'html') out.push(store.writeText('report.html', renderHtml(report, kb)));
+    else if (f === 'html') out.push(store.writeText('report.html', renderHtml(report, kb, loadExtras(store, report))));
     else if (f === 'sarif') out.push(store.writeText('report.sarif', JSON.stringify(renderSarif(report, kb), null, 2)));
     else throw new UsageError(`Unknown format: ${f}`);
   }
@@ -192,21 +202,51 @@ export function failOnExit(report: AuditReport, failOn: unknown): number {
   return report.findings.some((f) => SEVERITY_ORDER.indexOf(f.severity) <= idx && f.confidence !== 'unmeasurable') ? 1 : 0;
 }
 
-export function printSummary(report: AuditReport, files: string[], v: GlobalFlags['values']): void {
+/**
+ * Short, decision-oriented terminal summary: score, issue groups, top three priorities, automatic fixes,
+ * important limits and the path of the interactive report. Details live in the HTML report.
+ */
+export function printSummary(report: AuditReport, files: string[], v: GlobalFlags['values'], autoRules: string[] = []): void {
   if (v['json']) {
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');
     return;
   }
+  const html = files.find((f) => f.endsWith('.html'));
+  if (v['open'] && html) openFile(html);
   if (v['quiet']) return;
-  const counts = SEVERITY_ORDER.map((s) => `${s}: ${report.findings.filter((f) => f.severity === s).length}`).join('  ');
-  console.log(`\nSearvex audit — ${report.target}`);
-  console.log(`Health score ${scoreLabel(report.scores)} (Searvex summary, not a search engine metric)`);
-  console.log(`Pages: ${report.crawl.crawled}${report.crawl.truncated ? ` (limit reached; ${report.crawl.queuedRemaining} queued)` : ''}   Rules: ${report.tool.rulesVersion}`);
-  console.log(`Findings by rule — ${counts}`);
-  for (const f of report.findings.filter((x) => x.severity !== 'info').slice(0, 12)) {
-    console.log(`  [${f.severity.padEnd(8)}] ${f.title} (${f.count})${f.confidence === 'heuristic' ? ' ~heuristic' : ''}`);
+  console.log(summaryText(report, files, autoRules));
+}
+
+export function summaryText(report: AuditReport, files: string[], autoRules: string[] = []): string {
+  const issues = report.findings.filter((f) => f.severity !== 'info' && f.confidence !== 'unmeasurable');
+  const top = issues.slice().sort((a, b) => (b.priority?.score ?? 0) - (a.priority?.score ?? 0)).slice(0, 3);
+  const plan = { fixes: autoRules.map((ruleId) => ({ ruleId })) } as never;
+  const auto = issues.filter((f) => remediationOf(f.ruleId, plan) === 'auto');
+  const unit = report.mode === 'website' ? 'pages' : 'locations';
+  const L = [`\nSearvex — ${report.target}`];
+  L.push(`Health score ${scoreLabel(report.scores)} (Searvex metric, not a search engine score) · ${report.crawl.crawled} ${report.mode === 'website' ? 'pages crawled' : 'routes/pages'} · ${issues.length} issue types, ${report.affectedUrls ?? 0} affected ${unit}`);
+  if (top.length) {
+    L.push('Top priorities:');
+    top.forEach((f, i) => L.push(`  ${i + 1}. [${f.severity}] ${f.title} — ${f.count} ${f.count === 1 ? unit.replace(/s$/, '') : unit}${f.confidence === 'heuristic' ? ' (heuristic)' : ''}${remediationOf(f.ruleId, plan) === 'auto' ? ' · automatic fix' : ''}`));
+  } else L.push('No significant issues found.');
+  if (auto.length) L.push(`Automatic fixes: ${auto.length} (${auto.map((f) => f.ruleId).join(', ')}) — preview with "searvex optimize ${report.mode === 'repository' ? report.target : '<repo>'}"`);
+  const limits: string[] = [];
+  if (report.crawl.truncated) limits.push(`crawl stopped at the page limit (${report.crawl.queuedRemaining} queued)`);
+  if (report.scores.notApplicable) limits.push('nothing to audit');
+  if (report.mode === 'website') {
+    limits.push('search data not measured');
+    if (report.findings.some((f) => f.ruleId === 'perf.cwv-unmeasured')) limits.push('Core Web Vitals not measured');
+    if (!report.rendered) limits.push('JavaScript not rendered');
   }
-  if (files.length) console.log(`\nReports:\n${files.map((f) => '  ' + f).join('\n')}`);
+  if (limits.length) L.push(`Limits: ${limits.join(' · ')}`);
+  const html = files.find((f) => f.endsWith('.html'));
+  if (html) {
+    const ws = path.resolve(html, '..', '..', '..', '..');
+    L.push(`\nOpen the report: ${pathToFileURL(html).href}`, `  (or run: searvex open ${path.basename(path.dirname(html))}${ws === process.cwd() ? '' : ` --out "${ws}"`})`);
+  }
+  const others = files.filter((f) => f !== html);
+  if (others.length) L.push(`Other files: ${others.map((f) => path.basename(f)).join(', ')} in ${path.dirname(others[0]!)}`);
+  return L.join('\n');
 }
 
 async function commandAudit(flags: GlobalFlags): Promise<number> {
@@ -408,6 +448,10 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         return await commandReport(flags);
       case 'runs':
         return commandRuns(flags);
+      case 'open':
+        return commandOpen(flags);
+      case 'review':
+        return commandReview(flags);
       default:
         throw new UsageError(`Unknown command: ${cmd}`);
     }

@@ -14,7 +14,7 @@ Goal: an evidence-based content and SEO strategy for the site in `$ARGUMENTS`.
    competitors that sell the same thing to the same audience. Show the list with one-line reasons and
    let the user adjust it.
 3. **Compare.** Run `research <url> --competitor <c1> --competitor <c2> … --max-pages 100`.
-4. **Report** (in the user's language):
+4. **Report** (in the user's language; lead with a 3–5 line summary, then the plan — keep tables small):
    - Positioning summary and what each competitor covers that the site does not (topic and page-type gaps).
    - Search intent per gap (informational / commercial / transactional / navigational), explained from
      the SERP results you actually saw — state that volumes are unknown unless the user provides data.

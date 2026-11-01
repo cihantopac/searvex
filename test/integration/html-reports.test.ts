@@ -91,9 +91,9 @@ describe.runIf(browserType)('HTML reports in a browser', () => {
         expect(errors).toEqual([]);
         await p.close();
       };
-      await check(renderHtml(before, kb), [['#charts', /Issues by severity/], ['#p-templates', /\/blog\/\*/], ['#t', /Searvex audit/]]);
-      await check(renderMonitorHtml(diffReports(before, after, before.runId)), [['#cards', /Resolved|Worse/], ['#tables', /Improved/]]);
-      await check(renderEcosystemHtml(analyzeEcosystem([ecoSite('a.example', EVIL), ecoSite('b.example', 'B')])), [['#body', /from \\ to/], ['#charts', /Health score/]]);
+      await check(renderHtml(before, kb, { diff: diffReports(before, after, before.runId) }), [['#p-overview', /Issues by severity/], ['#p-issues', /\/blog\/\*/], ['#kicker', /SEO action center/i], ['#tabs', /Changes/], ['#controls', /Türkçe|TR/]]);
+      await check(renderMonitorHtml(diffReports(before, after, before.runId)), [['#p-changes', /Resolved|Worse/], ['#p-changes', /Improved/]]);
+      await check(renderEcosystemHtml(analyzeEcosystem([ecoSite('a.example', EVIL), ecoSite('b.example', 'B')])), [['#p-overview', /from \\ to/], ['#p-overview', /Health score/]]);
     } finally {
       await browser.close();
     }

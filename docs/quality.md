@@ -285,6 +285,21 @@ imprint pages are real; "canonical/description missing" on two creator-portal la
 irrelevant, because those pages are behind a login — Searvex does not resolve auth middleware statically
 (documented limitation, low severity). Repository audits took 0.1–0.5 s and ≤ 135 MB RSS each.
 
+## v1.1.0 product-experience validation (2026-11-01)
+
+| Check | Result |
+|---|---|
+| Real site (ovokodo.com, ≤ 60 pages, default politeness) | 7 issue types; root-cause grouping turned 41 URL-template groups into 9: the duplicate `<title>` on 50 pages is one shared-layout group whose evidence names the Inertia.js root template |
+| Report in a real browser (desktop 1280 px, mobile 375–390 px; light, dark, system; EN, TR) | renders without script errors; no horizontal overflow on mobile; language and theme survive a reload; selection survives a language switch; Copy works with a real click (clipboard needs a user gesture); Markdown download contains exactly the edited prompt (Playwright test) |
+| v1.0 vs v1.1 rendering of the same report.json | old: flat list of 7 findings, English only; new: KPIs, condition by area, three priorities, grouped issues with selection |
+| Real repository copy (static TR/EN site + Laravel API monorepo, copied to a temporary folder; the original untouched) | repair prompt listed the right files, refs, groups and verification commands; the dry run planned a second sitemap for the static app and a sitemap of login routes under the public host → fixed: planner limited to the owning app, multi-app sitemaps are a reviewed task (regression test) |
+| Owner repositories (5, read-only) | one Next.js site clean (100); one static tool output without its own URL; one monorepo as above |
+| Automatic fixes, bundled static-site fixture copy | 8 rules 1 → 0, Searvex health score 84 → 97, Changes tab populated from the previous run, rollback byte-for-byte (test) |
+
+Defects found during this round and fixed before release: per-rule template splitting overstated work (→ shared
+layout groups), English text in Turkish limits (→ translated), singular/plural labels, the monorepo sitemap
+planner above.
+
 ## Benchmarks
 
 `npm run build && node scripts/benchmark.mjs <pages> <concurrency>` — synthetic site on localhost

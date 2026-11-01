@@ -36,7 +36,7 @@ tests plus, where noted, real-world validation ([quality.md](quality.md)).
 | Market & competitor intelligence | 🟡 | competitor crawl, topic/page-type/schema gaps; brand-family ecosystem analysis; discovery via agent web search; no SERP/volume data |
 | Keyword & content intelligence | 🟡 | TF-IDF terms, clusters, cannibalisation, near-duplicates; briefs by agent |
 | GEO/AEO | ✅ | crawler purpose matrix, snippet controls, entity consistency, clarity heuristic, honest citation status |
-| Optimization engine | ✅ | deterministic fixes for 9 rule types, tasks for judgement calls, dry-run/verify/rollback |
+| Optimization engine | ✅ | deterministic fixes for 12 rule types, tasks for judgement calls, dry-run/verify/rollback |
 | Analytics & monitoring | 🟡 | run diffs, regressions, Search Console API + CSV import (property-checked), CrUX field data (supported); Bing Webmaster API (experimental); Yandex, GA4 not implemented |
 
 ## Platform

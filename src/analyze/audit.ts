@@ -31,6 +31,17 @@ export interface AuditReport {
   fieldData?: CruxResult;
   externalLinks?: ExternalLinkResult;
   limitations: string[];
+  /** Distinct URLs (website) or locations (repository) with at least one non-informational finding. */
+  affectedUrls?: number;
+  /** Whether JavaScript was executed for at least one page (`--render`). */
+  rendered?: boolean;
+}
+
+/** Distinct affected URLs/files across all non-informational findings. */
+export function countAffected(findings: Array<Finding & { count: number }>, affected: (ruleId: string) => string[]): number {
+  const all = new Set<string>();
+  for (const f of findings) if (f.severity !== 'info' && f.confidence !== 'unmeasurable') for (const u of affected(f.ruleId)) if (!/\/robots\.txt$/.test(u)) all.add(u);
+  return all.size;
 }
 
 export interface Scores {
@@ -194,5 +205,7 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
     fieldData,
     externalLinks,
     limitations,
+    affectedUrls: countAffected(findings, (id) => sink.affected(id)),
+    rendered: result.pages.some((p) => p.rendered),
   };
 }

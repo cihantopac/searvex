@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { computeScores, type AuditReport } from '../analyze/audit.js';
+import { computeScores, countAffected, type AuditReport } from '../analyze/audit.js';
 
 const NOTHING_TO_AUDIT = 'No website found: the repository has no web framework, HTML pages or server templates that Searvex can audit (tests, fixtures, examples and benchmarks are ignored). Point Searvex at the folder of the site, or at its deployed URL.';
 import { buildContext } from '../analyze/context.js';
@@ -106,6 +106,7 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
       unmeasurable: findings.filter((f) => f.confidence === 'unmeasurable').length,
     },
     limitations,
+    affectedUrls: countAffected(findings, (id) => sink.affected(id)),
   };
   return { report, scan };
 }
