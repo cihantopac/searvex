@@ -103,7 +103,7 @@ without storing a preference.
 When search data is available, use the striking-distance, low-CTR, findings-on-traffic and intent sections
 to prioritise and label them as verified search data. "Queries shared by several pages" are not
 cannibalisation by default: only entries marked for review are candidates, and they still need a check over
-time. For Bing, `bing report <siteUrl> --audit latest` with SEARVEX_BING_API_KEY.
+time. For Bing, `bing report <siteUrl> --audit latest` once the user ran `searvex bing auth` in their own terminal (never ask for the key in chat).
 
 ## Phase 7/7 — Monitoring
 Explain that running `searvex run <url>` again after deployment shows improvements and regressions

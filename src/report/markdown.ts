@@ -1,4 +1,4 @@
-import type { AuditReport } from '../analyze/audit.js';
+import { scoreLabel, type AuditReport } from '../analyze/audit.js';
 import type { Severity } from '../core/types.js';
 
 const ICON: Record<Severity, string> = { critical: '🔴', high: '🟠', medium: '🟡', low: '🔵', info: '⚪' };
@@ -18,7 +18,7 @@ export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = 
   L.push(`Generated ${r.generatedAt} · Searvex ${r.tool.version} · rules ${r.tool.rulesVersion} · run \`${r.runId}\``, '');
   L.push('## Summary', '');
   L.push(`| Metric | Value |`, `|---|---|`);
-  L.push(`| Searvex health score¹ | **${r.scores.overall}/100** |`);
+  L.push(`| Searvex health score¹ | **${scoreLabel(r.scores)}** |`);
   L.push(`| Pages crawled | ${r.crawl.crawled}${r.crawl.truncated ? ` (limit reached, ${r.crawl.queuedRemaining} queued)` : ''} |`);
   L.push(`| Indexable HTML pages | ${r.inventory.pages.filter((p) => p.indexable).length} |`);
   L.push(`| Likely site type (heuristic) | ${md(r.inventory.businessModel.label)} |`);

@@ -121,7 +121,7 @@ export function buildInventory(ctx: SiteContext): SiteInventory {
     }
     pages.push({
       url: p.url, type, basis, lang: f.lang, title: f.title, status: p.status, indexable: !isNoindex(p), depth: p.depth,
-      inlinks: ctx.inlinks.get(p.url)?.size ?? 0, words: f.wordCount, intent: pageIntent({ type, basis })?.intent,
+      inlinks: ctx.reachIn.get(p.url)?.size ?? 0, words: f.wordCount, intent: pageIntent({ type, basis })?.intent,
     });
   }
   const byType: Record<string, number> = {};

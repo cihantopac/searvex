@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Searvex 0.7.0 — Apache-2.0 — https://github.com/cihantopac/searvex
+// Searvex 1.0.0 — Apache-2.0 — https://github.com/cihantopac/searvex
 import { createRequire as __searvexCreateRequire } from 'node:module';
 const require = __searvexCreateRequire(import.meta.url);
 var __create = Object.create;
@@ -699,7 +699,7 @@ function assertUrlAllowed(raw, policy) {
   if (isIP(host) && !isAddressAllowed(host, policy)) {
     throw new BlockedUrlError(`Address not allowed (${classifyAddress(host)}): ${host}`, raw);
   }
-  const lower = host.toLowerCase();
+  const lower = host.toLowerCase().replace(/\.+$/, "");
   if (!policy.allowPrivate && (lower === "localhost" || lower.endsWith(".localhost") || lower.endsWith(".internal") || lower.endsWith(".local"))) {
     throw new BlockedUrlError(`Local hostname not allowed: ${host}`, raw);
   }
@@ -930,7 +930,7 @@ var init_fetcher = __esm({
   "src/net/fetcher.ts"() {
     "use strict";
     init_ssrf();
-    SEARVEX_VERSION = "0.7.0";
+    SEARVEX_VERSION = "1.0.0";
     DEFAULT_USER_AGENT = `Mozilla/5.0 (compatible; SearvexBot/${SEARVEX_VERSION}; +https://github.com/cihantopac/searvex)`;
     DEFAULTS = {
       timeoutMs: 15e3,
@@ -15782,14 +15782,19 @@ var require_lib = __commonJS({
 // src/integrations/bing.ts
 var bing_exports = {};
 __export(bing_exports, {
+  BingApiError: () => BingApiError,
   aggregate: () => aggregate,
+  bingErrorMessage: () => bingErrorMessage,
   bingQueryPageRows: () => bingQueryPageRows,
+  getDailyTraffic: () => getDailyTraffic,
   getPageQueryStats: () => getPageQueryStats,
   getPageStats: () => getPageStats,
   getQueryStats: () => getQueryStats,
+  getUserSites: () => getUserSites,
+  maskKey: () => maskKey,
   parseBingDate: () => parseBingDate
 });
-import http4 from "node:http";
+import http5 from "node:http";
 import https5 from "node:https";
 function parseBingDate(v) {
   if (typeof v !== "string") return null;
@@ -15798,9 +15803,23 @@ function parseBingDate(v) {
   const t = Date.parse(v);
   return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10);
 }
+function bingErrorMessage(status, method, body) {
+  let code = "";
+  try {
+    code = String(JSON.parse(body).Message ?? "");
+  } catch {
+  }
+  if (/InvalidApiKey/i.test(code)) return 'Bing rejected the API key (InvalidApiKey). Store a new key with "searvex bing auth --force", or fix SEARVEX_BING_API_KEY.';
+  if (/throttl|quota/i.test(code) || status === 429) return `Bing Webmaster API quota or rate limit reached on ${method} (${code || `HTTP ${status}`}). Try again later or lower --max-pages.`;
+  return `Bing Webmaster API error ${status} on ${method}: ${body}`;
+}
+function maskKey(text4, apiKey) {
+  if (!apiKey) return text4;
+  return [apiKey, encodeURIComponent(apiKey)].reduce((t, k) => t.split(k).join("***"), text4);
+}
 function get2(method, params, apiKey) {
-  const url = `${BASE2()}/${method}?${new URLSearchParams({ ...params, apikey: apiKey })}`;
-  const mod = url.startsWith("https:") ? https5 : http4;
+  const url = `${BASE3()}/${method}?${new URLSearchParams({ ...params, apikey: apiKey })}`;
+  const mod = url.startsWith("https:") ? https5 : http5;
   return new Promise((resolve, reject) => {
     const req = mod.get(url, { headers: { accept: "application/json" }, timeout: 3e4 }, (res) => {
       const chunks = [];
@@ -15808,7 +15827,7 @@ function get2(method, params, apiKey) {
       res.on("end", () => {
         const text4 = Buffer.concat(chunks).toString("utf8");
         if ((res.statusCode ?? 0) !== 200) {
-          reject(new Error(`Bing Webmaster API error ${res.statusCode} on ${method}: ${text4.slice(0, 200).replace(apiKey, "***")}`));
+          reject(new BingApiError(bingErrorMessage(res.statusCode ?? 0, method, maskKey(text4.slice(0, 200), apiKey))));
           return;
         }
         try {
@@ -15820,7 +15839,7 @@ function get2(method, params, apiKey) {
       });
     });
     req.on("timeout", () => req.destroy(new Error("Bing Webmaster API request timed out")));
-    req.on("error", reject);
+    req.on("error", (e) => reject(new Error(maskKey(e.message, apiKey))));
   });
 }
 function toStats(items) {
@@ -15859,11 +15878,25 @@ async function bingQueryPageRows(siteUrl, apiKey, opts) {
   }
   return { rows, pages: pages.length };
 }
-var BASE2, getQueryStats, getPageStats, getPageQueryStats;
+async function getUserSites(apiKey) {
+  return (await get2("GetUserSites", {}, apiKey)).map((x) => {
+    const o = x;
+    return { url: String(o["Url"] ?? ""), verified: o["IsVerified"] === true };
+  });
+}
+async function getDailyTraffic(siteUrl, apiKey, sinceIso) {
+  return (await get2("GetRankAndTrafficStats", { siteUrl }, apiKey)).map((x) => {
+    const o = x;
+    return { date: parseBingDate(o["Date"]) ?? "", clicks: Number(o["Clicks"] ?? 0) || 0, impressions: Number(o["Impressions"] ?? 0) || 0 };
+  }).filter((d) => d.date && d.date >= sinceIso).sort((a, b) => a.date.localeCompare(b.date));
+}
+var BASE3, BingApiError, getQueryStats, getPageStats, getPageQueryStats;
 var init_bing = __esm({
   "src/integrations/bing.ts"() {
     "use strict";
-    BASE2 = () => process.env["SEARVEX_BING_API_BASE"] ?? "https://ssl.bing.com/webmaster/api.svc/json";
+    BASE3 = () => process.env["SEARVEX_BING_API_BASE"] ?? "https://ssl.bing.com/webmaster/api.svc/json";
+    BingApiError = class extends Error {
+    };
     getQueryStats = async (siteUrl, apiKey) => toStats(await get2("GetQueryStats", { siteUrl }, apiKey));
     getPageStats = async (siteUrl, apiKey) => toStats(await get2("GetPageStats", { siteUrl }, apiKey));
     getPageQueryStats = async (siteUrl, page, apiKey) => toStats(await get2("GetPageQueryStats", { siteUrl, page }, apiKey));
@@ -15871,14 +15904,14 @@ var init_bing = __esm({
 });
 
 // src/net/policy-proxy.ts
-import crypto6 from "node:crypto";
-import http5 from "node:http";
+import crypto7 from "node:crypto";
+import http6 from "node:http";
 import net from "node:net";
 async function startPolicyProxy(policy, opts = {}) {
   const maxBytes = opts.maxBytesPerWindow ?? 64 * 1024 * 1024;
   const idle = opts.idleTimeoutMs ?? 3e4;
   const username = "searvex";
-  const password = crypto6.randomBytes(18).toString("base64url");
+  const password = crypto7.randomBytes(18).toString("base64url");
   const expectedAuth = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
   const stats = { requests: 0, tunnels: 0, blocked: 0, blockedTargets: [], bytes: 0, budgetExceeded: 0 };
   const sockets = /* @__PURE__ */ new Set();
@@ -15924,7 +15957,7 @@ Connection: close\r
       return null;
     }
   };
-  const server = http5.createServer((req, res) => {
+  const server = http6.createServer((req, res) => {
     stats.requests++;
     if (!authorized(req)) {
       res.writeHead(407, { "proxy-authenticate": 'Basic realm="searvex"', connection: "close" }).end();
@@ -15937,7 +15970,7 @@ Connection: close\r
     }
     const headers = {};
     for (const [k, val2] of Object.entries(req.headers)) if (!HOP_BY_HOP.has(k.toLowerCase()) && val2 !== void 0) headers[k] = val2;
-    const upstream = http5.request(
+    const upstream = http6.request(
       { host: u.hostname.replace(/^\[|\]$/g, ""), port: u.port || 80, path: `${u.pathname}${u.search}`, method: req.method, headers, lookup: guardedLookup(policy), agent: false, timeout: idle },
       (up) => {
         const out = {};
@@ -16028,6 +16061,12 @@ __export(render_exports, {
   BROWSER_ARGS: () => BROWSER_ARGS,
   createRenderer: () => createRenderer
 });
+async function bounded(p, ms) {
+  let timer;
+  const ok = await Promise.race([p.then(() => true, () => true), new Promise((r) => timer = setTimeout(() => r(false), ms))]);
+  clearTimeout(timer);
+  return ok;
+}
 async function launch(chromium, proxy) {
   const base = { headless: true, args: BROWSER_ARGS, proxy: { server: proxy.server, username: proxy.username, password: proxy.password, bypass: "" } };
   try {
@@ -16053,7 +16092,14 @@ async function createRenderer(policy, timeoutMs = 3e4) {
     await proxy.close();
     throw e;
   }
-  const stats = { pages: 0, blockedRequests: 0, skippedResources: 0, sandbox, proxy: proxy.stats };
+  const stats = { pages: 0, blockedRequests: 0, skippedResources: 0, deadlineExceeded: 0, browserRestarts: 0, sandbox, proxy: proxy.stats };
+  const deadlineMs = timeoutMs + SETTLE_MS + 5e3;
+  const restart = async () => {
+    stats.browserRestarts++;
+    await bounded(browser.close(), CLOSE_MS);
+    ({ browser, sandbox } = await launch(chromium, proxy));
+    stats.sandbox = sandbox;
+  };
   return {
     stats,
     async render(url) {
@@ -16066,7 +16112,7 @@ async function createRenderer(policy, timeoutMs = 3e4) {
         if (main2 && p !== main2) void p.close().catch(() => {
         });
       });
-      try {
+      const work = (async () => {
         await context.route("**/*", async (route) => {
           const req = route.request();
           if (SKIPPED_RESOURCE_TYPES.has(req.resourceType())) {
@@ -16087,24 +16133,33 @@ async function createRenderer(policy, timeoutMs = 3e4) {
         });
         main2 = await context.newPage();
         await main2.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
-        await main2.waitForLoadState("networkidle", { timeout: 5e3 }).catch(() => {
+        await main2.waitForLoadState("networkidle", { timeout: SETTLE_MS }).catch(() => {
         });
         return { html: await main2.content() };
+      })();
+      let timer;
+      const deadline = new Promise((resolve) => timer = setTimeout(() => resolve("deadline"), deadlineMs));
+      try {
+        const r = await Promise.race([work, deadline]);
+        if (r !== "deadline") return r;
+        stats.deadlineExceeded++;
+        work.catch(() => {
+        });
+        return { html: "", error: `rendering exceeded ${Math.round(deadlineMs / 1e3)} s (page scripts kept the browser busy)` };
       } catch (e) {
         return { html: "", error: e.message.split("\n")[0] };
       } finally {
-        await context.close().catch(() => {
-        });
+        clearTimeout(timer);
+        if (!await bounded(context.close(), CLOSE_MS)) await restart();
       }
     },
     async close() {
-      await browser.close().catch(() => {
-      });
+      await bounded(browser.close(), CLOSE_MS);
       await proxy.close();
     }
   };
 }
-var SKIPPED_RESOURCE_TYPES, MAX_REQUESTS_PER_PAGE, BROWSER_ARGS;
+var SKIPPED_RESOURCE_TYPES, MAX_REQUESTS_PER_PAGE, SETTLE_MS, CLOSE_MS, BROWSER_ARGS;
 var init_render = __esm({
   "src/crawl/render.ts"() {
     "use strict";
@@ -16113,6 +16168,8 @@ var init_render = __esm({
     init_policy_proxy();
     SKIPPED_RESOURCE_TYPES = /* @__PURE__ */ new Set(["image", "media", "font"]);
     MAX_REQUESTS_PER_PAGE = 300;
+    SETTLE_MS = 5e3;
+    CLOSE_MS = 5e3;
     BROWSER_ARGS = [
       // Send loopback through the proxy too (Chromium bypasses proxies for localhost by default).
       "--proxy-bypass-list=<-loopback>",
@@ -30348,6 +30405,12 @@ var adapter = {
 };
 
 // src/extract/html.ts
+function sizedByLayout(style, nimg, cls) {
+  if (nimg === "fill") return true;
+  if (/(^|\s)aspect-(video|square|\[\d+(\.\d+)?\/\d+(\.\d+)?\]|\d+\/\d+)(\s|$)/.test(cls ?? "")) return true;
+  const s = (style ?? "").toLowerCase().replace(/\s+/g, "");
+  return /aspect-ratio:/.test(s) || /position:absolute/.test(s) && /(^|;)width:100%/.test(s) && /(^|;)height:100%/.test(s);
+}
 function collapse(s) {
   return s.replace(/\s+/g, " ").trim();
 }
@@ -30433,7 +30496,8 @@ function extractPage(html3, pageUrl) {
     alt: $2(el).attr("alt") ?? null,
     width: $2(el).attr("width"),
     height: $2(el).attr("height"),
-    loading: $2(el).attr("loading")
+    loading: $2(el).attr("loading"),
+    sizedByLayout: sizedByLayout($2(el).attr("style"), $2(el).attr("data-nimg"), $2(el).attr("class"))
   })).get();
   const jsonLd = [];
   $2('script[type="application/ld+json" i]').each((_, el) => {
@@ -35258,6 +35322,8 @@ var FindingSink = class {
     const existing = this.byRule.get(ruleId);
     if (existing) {
       existing.count += list.length;
+      const sev = overrides.severity ?? rule.severity;
+      if (SEVERITIES.indexOf(sev) < SEVERITIES.indexOf(existing.severity)) existing.severity = sev;
       for (const e of list) if (existing.evidence.length < this.maxEvidence) existing.evidence.push(e);
       return;
     }
@@ -35325,7 +35391,14 @@ function buildContext(crawl2) {
   const sitemapUrls = new Set(crawl2.sitemap.urls.map((u) => normalizeUrl(u.loc)).filter((x) => !!x));
   const startPath = new URL(crawl2.startUrl).pathname;
   const homepage = byUrl.get(new URL("/", crawl2.origin).toString()) ?? (/^\/([a-z]{2}(-[a-z]{2})?\/?)?$/i.test(startPath) ? byUrl.get(crawl2.startUrl) : void 0);
-  return { crawl: crawl2, pages: crawl2.pages, byUrl, inlinks, htmlPages, indexable, sitemapUrls, homepage };
+  const reachIn = /* @__PURE__ */ new Map();
+  for (const [target, sources] of inlinks) {
+    const rec = byUrl.get(target);
+    const final = rec?.redirects.length ? normalizeUrl(rec.finalUrl) ?? target : target;
+    const set = reachIn.get(final) ?? reachIn.set(final, /* @__PURE__ */ new Set()).get(final);
+    for (const s of sources) if (s !== final) set.add(s);
+  }
+  return { crawl: crawl2, pages: crawl2.pages, byUrl, inlinks, reachIn, htmlPages, indexable, sitemapUrls, homepage };
 }
 function resolveRecord(ctx, url) {
   const n = normalizeUrl(url);
@@ -35334,388 +35407,6 @@ function resolveRecord(ctx, url) {
 
 // src/analyze/content.ts
 import crypto2 from "node:crypto";
-var STOPWORDS = new Set(
-  // English
-  "a about above after again against all am an and any are as at be because been before being below between both but by can could did do does doing down during each few for from further had has have having he her here hers him his how i if in into is it its itself just me more most my no nor not now of off on once only or other our ours out over own same she should so some such than that the their them then there these they this those through to too under until up very was we were what when where which while who whom why will with you your yours get got also use using used new one two may like make many much via per vs etc com www http https home page ve ile bir bu da de i\xE7in gibi daha \xE7ok en mi mu m\xFC ne o \u015Fu ama veya ya ki her olan olarak sonra \xF6nce kadar ise de\u011Fil var yok nas\u0131l neden der die das und ist nicht mit f\xFCr auf ein eine den von zu im le la les et des un une du pour dans est el los las y en del por con para una".split(/\s+/)
-);
-function tokenize(text4) {
-  return text4.toLowerCase().replace(/\u0307/g, "").normalize("NFKC").split(/[^\p{L}\p{M}\p{N}]+/u).filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
-}
-function fnv1a(str, seed = 2166136261) {
-  let h = seed >>> 0;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return h >>> 0;
-}
-function shingles(words2, k = 5) {
-  const s = /* @__PURE__ */ new Set();
-  for (let i = 0; i + k <= words2.length; i++) s.add(fnv1a(words2.slice(i, i + k).join(" ")));
-  return s;
-}
-var MINHASH_N = 64;
-function minhash(sh) {
-  const sig = new Uint32Array(MINHASH_N).fill(4294967295);
-  for (const x of sh) {
-    const a = x >>> 0;
-    const b = Math.imul(x ^ 2654435769, 2246822507) >>> 0 | 1;
-    for (let i = 0; i < MINHASH_N; i++) {
-      const v = a + Math.imul(i, b) >>> 0;
-      if (v < sig[i]) sig[i] = v;
-    }
-  }
-  return sig;
-}
-function jaccard(a, b) {
-  let inter = 0;
-  for (const x of a) if (b.has(x)) inter++;
-  return inter / (a.size + b.size - inter || 1);
-}
-function runContentChecks(ctx, sink) {
-  const pages = ctx.indexable.map((p) => ({ p, f: factsOf(p) }));
-  const groupOf = (url) => {
-    const segs = new URL(url).pathname.split("/").filter(Boolean);
-    const locale = segs[0] && /^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0]) ? segs.shift() : "";
-    return `${locale}/${segs[0] ?? ""}`;
-  };
-  const docTerms = /* @__PURE__ */ new Map();
-  const df = /* @__PURE__ */ new Map();
-  for (const { p, f } of pages) {
-    const tf = /* @__PURE__ */ new Map();
-    const weighted = [
-      ...tokenize(f.title ?? "").flatMap((t) => [t, t, t]),
-      // Headings in site chrome (footer "Product family", "Legal"…) repeat on every page: not page topics.
-      ...f.headings.filter((h) => !h.chrome).flatMap((h) => tokenize(h.text).flatMap((t) => h.level === 1 ? [t, t, t] : [t, t])),
-      ...tokenize(f.mainText.slice(0, 2e4))
-    ];
-    for (const t of weighted) tf.set(t, (tf.get(t) ?? 0) + 1);
-    docTerms.set(p.url, tf);
-    for (const t of tf.keys()) df.set(t, (df.get(t) ?? 0) + 1);
-  }
-  const N = Math.max(1, pages.length);
-  const pageTerms = [];
-  const vectors = /* @__PURE__ */ new Map();
-  const secSize = /* @__PURE__ */ new Map();
-  const secDf = /* @__PURE__ */ new Map();
-  for (const [url, tf] of docTerms) {
-    const g = groupOf(url);
-    secSize.set(g, (secSize.get(g) ?? 0) + 1);
-    const m = secDf.get(g) ?? secDf.set(g, /* @__PURE__ */ new Map()).get(g);
-    for (const t of tf.keys()) m.set(t, (m.get(t) ?? 0) + 1);
-  }
-  for (const [url, tf] of docTerms) {
-    const g = groupOf(url);
-    const gs = secSize.get(g);
-    const sectionTemplate = (t) => gs >= 4 && (secDf.get(g).get(t) ?? 0) >= gs * 0.8;
-    const scored = [...tf.entries()].map(([t, c]) => [t, c * Math.log(1 + N / (df.get(t) ?? 1))]).sort((a, b) => b[1] - a[1]);
-    pageTerms.push({ url, terms: scored.slice(0, 8).map(([t]) => t) });
-    vectors.set(url, new Map(scored.filter(([t]) => (df.get(t) ?? 0) <= Math.max(3, N * 0.5) && !sectionTemplate(t)).slice(0, 20)));
-  }
-  const langOf = new Map(pages.map(({ p, f }) => [p.url, (f.lang ?? "").toLowerCase().split("-")[0]]));
-  const linkOpportunities = findLinkOpportunities(ctx, vectors, langOf);
-  if (linkOpportunities.length) {
-    sink.emit("links.internal-opportunity", linkOpportunities.slice(0, 50).map((o) => ({ url: o.to, observed: `link from ${o.from} (topic similarity ${Math.round(o.similarity * 100)}%: ${o.sharedTerms.slice(0, 4).join(", ")}); target has ${o.toInlinks} internal inlink(s)` })));
-  }
-  const topTerms = [...df.entries()].filter(([, c]) => c >= Math.min(2, N) && c <= Math.max(2, N * 0.8)).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([term, n]) => ({ term, pages: n }));
-  const utility = /\/(contact|login|signin|sign-in|register|signup|cart|checkout|account|search|404|privacy|terms|legal|cookie|impressum|iletisim|giris)(\/|$|\?)/i;
-  for (const { p, f } of pages) {
-    const linkDensity = f.mainWordCount ? (f.mainLinkWordCount ?? 0) / f.mainWordCount : 0;
-    if (f.mainWordCount < 100 && linkDensity < 0.5 && !utility.test(new URL(p.finalUrl).pathname) && p !== ctx.homepage) {
-      sink.emit("content.low-text", { url: p.url, observed: `${f.mainWordCount} words of main content (${f.wordCount} incl. navigation/footer)` });
-    }
-  }
-  const byHash = /* @__PURE__ */ new Map();
-  for (const { p, f } of pages) {
-    if (f.mainWordCount < 30) continue;
-    const h = crypto2.createHash("sha1").update(f.mainText.toLowerCase()).digest("hex");
-    const a = byHash.get(h);
-    if (a) a.push(p.url);
-    else byHash.set(h, [p.url]);
-  }
-  const exactDuplicates = [...byHash.values()].filter((g) => g.length > 1);
-  for (const g of exactDuplicates) sink.emit("duplicate.content", { url: g[0], observed: `identical text on ${g.length} URLs: ${g.slice(0, 5).join(", ")}` });
-  const allSh = /* @__PURE__ */ new Map();
-  for (const { p, f } of pages) {
-    const words2 = f.mainText.toLowerCase().split(/\s+/).filter(Boolean);
-    if (words2.length >= 50) allSh.set(p.url, shingles(words2));
-  }
-  const siteDf = /* @__PURE__ */ new Map();
-  const groupDf = /* @__PURE__ */ new Map();
-  const groupSize = /* @__PURE__ */ new Map();
-  for (const [url, s] of allSh) {
-    const g = groupOf(url);
-    groupSize.set(g, (groupSize.get(g) ?? 0) + 1);
-    const gm = groupDf.get(g) ?? /* @__PURE__ */ new Map();
-    groupDf.set(g, gm);
-    for (const x of s) {
-      siteDf.set(x, (siteDf.get(x) ?? 0) + 1);
-      gm.set(x, (gm.get(x) ?? 0) + 1);
-    }
-  }
-  const siteMin = Math.max(3, Math.ceil(allSh.size * 0.3));
-  const sh = /* @__PURE__ */ new Map();
-  const sigs = /* @__PURE__ */ new Map();
-  for (const [url, s] of allSh) {
-    const g = groupOf(url);
-    const gSize = groupSize.get(g) ?? 0;
-    const gMin = Math.max(3, Math.ceil(gSize * 0.3));
-    const gm = groupDf.get(g);
-    const isBoilerplate = (x) => allSh.size >= 5 && (siteDf.get(x) ?? 0) >= siteMin || gSize >= 5 && (gm.get(x) ?? 0) >= gMin;
-    const unique = new Set([...s].filter((x) => !isBoilerplate(x)));
-    if (unique.size < 20) continue;
-    sh.set(url, unique);
-    sigs.set(url, minhash(unique));
-  }
-  const buckets = /* @__PURE__ */ new Map();
-  for (const [url, sig] of sigs) {
-    for (let b = 0; b < 16; b++) {
-      const key = `${b}:${sig.slice(b * 4, b * 4 + 4).join(",")}`;
-      const arr = buckets.get(key);
-      if (arr) arr.push(url);
-      else buckets.set(key, [url]);
-    }
-  }
-  const exactSet = new Set(exactDuplicates.flat());
-  const seenPairs = /* @__PURE__ */ new Set();
-  const nearDuplicates = [];
-  for (const urls of buckets.values()) {
-    if (urls.length < 2 || urls.length > 200) continue;
-    for (let i = 0; i < urls.length; i++)
-      for (let j = i + 1; j < urls.length; j++) {
-        const a = urls[i], b = urls[j];
-        const key = a < b ? `${a}|${b}` : `${b}|${a}`;
-        if (seenPairs.has(key)) continue;
-        seenPairs.add(key);
-        if (exactSet.has(a) && exactSet.has(b)) continue;
-        const sim = jaccard(sh.get(a), sh.get(b));
-        if (sim >= 0.9) nearDuplicates.push({ a, b, similarity: Math.round(sim * 100) / 100 });
-      }
-  }
-  if (nearDuplicates.length) sink.emit("content.near-duplicate", nearDuplicates.slice(0, 50).map((d) => ({ url: d.a, observed: `${Math.round(d.similarity * 100)}% similar to ${d.b}` })));
-  const groups = /* @__PURE__ */ new Map();
-  const titleTerms = /* @__PURE__ */ new Map();
-  const specificTerms = /* @__PURE__ */ new Map();
-  const sectionTermDf = /* @__PURE__ */ new Map();
-  const sectionPages = /* @__PURE__ */ new Map();
-  for (const { p, f } of pages) {
-    const terms = [.../* @__PURE__ */ new Set([...tokenize(f.title ?? ""), ...tokenize(f.headings.find((h) => h.level === 1 && !h.chrome)?.text ?? "")])];
-    titleTerms.set(p.url, terms);
-    const g = groupOf(p.url);
-    sectionPages.set(g, (sectionPages.get(g) ?? 0) + 1);
-    const m = sectionTermDf.get(g) ?? /* @__PURE__ */ new Map();
-    sectionTermDf.set(g, m);
-    for (const t of terms) m.set(t, (m.get(t) ?? 0) + 1);
-  }
-  for (const { p } of pages) {
-    const terms = titleTerms.get(p.url);
-    const section = groupOf(p.url);
-    const gSize = sectionPages.get(section) ?? 0;
-    const specific = terms.filter((t) => ((df.get(t) ?? 0) < N * 0.5 || N < 4) && !(gSize >= 4 && (sectionTermDf.get(section).get(t) ?? 0) >= gSize * 0.5));
-    if (specific.length >= 2) specificTerms.set(p.url, new Set(specific));
-  }
-  const index2 = /* @__PURE__ */ new Map();
-  for (const [url, set] of specificTerms) for (const t of set) (index2.get(t) ?? index2.set(t, []).get(t)).push(url);
-  const parent2 = /* @__PURE__ */ new Map();
-  const find5 = (x) => {
-    const px = parent2.get(x) ?? x;
-    if (px === x) return x;
-    const r = find5(px);
-    parent2.set(x, r);
-    return r;
-  };
-  const checked = /* @__PURE__ */ new Set();
-  for (const urls of index2.values()) {
-    if (urls.length > 100) continue;
-    for (let i = 0; i < urls.length; i++)
-      for (let j = i + 1; j < urls.length; j++) {
-        const a = urls[i], b = urls[j];
-        const key = a < b ? a + "|" + b : b + "|" + a;
-        if (checked.has(key)) continue;
-        checked.add(key);
-        const sa = specificTerms.get(a), sb = specificTerms.get(b);
-        let shared = 0;
-        for (const t of sa) if (sb.has(t)) shared++;
-        if (shared >= 2 && shared / (sa.size + sb.size - shared) >= 0.6) parent2.set(find5(a), find5(b));
-      }
-  }
-  for (const url of specificTerms.keys()) {
-    const root2 = find5(url);
-    (groups.get(root2) ?? groups.set(root2, []).get(root2)).push(url);
-  }
-  const cannibalization = [...groups.values()].filter((g) => g.length > 1).map((g) => {
-    const sets = g.map((u) => specificTerms.get(u));
-    const common = [...sets[0]].filter((t) => sets.every((x) => x.has(t)));
-    return { terms: (common.length ? common : [...sets[0]]).slice(0, 4), pages: g };
-  });
-  for (const c of cannibalization) sink.emit("content.cannibalization", { url: c.pages[0], observed: `"${c.terms.join(" ")}" shared by ${c.pages.length} pages: ${c.pages.slice(0, 5).join(", ")}` });
-  const clusterMap = /* @__PURE__ */ new Map();
-  for (const { p } of pages) {
-    const seg = new URL(p.finalUrl).pathname.split("/").filter(Boolean)[0] ?? "(root)";
-    const a = clusterMap.get(seg);
-    if (a) a.push(p.url);
-    else clusterMap.set(seg, [p.url]);
-  }
-  const clusters = [...clusterMap.entries()].map(([key, urls]) => {
-    const counts = /* @__PURE__ */ new Map();
-    for (const u of urls) for (const t of pageTerms.find((x) => x.url === u)?.terms ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
-    return { key, pages: urls, terms: [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([t]) => t) };
-  }).sort((a, b) => b.pages.length - a.pages.length);
-  return { topTerms, pageTerms, clusters, cannibalization, nearDuplicates, exactDuplicates, linkOpportunities: linkOpportunities.slice(0, 200) };
-}
-function findLinkOpportunities(ctx, vectors, langOf) {
-  const otherLanguage = (a, b) => {
-    const la = langOf?.get(a), lb = langOf?.get(b);
-    return !!la && !!lb && la !== lb;
-  };
-  const norm4 = /* @__PURE__ */ new Map();
-  for (const [u, v] of vectors) norm4.set(u, Math.sqrt([...v.values()].reduce((a, x) => a + x * x, 0)) || 1);
-  const index2 = /* @__PURE__ */ new Map();
-  for (const [u, v] of vectors) for (const t of v.keys()) (index2.get(t) ?? index2.set(t, []).get(t)).push(u);
-  const outlinks = /* @__PURE__ */ new Map();
-  for (const [target, sources] of ctx.inlinks) for (const s of sources) (outlinks.get(s) ?? outlinks.set(s, /* @__PURE__ */ new Set()).get(s)).add(target);
-  const links = (a, b) => outlinks.get(a)?.has(b) || outlinks.get(b)?.has(a);
-  const inl = (u) => ctx.inlinks.get(u)?.size ?? 0;
-  const seen = /* @__PURE__ */ new Set();
-  const out = [];
-  for (const urls of index2.values()) {
-    if (urls.length > 200) continue;
-    for (let i = 0; i < urls.length; i++)
-      for (let j = i + 1; j < urls.length; j++) {
-        const a = urls[i], b = urls[j];
-        const key = a < b ? a + "|" + b : b + "|" + a;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        if (otherLanguage(a, b)) continue;
-        const va = vectors.get(a), vb = vectors.get(b);
-        let dot = 0;
-        const shared = [];
-        for (const [t, w] of va) {
-          const w2 = vb.get(t);
-          if (w2 !== void 0) {
-            dot += w * w2;
-            shared.push(t);
-          }
-        }
-        const sim = dot / (norm4.get(a) * norm4.get(b));
-        if (shared.length < 2 || sim < 0.3 || sim > 0.9 || links(a, b)) continue;
-        const [from, to] = inl(a) >= inl(b) ? [a, b] : [b, a];
-        out.push({ from, to, similarity: Math.round(sim * 100) / 100, sharedTerms: shared.slice(0, 6), toInlinks: inl(to) });
-      }
-  }
-  out.sort((x, y) => x.toInlinks - y.toInlinks || y.similarity - x.similarity);
-  const perTarget = /* @__PURE__ */ new Map();
-  return out.filter((o) => {
-    const n = perTarget.get(o.to) ?? 0;
-    if (n >= 3) return false;
-    perTarget.set(o.to, n + 1);
-    return true;
-  });
-}
-
-// src/analyze/geo.ts
-function answerability(ctx) {
-  const out = [];
-  for (const p of ctx.indexable) {
-    const f = factsOf(p);
-    const s = f.structure;
-    const signals = {
-      descriptiveTitle: !!f.title && f.title.split(/\s+/).length >= 3,
-      hasH1: f.headings.some((h) => h.level === 1),
-      sectioned: f.headings.filter((h) => h.level === 2).length >= 2,
-      questionHeadings: s.questionHeadings > 0,
-      conciseParagraphs: s.paragraphs > 0 && s.avgParagraphWords <= 80,
-      listsOrTables: s.lists + s.tables > 0,
-      datedOrAuthored: s.hasPublishedDate || s.hasAuthor,
-      structuredData: f.jsonLd.some((b) => !b.error),
-      substantiveText: f.mainWordCount >= 150
-    };
-    const vals = Object.values(signals);
-    out.push({ url: p.url, score: Math.round(vals.filter(Boolean).length / vals.length * 100), signals });
-  }
-  return out;
-}
-function runGeoChecks(ctx, sink, llms) {
-  const notes = [];
-  const matrix = ctx.crawl.robots.state === "ok" || ctx.crawl.robots.state === "missing" ? botAccessMatrix(ctx.crawl.robots, ctx.crawl.startUrl) : [];
-  for (const b of matrix) {
-    if (b.homepageAllowed) continue;
-    if (b.bot.token === "Googlebot" || b.bot.token === "Bingbot") sink.emit("geo.search-bot-blocked", { url: ctx.crawl.robots.url, observed: `${b.bot.token} disallowed` });
-    if (b.bot.purpose === "ai-search" && ["OAI-SearchBot", "Claude-SearchBot", "PerplexityBot"].includes(b.bot.token)) {
-      sink.emit("geo.ai-search-bot-blocked", { url: ctx.crawl.robots.url, observed: `${b.bot.token} (${b.bot.operator}) disallowed${b.explicit ? "" : " via * group"}` });
-    }
-  }
-  const training = matrix.filter((b) => b.bot.purpose === "ai-training");
-  if (training.length) {
-    sink.emit("geo.training-bots", {
-      url: ctx.crawl.robots.url,
-      observed: training.map((b) => `${b.bot.token}: ${b.homepageAllowed ? "allowed" : "blocked"}`).join(", ")
-    });
-  }
-  if (ctx.crawl.robots.state === "unreachable") notes.push("robots.txt unreachable: AI crawler access could not be evaluated (RFC 9309 treats this as full disallow).");
-  const snippetRestricted = [];
-  for (const p of ctx.htmlPages) {
-    if (isNoindex(p)) continue;
-    const d = robotsDirectives(p, ["googlebot", "bingbot"]);
-    const restricted = d.filter((x) => x === "nosnippet" || x === "max-snippet:0" || x === "noarchive" || x === "nocache");
-    if (restricted.length) {
-      snippetRestricted.push(p.url);
-      sink.emit("geo.snippet-restricted", { url: p.url, observed: restricted.join(", ") });
-    }
-  }
-  if (llms) sink.emit("geo.llms-txt", { url: llms.url, observed: llms.present ? `present (${llms.bytes} bytes) \u2014 not used by Google; no scoring impact` : `absent (HTTP ${llms.status}) \u2014 no scoring impact` });
-  const entityNames = {};
-  const roles = { site: /* @__PURE__ */ new Map(), organization: /* @__PURE__ */ new Map() };
-  const norm4 = (n) => n.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
-  const note = (role, name, url) => {
-    const k = norm4(name);
-    if (!k) return;
-    entityNames[name] = (entityNames[name] ?? 0) + 1;
-    const set = roles[role].get(k) ?? /* @__PURE__ */ new Set();
-    set.add(`${name}|${url}`);
-    roles[role].set(k, set);
-  };
-  for (const p of ctx.htmlPages) {
-    const f = factsOf(p);
-    for (const b of f.jsonLd) {
-      const data2 = b.data;
-      const roots = Array.isArray(data2) ? data2 : data2 && Array.isArray(data2["@graph"]) ? data2["@graph"] : [data2];
-      for (const n of roots) {
-        if (!n || typeof n !== "object") continue;
-        const node = n;
-        const t = [].concat(node["@type"] ?? []);
-        if (typeof node["name"] !== "string") continue;
-        if (t.includes("WebSite")) note("site", node["name"].trim(), p.url);
-        else if (t.some((x) => typeof x === "string" && /Organization|Corporation|LocalBusiness|OnlineStore|OnlineBusiness/.test(x))) note("organization", node["name"].trim(), p.url);
-      }
-    }
-    if (f.openGraph["og:site_name"]) note("site", f.openGraph["og:site_name"].trim(), p.url);
-  }
-  for (const role of ["site", "organization"]) {
-    if (roles[role].size > 1) {
-      const variants = [...roles[role].values()].map((set) => {
-        const [name, url] = [...set][0].split("|");
-        return `"${name}" on ${set.size} page(s), e.g. ${url}`;
-      });
-      sink.emit("geo.entity-inconsistent", { observed: `${role === "site" ? "site name (WebSite / og:site_name)" : "organization name"}: ${variants.join("; ")}` });
-    }
-  }
-  const pages = answerability(ctx);
-  const average = pages.length ? Math.round(pages.reduce((a, p) => a + p.score, 0) / pages.length) : 0;
-  const weak = pages.filter((p) => p.score < 50);
-  if (weak.length) sink.emit("geo.answerability", weak.slice(0, 50).map((p) => ({ url: p.url, observed: `clarity signals ${p.score}/100; missing: ${Object.entries(p.signals).filter(([, v]) => !v).map(([k]) => k).join(", ")}` })));
-  sink.emit("geo.citations-unmeasured", { observed: "No AI citation data source configured" });
-  notes.push("Answerability is a heuristic clarity signal. Google states AI Overviews/AI Mode require no special optimisation; no citation or ranking prediction is made.");
-  return {
-    bots: matrix.map((b) => ({ token: b.bot.token, operator: b.bot.operator, purpose: b.bot.purpose, allowed: b.homepageAllowed, explicit: b.explicit, docs: b.bot.docs })),
-    llmsTxt: llms,
-    entityNames,
-    answerability: { average, pages: pages.sort((a, b) => a.score - b.score).slice(0, 200) },
-    snippetRestricted,
-    citations: { measured: false, reason: "No AI citation integration configured (Bing AI Performance export or Search Console data can be imported)." },
-    notes
-  };
-}
 
 // src/analyze/structured-data.ts
 var BASE = "https://developers.google.com/search/docs/appearance/structured-data/";
@@ -35818,7 +35509,8 @@ function checkStructuredData(url, f, sink, isHomepage) {
     }
   }
   for (const t of allTypes) if (RETIRED_TYPES.has(t)) sink.emit("sd.retired-type", { url, observed: t });
-  if (isHomepage && !["Organization", "Corporation", "OnlineStore", "OnlineBusiness", "NGO", "EducationalOrganization", "GovernmentOrganization", ...LOCAL_BUSINESS_SUBTYPES].some((t) => allTypes.has(t))) {
+  const personal = allTypes.has("Person") || allTypes.has("ProfilePage");
+  if (isHomepage && !personal && !["Organization", "Corporation", "OnlineStore", "OnlineBusiness", "NGO", "EducationalOrganization", "GovernmentOrganization", ...LOCAL_BUSINESS_SUBTYPES].some((t) => allTypes.has(t))) {
     sink.emit("geo.organization-missing", { url, observed: `types present: ${[...allTypes].join(", ") || "none"}` });
   }
 }
@@ -36112,7 +35804,7 @@ function buildInventory(ctx) {
       status: p.status,
       indexable: !isNoindex(p),
       depth: p.depth,
-      inlinks: ctx.inlinks.get(p.url)?.size ?? 0,
+      inlinks: ctx.reachIn.get(p.url)?.size ?? 0,
       words: f.wordCount,
       intent: pageIntent({ type, basis })?.intent
     });
@@ -36238,6 +35930,393 @@ function classifyBusiness(ctx, byType, sd) {
   };
 }
 
+// src/analyze/content.ts
+var STOPWORDS = new Set(
+  // English
+  "a about above after again against all am an and any are as at be because been before being below between both but by can could did do does doing down during each few for from further had has have having he her here hers him his how i if in into is it its itself just me more most my no nor not now of off on once only or other our ours out over own same she should so some such than that the their them then there these they this those through to too under until up very was we were what when where which while who whom why will with you your yours get got also use using used new one two may like make many much via per vs etc com www http https home page ve ile bir bu da de i\xE7in gibi daha \xE7ok en mi mu m\xFC ne o \u015Fu ama veya ya ki her olan olarak sonra \xF6nce kadar ise de\u011Fil var yok nas\u0131l neden der die das und ist nicht mit f\xFCr auf ein eine den von zu im le la les et des un une du pour dans est el los las y en del por con para una".split(/\s+/)
+);
+function tokenize(text4) {
+  return text4.toLowerCase().replace(/\u0307/g, "").normalize("NFKC").split(/[^\p{L}\p{M}\p{N}]+/u).filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
+}
+function fnv1a(str, seed = 2166136261) {
+  let h = seed >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+function shingles(words2, k = 5) {
+  const s = /* @__PURE__ */ new Set();
+  for (let i = 0; i + k <= words2.length; i++) s.add(fnv1a(words2.slice(i, i + k).join(" ")));
+  return s;
+}
+var MINHASH_N = 64;
+function minhash(sh) {
+  const sig = new Uint32Array(MINHASH_N).fill(4294967295);
+  for (const x of sh) {
+    const a = x >>> 0;
+    const b = Math.imul(x ^ 2654435769, 2246822507) >>> 0 | 1;
+    for (let i = 0; i < MINHASH_N; i++) {
+      const v = a + Math.imul(i, b) >>> 0;
+      if (v < sig[i]) sig[i] = v;
+    }
+  }
+  return sig;
+}
+function jaccard(a, b) {
+  let inter = 0;
+  for (const x of a) if (b.has(x)) inter++;
+  return inter / (a.size + b.size - inter || 1);
+}
+function runContentChecks(ctx, sink) {
+  const pages = ctx.indexable.map((p) => ({ p, f: factsOf(p) }));
+  const groupOf = (url) => {
+    const segs = new URL(url).pathname.split("/").filter(Boolean);
+    const locale = segs[0] && /^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0]) ? segs.shift() : "";
+    return `${locale}/${segs[0] ?? ""}`;
+  };
+  const docTerms = /* @__PURE__ */ new Map();
+  const df = /* @__PURE__ */ new Map();
+  for (const { p, f } of pages) {
+    const tf = /* @__PURE__ */ new Map();
+    const weighted = [
+      ...tokenize(f.title ?? "").flatMap((t) => [t, t, t]),
+      // Headings in site chrome (footer "Product family", "Legal"…) repeat on every page: not page topics.
+      ...f.headings.filter((h) => !h.chrome).flatMap((h) => tokenize(h.text).flatMap((t) => h.level === 1 ? [t, t, t] : [t, t])),
+      ...tokenize(f.mainText.slice(0, 2e4))
+    ];
+    for (const t of weighted) tf.set(t, (tf.get(t) ?? 0) + 1);
+    docTerms.set(p.url, tf);
+    for (const t of tf.keys()) df.set(t, (df.get(t) ?? 0) + 1);
+  }
+  const N = Math.max(1, pages.length);
+  const pageTerms = [];
+  const vectors = /* @__PURE__ */ new Map();
+  const secSize = /* @__PURE__ */ new Map();
+  const secDf = /* @__PURE__ */ new Map();
+  for (const [url, tf] of docTerms) {
+    const g = groupOf(url);
+    secSize.set(g, (secSize.get(g) ?? 0) + 1);
+    const m = secDf.get(g) ?? secDf.set(g, /* @__PURE__ */ new Map()).get(g);
+    for (const t of tf.keys()) m.set(t, (m.get(t) ?? 0) + 1);
+  }
+  for (const [url, tf] of docTerms) {
+    const g = groupOf(url);
+    const gs = secSize.get(g);
+    const sectionTemplate = (t) => gs >= 4 && (secDf.get(g).get(t) ?? 0) >= gs * 0.8;
+    const scored = [...tf.entries()].map(([t, c]) => [t, c * Math.log(1 + N / (df.get(t) ?? 1))]).sort((a, b) => b[1] - a[1]);
+    pageTerms.push({ url, terms: scored.slice(0, 8).map(([t]) => t) });
+    vectors.set(url, new Map(scored.filter(([t]) => (df.get(t) ?? 0) <= Math.max(3, N * 0.5) && !sectionTemplate(t)).slice(0, 20)));
+  }
+  const langOf = new Map(pages.map(({ p, f }) => [p.url, (f.lang ?? "").toLowerCase().split("-")[0]]));
+  const linkOpportunities = findLinkOpportunities(ctx, vectors, langOf);
+  if (linkOpportunities.length) {
+    sink.emit("links.internal-opportunity", linkOpportunities.slice(0, 50).map((o) => ({ url: o.to, observed: `link from ${o.from} (topic similarity ${Math.round(o.similarity * 100)}%: ${o.sharedTerms.slice(0, 4).join(", ")}); target has ${o.toInlinks} internal inlink(s)` })));
+  }
+  const topTerms = [...df.entries()].filter(([, c]) => c >= Math.min(2, N) && c <= Math.max(2, N * 0.8)).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([term, n]) => ({ term, pages: n }));
+  const utility = /\/(contact|login|signin|sign-in|register|signup|cart|checkout|account|search|404|privacy|terms|legal|cookie|impressum|iletisim|giris)(\/|$|\?)/i;
+  for (const { p, f } of pages) {
+    const linkDensity = f.mainWordCount ? (f.mainLinkWordCount ?? 0) / f.mainWordCount : 0;
+    if (f.mainWordCount < 100 && linkDensity < 0.5 && !utility.test(new URL(p.finalUrl).pathname) && p !== ctx.homepage) {
+      sink.emit("content.low-text", { url: p.url, observed: `${f.mainWordCount} words of main content (${f.wordCount} incl. navigation/footer)` });
+    }
+  }
+  const byHash = /* @__PURE__ */ new Map();
+  for (const { p, f } of pages) {
+    if (f.mainWordCount < 30) continue;
+    const h = crypto2.createHash("sha1").update(f.mainText.toLowerCase()).digest("hex");
+    const a = byHash.get(h);
+    if (a) a.push(p.url);
+    else byHash.set(h, [p.url]);
+  }
+  const exactDuplicates = [...byHash.values()].filter((g) => g.length > 1);
+  for (const g of exactDuplicates) sink.emit("duplicate.content", { url: g[0], observed: `identical text on ${g.length} URLs: ${g.slice(0, 5).join(", ")}` });
+  const allSh = /* @__PURE__ */ new Map();
+  for (const { p, f } of pages) {
+    const words2 = f.mainText.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words2.length >= 50) allSh.set(p.url, shingles(words2));
+  }
+  const siteDf = /* @__PURE__ */ new Map();
+  const groupDf = /* @__PURE__ */ new Map();
+  const groupSize = /* @__PURE__ */ new Map();
+  for (const [url, s] of allSh) {
+    const g = groupOf(url);
+    groupSize.set(g, (groupSize.get(g) ?? 0) + 1);
+    const gm = groupDf.get(g) ?? /* @__PURE__ */ new Map();
+    groupDf.set(g, gm);
+    for (const x of s) {
+      siteDf.set(x, (siteDf.get(x) ?? 0) + 1);
+      gm.set(x, (gm.get(x) ?? 0) + 1);
+    }
+  }
+  const siteMin = Math.max(3, Math.ceil(allSh.size * 0.3));
+  const sh = /* @__PURE__ */ new Map();
+  const sigs = /* @__PURE__ */ new Map();
+  for (const [url, s] of allSh) {
+    const g = groupOf(url);
+    const gSize = groupSize.get(g) ?? 0;
+    const gMin = Math.max(3, Math.ceil(gSize * 0.3));
+    const gm = groupDf.get(g);
+    const isBoilerplate = (x) => allSh.size >= 5 && (siteDf.get(x) ?? 0) >= siteMin || gSize >= 5 && (gm.get(x) ?? 0) >= gMin;
+    const unique = new Set([...s].filter((x) => !isBoilerplate(x)));
+    if (unique.size < 20) continue;
+    sh.set(url, unique);
+    sigs.set(url, minhash(unique));
+  }
+  const buckets = /* @__PURE__ */ new Map();
+  for (const [url, sig] of sigs) {
+    for (let b = 0; b < 16; b++) {
+      const key = `${b}:${sig.slice(b * 4, b * 4 + 4).join(",")}`;
+      const arr = buckets.get(key);
+      if (arr) arr.push(url);
+      else buckets.set(key, [url]);
+    }
+  }
+  const exactSet = new Set(exactDuplicates.flat());
+  const seenPairs = /* @__PURE__ */ new Set();
+  const nearDuplicates = [];
+  for (const urls of buckets.values()) {
+    if (urls.length < 2 || urls.length > 200) continue;
+    for (let i = 0; i < urls.length; i++)
+      for (let j = i + 1; j < urls.length; j++) {
+        const a = urls[i], b = urls[j];
+        const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+        if (seenPairs.has(key)) continue;
+        seenPairs.add(key);
+        if (exactSet.has(a) && exactSet.has(b)) continue;
+        const sim = jaccard(sh.get(a), sh.get(b));
+        if (sim >= 0.9) nearDuplicates.push({ a, b, similarity: Math.round(sim * 100) / 100 });
+      }
+  }
+  if (nearDuplicates.length) sink.emit("content.near-duplicate", nearDuplicates.slice(0, 50).map((d) => ({ url: d.a, observed: `${Math.round(d.similarity * 100)}% similar to ${d.b}` })));
+  const groups = /* @__PURE__ */ new Map();
+  const titleTerms = /* @__PURE__ */ new Map();
+  const specificTerms = /* @__PURE__ */ new Map();
+  const sectionTermDf = /* @__PURE__ */ new Map();
+  const sectionPages = /* @__PURE__ */ new Map();
+  for (const { p, f } of pages) {
+    const terms = [.../* @__PURE__ */ new Set([...tokenize(f.title ?? ""), ...tokenize(f.headings.find((h) => h.level === 1 && !h.chrome)?.text ?? "")])];
+    titleTerms.set(p.url, terms);
+    const g = groupOf(p.url);
+    sectionPages.set(g, (sectionPages.get(g) ?? 0) + 1);
+    const m = sectionTermDf.get(g) ?? /* @__PURE__ */ new Map();
+    sectionTermDf.set(g, m);
+    for (const t of terms) m.set(t, (m.get(t) ?? 0) + 1);
+  }
+  const legal = URL_RULES.find(([, t]) => t === "legal")[0];
+  for (const { p } of pages) {
+    if (legal.test(new URL(p.url).pathname)) continue;
+    const terms = titleTerms.get(p.url);
+    const section = groupOf(p.url);
+    const gSize = sectionPages.get(section) ?? 0;
+    const specific = terms.filter((t) => ((df.get(t) ?? 0) < N * 0.5 || N < 4) && !(gSize >= 4 && (sectionTermDf.get(section).get(t) ?? 0) >= gSize * 0.5));
+    if (specific.length >= 2) specificTerms.set(p.url, new Set(specific));
+  }
+  const index2 = /* @__PURE__ */ new Map();
+  for (const [url, set] of specificTerms) for (const t of set) (index2.get(t) ?? index2.set(t, []).get(t)).push(url);
+  const parent2 = /* @__PURE__ */ new Map();
+  const find5 = (x) => {
+    const px = parent2.get(x) ?? x;
+    if (px === x) return x;
+    const r = find5(px);
+    parent2.set(x, r);
+    return r;
+  };
+  const checked = /* @__PURE__ */ new Set();
+  for (const urls of index2.values()) {
+    if (urls.length > 100) continue;
+    for (let i = 0; i < urls.length; i++)
+      for (let j = i + 1; j < urls.length; j++) {
+        const a = urls[i], b = urls[j];
+        const key = a < b ? a + "|" + b : b + "|" + a;
+        if (checked.has(key)) continue;
+        checked.add(key);
+        if (langOf.get(a) !== langOf.get(b)) continue;
+        const sa = specificTerms.get(a), sb = specificTerms.get(b);
+        let shared = 0;
+        for (const t of sa) if (sb.has(t)) shared++;
+        if (shared >= 2 && shared / (sa.size + sb.size - shared) >= 0.6) parent2.set(find5(a), find5(b));
+      }
+  }
+  for (const url of specificTerms.keys()) {
+    const root2 = find5(url);
+    (groups.get(root2) ?? groups.set(root2, []).get(root2)).push(url);
+  }
+  const cannibalization = [...groups.values()].filter((g) => g.length > 1).map((g) => {
+    const sets = g.map((u) => specificTerms.get(u));
+    const common = [...sets[0]].filter((t) => sets.every((x) => x.has(t)));
+    return { terms: (common.length ? common : [...sets[0]]).slice(0, 4), pages: g };
+  });
+  for (const c of cannibalization) sink.emit("content.cannibalization", { url: c.pages[0], observed: `"${c.terms.join(" ")}" shared by ${c.pages.length} pages: ${c.pages.slice(0, 5).join(", ")}` });
+  const clusterMap = /* @__PURE__ */ new Map();
+  for (const { p } of pages) {
+    const seg = new URL(p.finalUrl).pathname.split("/").filter(Boolean)[0] ?? "(root)";
+    const a = clusterMap.get(seg);
+    if (a) a.push(p.url);
+    else clusterMap.set(seg, [p.url]);
+  }
+  const clusters = [...clusterMap.entries()].map(([key, urls]) => {
+    const counts = /* @__PURE__ */ new Map();
+    for (const u of urls) for (const t of pageTerms.find((x) => x.url === u)?.terms ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+    return { key, pages: urls, terms: [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([t]) => t) };
+  }).sort((a, b) => b.pages.length - a.pages.length);
+  return { topTerms, pageTerms, clusters, cannibalization, nearDuplicates, exactDuplicates, linkOpportunities: linkOpportunities.slice(0, 200) };
+}
+function findLinkOpportunities(ctx, vectors, langOf) {
+  const otherLanguage = (a, b) => {
+    const la = langOf?.get(a), lb = langOf?.get(b);
+    return !!la && !!lb && la !== lb;
+  };
+  const norm4 = /* @__PURE__ */ new Map();
+  for (const [u, v] of vectors) norm4.set(u, Math.sqrt([...v.values()].reduce((a, x) => a + x * x, 0)) || 1);
+  const index2 = /* @__PURE__ */ new Map();
+  for (const [u, v] of vectors) for (const t of v.keys()) (index2.get(t) ?? index2.set(t, []).get(t)).push(u);
+  const outlinks = /* @__PURE__ */ new Map();
+  for (const [target, sources] of ctx.inlinks) for (const s of sources) (outlinks.get(s) ?? outlinks.set(s, /* @__PURE__ */ new Set()).get(s)).add(target);
+  const links = (a, b) => outlinks.get(a)?.has(b) || outlinks.get(b)?.has(a);
+  const inl = (u) => ctx.reachIn.get(u)?.size ?? 0;
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const urls of index2.values()) {
+    if (urls.length > 200) continue;
+    for (let i = 0; i < urls.length; i++)
+      for (let j = i + 1; j < urls.length; j++) {
+        const a = urls[i], b = urls[j];
+        const key = a < b ? a + "|" + b : b + "|" + a;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (otherLanguage(a, b)) continue;
+        const va = vectors.get(a), vb = vectors.get(b);
+        let dot = 0;
+        const shared = [];
+        for (const [t, w] of va) {
+          const w2 = vb.get(t);
+          if (w2 !== void 0) {
+            dot += w * w2;
+            shared.push(t);
+          }
+        }
+        const sim = dot / (norm4.get(a) * norm4.get(b));
+        if (shared.length < 2 || sim < 0.3 || sim > 0.9 || links(a, b)) continue;
+        const [from, to] = inl(a) >= inl(b) ? [a, b] : [b, a];
+        out.push({ from, to, similarity: Math.round(sim * 100) / 100, sharedTerms: shared.slice(0, 6), toInlinks: inl(to) });
+      }
+  }
+  out.sort((x, y) => x.toInlinks - y.toInlinks || y.similarity - x.similarity);
+  const perTarget = /* @__PURE__ */ new Map();
+  return out.filter((o) => {
+    const n = perTarget.get(o.to) ?? 0;
+    if (n >= 3) return false;
+    perTarget.set(o.to, n + 1);
+    return true;
+  });
+}
+
+// src/analyze/geo.ts
+function answerability(ctx) {
+  const out = [];
+  for (const p of ctx.indexable) {
+    const f = factsOf(p);
+    const s = f.structure;
+    const signals = {
+      descriptiveTitle: !!f.title && f.title.split(/\s+/).length >= 3,
+      hasH1: f.headings.some((h) => h.level === 1),
+      sectioned: f.headings.filter((h) => h.level === 2).length >= 2,
+      questionHeadings: s.questionHeadings > 0,
+      conciseParagraphs: s.paragraphs > 0 && s.avgParagraphWords <= 80,
+      listsOrTables: s.lists + s.tables > 0,
+      datedOrAuthored: s.hasPublishedDate || s.hasAuthor,
+      structuredData: f.jsonLd.some((b) => !b.error),
+      substantiveText: f.mainWordCount >= 150
+    };
+    const vals = Object.values(signals);
+    out.push({ url: p.url, score: Math.round(vals.filter(Boolean).length / vals.length * 100), signals });
+  }
+  return out;
+}
+function runGeoChecks(ctx, sink, llms) {
+  const notes = [];
+  const matrix = ctx.crawl.robots.state === "ok" || ctx.crawl.robots.state === "missing" ? botAccessMatrix(ctx.crawl.robots, ctx.crawl.startUrl) : [];
+  for (const b of matrix) {
+    if (b.homepageAllowed) continue;
+    if (b.bot.token === "Googlebot" || b.bot.token === "Bingbot") sink.emit("geo.search-bot-blocked", { url: ctx.crawl.robots.url, observed: `${b.bot.token} disallowed` });
+    if (b.bot.purpose === "ai-search" && ["OAI-SearchBot", "Claude-SearchBot", "PerplexityBot"].includes(b.bot.token)) {
+      sink.emit("geo.ai-search-bot-blocked", { url: ctx.crawl.robots.url, observed: `${b.bot.token} (${b.bot.operator}) disallowed${b.explicit ? "" : " via * group"}` });
+    }
+  }
+  const training = matrix.filter((b) => b.bot.purpose === "ai-training");
+  if (training.length) {
+    sink.emit("geo.training-bots", {
+      url: ctx.crawl.robots.url,
+      observed: training.map((b) => `${b.bot.token}: ${b.homepageAllowed ? "allowed" : "blocked"}`).join(", ")
+    });
+  }
+  if (ctx.crawl.robots.state === "unreachable") notes.push("robots.txt unreachable: AI crawler access could not be evaluated (RFC 9309 treats this as full disallow).");
+  const snippetRestricted = [];
+  for (const p of ctx.htmlPages) {
+    if (isNoindex(p)) continue;
+    const d = robotsDirectives(p, ["googlebot", "bingbot"]);
+    const restricted = d.filter((x) => x === "nosnippet" || x === "max-snippet:0" || x === "noarchive" || x === "nocache");
+    if (restricted.length) {
+      snippetRestricted.push(p.url);
+      sink.emit("geo.snippet-restricted", { url: p.url, observed: restricted.join(", ") });
+    }
+  }
+  if (llms) sink.emit("geo.llms-txt", { url: llms.url, observed: llms.present ? `present (${llms.bytes} bytes) \u2014 not used by Google; no scoring impact` : `absent (HTTP ${llms.status}) \u2014 no scoring impact` });
+  const entityNames = {};
+  const roles = { site: /* @__PURE__ */ new Map(), organization: /* @__PURE__ */ new Map() };
+  const norm4 = (n) => n.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const note = (role, name, url) => {
+    const k = norm4(name);
+    if (!k) return;
+    entityNames[name] = (entityNames[name] ?? 0) + 1;
+    const set = roles[role].get(k) ?? /* @__PURE__ */ new Set();
+    set.add(`${name}|${url}`);
+    roles[role].set(k, set);
+  };
+  for (const p of ctx.htmlPages) {
+    const f = factsOf(p);
+    for (const b of f.jsonLd) {
+      const data2 = b.data;
+      const roots = Array.isArray(data2) ? data2 : data2 && Array.isArray(data2["@graph"]) ? data2["@graph"] : [data2];
+      for (const n of roots) {
+        if (!n || typeof n !== "object") continue;
+        const node = n;
+        const t = [].concat(node["@type"] ?? []);
+        if (typeof node["name"] !== "string") continue;
+        if (t.includes("WebSite")) note("site", node["name"].trim(), p.url);
+        else if (t.some((x) => typeof x === "string" && /Organization|Corporation|LocalBusiness|OnlineStore|OnlineBusiness/.test(x))) note("organization", node["name"].trim(), p.url);
+      }
+    }
+    if (f.openGraph["og:site_name"]) note("site", f.openGraph["og:site_name"].trim(), p.url);
+  }
+  for (const role of ["site", "organization"]) {
+    if (roles[role].size > 1) {
+      const variants = [...roles[role].values()].map((set) => {
+        const [name, url] = [...set][0].split("|");
+        return `"${name}" on ${set.size} page(s), e.g. ${url}`;
+      });
+      sink.emit("geo.entity-inconsistent", { observed: `${role === "site" ? "site name (WebSite / og:site_name)" : "organization name"}: ${variants.join("; ")}` });
+    }
+  }
+  const pages = answerability(ctx);
+  const average = pages.length ? Math.round(pages.reduce((a, p) => a + p.score, 0) / pages.length) : 0;
+  const weak = pages.filter((p) => p.score < 50);
+  if (weak.length) sink.emit("geo.answerability", weak.slice(0, 50).map((p) => ({ url: p.url, observed: `clarity signals ${p.score}/100; missing: ${Object.entries(p.signals).filter(([, v]) => !v).map(([k]) => k).join(", ")}` })));
+  sink.emit("geo.citations-unmeasured", { observed: "No AI citation data source configured" });
+  notes.push("Answerability is a heuristic clarity signal. Google states AI Overviews/AI Mode require no special optimisation; no citation or ranking prediction is made.");
+  return {
+    bots: matrix.map((b) => ({ token: b.bot.token, operator: b.bot.operator, purpose: b.bot.purpose, allowed: b.homepageAllowed, explicit: b.explicit, docs: b.bot.docs })),
+    llmsTxt: llms,
+    entityNames,
+    answerability: { average, pages: pages.sort((a, b) => a.score - b.score).slice(0, 200) },
+    snippetRestricted,
+    citations: { measured: false, reason: "No AI citation integration configured (Bing AI Performance export or Search Console data can be imported)." },
+    notes
+  };
+}
+
 // src/analyze/language.ts
 var FUNCTION_WORDS = {
   en: ["the", "and", "of", "to", "is", "in", "for", "with", "you", "your", "this", "that", "on", "are", "it", "be", "as", "can", "from", "or", "an", "how", "what", "we", "our"],
@@ -36301,6 +36380,39 @@ function isValidHreflang(code) {
   if (m[3] && ["uk", "eu"].includes(m[3].toLowerCase())) return false;
   return true;
 }
+var ISO639_2_TO_1 = {
+  eng: "en",
+  tur: "tr",
+  deu: "de",
+  ger: "de",
+  fra: "fr",
+  fre: "fr",
+  spa: "es",
+  ita: "it",
+  por: "pt",
+  nld: "nl",
+  dut: "nl",
+  rus: "ru",
+  jpn: "ja",
+  zho: "zh",
+  chi: "zh",
+  kor: "ko",
+  ara: "ar",
+  pol: "pl",
+  swe: "sv",
+  dan: "da",
+  fin: "fi",
+  nor: "no",
+  ell: "el",
+  gre: "el",
+  heb: "he"
+};
+function hreflangProblem(code) {
+  const three = /^([a-z]{3})(?:-[a-z0-9]{2,8})*$/i.exec(code)?.[1]?.toLowerCase();
+  if (three && ISO639_2_TO_1[three]) return { observed: `${code} \u2014 use the ISO 639-1 code "${ISO639_2_TO_1[three]}"` };
+  if (three) return { observed: `${code} \u2014 valid BCP 47, but Google supports only ISO 639-1 codes and ignores this alternate; this language has no 2-letter code, so there is nothing to correct (other search engines may use it)`, severity: "low" };
+  return { observed: code };
+}
 var SESSION_PARAM = /[?&](sid|sessionid|phpsessid|jsessionid|session_id|utm_[a-z]+|gclid|fbclid)=/i;
 function runTechnicalChecks(ctx, sink) {
   const { crawl: crawl2 } = ctx;
@@ -36334,7 +36446,7 @@ function runTechnicalChecks(ctx, sink) {
     if (p.redirects.length && p.foundOn && p.foundOn !== "sitemap" && p.redirects.some((r) => [302, 303, 307].includes(r.status))) {
       sink.emit("redirect.temporary-internal", { url: p.url, observed: p.redirects.map((r) => `${r.status} \u2192 ${r.location}`).join(", "), expected: "linked from " + p.foundOn });
     }
-    if (p.inSitemap && (p.redirects.length || p.status !== 200)) sink.emit("index.sitemap-non200", { url: p.url, observed: p.redirects.length ? `redirects to ${p.finalUrl}` : `HTTP ${p.status}` });
+    if (p.inSitemap && (p.redirects.length || p.status !== 200)) sink.emit("index.sitemap-non200", { url: p.url, observed: p.redirects.length ? `redirects to ${p.finalUrl}` : p.error ? `${p.error} (HTTP ${p.status || "error"})` : `HTTP ${p.status}` });
     if (p.bytes > 15 * 1024 * 1024 || p.truncated) sink.emit("index.oversized-html", { url: p.url, observed: `${Math.round(p.bytes / 1024 / 1024)} MB${p.truncated ? " (truncated by crawler limit)" : ""}` });
     const f = factsOf(p);
     if (!f || p.status !== 200 || p.redirects.length) continue;
@@ -36343,7 +36455,7 @@ function runTechnicalChecks(ctx, sink) {
     const noindex = isNoindex(p);
     const selfCanon = isSelfCanonical(p);
     if (noindex) {
-      sink.emit("index.noindex", { url: p.url, observed: robotsDirectives(p, ["googlebot", "bingbot"]).join(", ") });
+      sink.emit("index.noindex", { url: p.url, observed: [...new Set(robotsDirectives(p, ["googlebot", "bingbot"]))].join(", ") });
       if (p.inSitemap) sink.emit("index.noindex-in-sitemap", ev);
       if (f.canonical && !selfCanon) sink.emit("canonical.noindex-conflict", { url: p.url, observed: `noindex + canonical \u2192 ${f.canonical}` });
     }
@@ -36394,7 +36506,7 @@ function runTechnicalChecks(ctx, sink) {
     if (!f.openGraph["og:title"] && !f.openGraph["og:description"] && !f.openGraph["og:image"]) sink.emit("social.og-missing", ev);
     const noAlt = f.images.filter((i) => i.alt === null && i.src);
     if (noAlt.length) sink.emit("img.alt-missing", { url: p.url, observed: `${noAlt.length} image(s), e.g. ${noAlt[0].src.slice(0, 120)}` });
-    const noDim = f.images.filter((i) => i.src && (!i.width || !i.height));
+    const noDim = f.images.filter((i) => i.src && (!i.width || !i.height) && !i.sizedByLayout);
     if (noDim.length) sink.emit("img.dimensions-missing", { url: p.url, observed: `${noDim.length} image(s) without width/height attributes` });
     const uncrawlable = f.links.filter((l) => l.uncrawlable && l.text);
     if (uncrawlable.length) sink.emit("links.uncrawlable", { url: p.url, observed: `${uncrawlable.length} link(s), e.g. "${uncrawlable[0].text}" href="${uncrawlable[0].href}"` });
@@ -36403,8 +36515,7 @@ function runTechnicalChecks(ctx, sink) {
     if (empty2.length) sink.emit("links.empty-anchor", { url: p.url, observed: `${empty2.length} link(s), e.g. ${empty2[0].href}` });
     const sessionLinks = f.links.filter((l) => l.internal && SESSION_PARAM.test(l.href));
     if (sessionLinks.length) sink.emit("url.session-params", { url: p.url, observed: sessionLinks[0].href });
-    const errorish = /\b(404|not found|page not found|sayfa bulunamadı|nicht gefunden|introuvable|no encontrada)\b/i;
-    if (!noindex && (f.title && errorish.test(f.title) || f.headings.some((h) => h.level === 1 && errorish.test(h.text)))) {
+    if (!noindex && (isErrorText(f.title) || f.headings.some((h) => h.level === 1 && isErrorText(h.text)))) {
       sink.emit("index.soft-404", { url: p.url, observed: f.title ?? "" });
     }
     if (p.data?.likelyClientRendered && !p.rendered) sink.emit("index.client-rendered", { url: p.url, observed: `${p.data.wordCount} words in raw HTML, ${p.data.scriptCount} scripts` });
@@ -36437,15 +36548,19 @@ function runTechnicalChecks(ctx, sink) {
     const rec = resolveRecord(ctx, target);
     if (new URL(target).pathname.startsWith("/cdn-cgi/")) continue;
     if (rec && !rec.blockedByRobots && rec.status >= 400 && rec.status < 500) {
-      sink.emit("links.broken-internal", { url: target, observed: `HTTP ${rec.status}, linked from ${sources.size} page(s): ${[...sources].slice(0, 3).join(", ")}` });
+      sink.emit("links.broken-internal", { url: target, observed: `${rec.error ? rec.error : `HTTP ${rec.status}`}, linked from ${sources.size} page(s): ${[...sources].slice(0, 3).join(", ")}` }, rec.error ? { confidence: "heuristic" } : {});
     }
   }
   checkFacetsAndPagination(ctx, sink);
-  for (const u of ctx.sitemapUrls) {
+  for (const u of crawl2.truncated ? [] : ctx.sitemapUrls) {
     const rec = ctx.byUrl.get(u);
     if (!rec || rec.status !== 200 || u === crawl2.startUrl) continue;
-    if (!ctx.inlinks.get(u)?.size && !ctx.inlinks.get(rec.finalUrl)?.size) sink.emit("crawl.sitemap-orphan", { url: u });
+    if (!ctx.reachIn.get(u)?.size && !ctx.reachIn.get(rec.finalUrl)?.size) sink.emit("crawl.sitemap-orphan", { url: u });
   }
+}
+var ERROR_TEXT = /(?<![\p{L}\p{N}])(404|not found|page not found|sayfa bulunamadı|bulunamadı|(böyle bir )?sayfa yok|nicht gefunden|introuvable|no encontrada|non trovata|niet gevonden|não encontrada)(?![\p{L}\p{N}])/iu;
+function isErrorText(text4) {
+  return !!text4 && ERROR_TEXT.test(text4);
 }
 function push(m, k, v) {
   const a = m.get(k);
@@ -36473,7 +36588,10 @@ function checkHreflang(ctx, url, f, sink) {
   let hasSelf = false;
   let hasDefault = false;
   for (const h of f.hreflang) {
-    if (!isValidHreflang(h.lang)) sink.emit("hreflang.invalid-code", { url, observed: h.lang });
+    if (!isValidHreflang(h.lang)) {
+      const problem = hreflangProblem(h.lang);
+      sink.emit("hreflang.invalid-code", { url, observed: problem.observed }, problem.severity ? { severity: problem.severity } : {});
+    }
     if (h.lang.toLowerCase() === "x-default") hasDefault = true;
     const target = normalizeUrl(h.href);
     if (target === self) {
@@ -36604,6 +36722,30 @@ function prioritise(findings, affected, ctx, totalUnits) {
     const bucket = score >= 45 ? "P1" : score >= 15 ? "P2" : "P3";
     f.priority = { score, bucket, reach: Math.round(reach * 1e3) / 1e3, effort, reasons };
   }
+  linkRootCauses(findings);
+}
+var CONSEQUENCES = [
+  {
+    cause: "lang.locale-adaptive",
+    when: /client-side switch during rendering/,
+    effects: ["index.render-mismatch", "index.soft-404", "hreflang.target-error", "index.sitemap-non-canonical", "crawl.sitemap-orphan", "duplicate.content", "duplicate.title", "lang.mixed-navigation", "canonical.target-error"],
+    why: "the page switches language in the browser (en-US), which changes its title, canonical and links for renderers such as Googlebot"
+  }
+];
+function linkRootCauses(findings) {
+  for (const c of CONSEQUENCES) {
+    const cause = findings.find((f) => f.ruleId === c.cause && f.evidence.some((e) => c.when.test(e.observed ?? "")));
+    if (!cause) continue;
+    const effects = findings.filter((f) => c.effects.includes(f.ruleId) && f.priority);
+    if (!effects.length || !cause.priority) continue;
+    for (const f of effects) f.priority.reasons.push(`likely a consequence of ${c.cause} \u2014 ${c.why}; fix that first, then re-run`);
+    const top2 = Math.max(...effects.map((f) => f.priority.score));
+    if (cause.priority.score <= top2) {
+      cause.priority.score = Math.min(100, top2 + 1);
+      cause.priority.bucket = cause.priority.score >= 45 ? "P1" : cause.priority.score >= 15 ? "P2" : "P3";
+    }
+    cause.priority.reasons.push(`likely root cause of ${effects.length} other finding(s): ${effects.map((f) => f.ruleId).join(", ")}`);
+  }
 }
 
 // src/analyze/external-links.ts
@@ -36644,11 +36786,13 @@ async function checkExternalLinks(ctx, sink, opts = {}) {
 }
 
 // src/integrations/crux.ts
+import http2 from "node:http";
 import https2 from "node:https";
+var BASE2 = () => process.env["SEARVEX_CRUX_API_BASE"] ?? "https://chromeuxreport.googleapis.com/v1";
 var CWV_THRESHOLDS = { lcpMs: 2500, inpMs: 200, cls: 0.1 };
 function post(url, body) {
   return new Promise((resolve, reject) => {
-    const req = https2.request(url, { method: "POST", headers: { "content-type": "application/json" }, timeout: 2e4 }, (r) => {
+    const req = (url.startsWith("https:") ? https2 : http2).request(url, { method: "POST", headers: { "content-type": "application/json" }, timeout: 2e4 }, (r) => {
       const chunks = [];
       r.on("data", (c) => chunks.push(c));
       r.on("end", () => resolve({ status: r.statusCode ?? 0, text: Buffer.concat(chunks).toString("utf8") }));
@@ -36668,12 +36812,28 @@ function parseCruxRecord(json, formFactor) {
   const cp = json.record?.collectionPeriod;
   return { formFactor, lcpMs: p75("largest_contentful_paint"), inpMs: p75("interaction_to_next_paint"), cls: p75("cumulative_layout_shift"), collectionPeriod: cp ? { first: d(cp.firstDate), last: d(cp.lastDate) } : void 0 };
 }
+function maskCruxKey(text4, apiKey) {
+  return apiKey ? [apiKey, encodeURIComponent(apiKey)].reduce((t, k) => t.split(k).join("***"), text4) : text4;
+}
+function cruxErrorMessage(status, body) {
+  let reason = "";
+  try {
+    const e = JSON.parse(body).error;
+    reason = `${e?.status ?? ""} ${e?.message ?? ""}`.trim();
+  } catch {
+    reason = body;
+  }
+  if (status === 400 && /API key not valid|API_KEY_INVALID/i.test(reason)) return 'Google rejected the CrUX API key (not valid). Store a new key with "searvex crux auth --force", or fix SEARVEX_CRUX_API_KEY.';
+  if (status === 403) return `The key may not use the Chrome UX Report API (${reason.slice(0, 160)}). Enable "Chrome UX Report API" in the key's Google Cloud project and allow it in the key's API restrictions.`;
+  if (status === 429) return "CrUX API quota reached (150 queries per minute per project). Try again in a minute.";
+  return `CrUX API HTTP ${status}: ${reason.slice(0, 200)}`;
+}
 async function queryCrux(origin, apiKey) {
   const metrics = [];
   for (const formFactor of ["PHONE", "DESKTOP"]) {
-    const res = await post(`https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=${encodeURIComponent(apiKey)}`, JSON.stringify({ origin, formFactor, metrics: ["largest_contentful_paint", "interaction_to_next_paint", "cumulative_layout_shift"] }));
+    const res = await post(`${BASE2()}/records:queryRecord?key=${encodeURIComponent(apiKey)}`, JSON.stringify({ origin, formFactor, metrics: ["largest_contentful_paint", "interaction_to_next_paint", "cumulative_layout_shift"] }));
     if (res.status === 404) continue;
-    if (res.status !== 200) return { status: "error", origin, message: `CrUX API HTTP ${res.status}: ${res.text.slice(0, 200)}` };
+    if (res.status !== 200) return { status: "error", origin, message: cruxErrorMessage(res.status, maskCruxKey(res.text.slice(0, 300), apiKey)) };
     metrics.push(parseCruxRecord(JSON.parse(res.text), formFactor));
   }
   if (!metrics.length) return { status: "no-data", origin, message: "Origin not in the CrUX dataset (insufficient real-user traffic)" };
@@ -36688,6 +36848,9 @@ function failingMetrics(m) {
 }
 
 // src/analyze/audit.ts
+function scoreLabel(s) {
+  return s.notApplicable ? "n/a (nothing to audit)" : `${s.overall}/100`;
+}
 var WEIGHT = { critical: 25, high: 10, medium: 4, low: 1.5, info: 0 };
 function computeScores(findings, pageCount) {
   const penalty = (fs15) => fs15.reduce((sum, f) => {
@@ -36725,10 +36888,10 @@ async function probeLocaleAdaptive(startUrl, opts, sink) {
 async function probeHostVariants(startUrl, opts, sink) {
   const u = new URL(startUrl);
   if (u.protocol === "https:") {
-    const http6 = new URL(startUrl);
-    http6.protocol = "http:";
-    const res2 = await safeFetch(http6.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
-    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http6.toString(), observed: "HTTP 200 without redirect to HTTPS" });
+    const http7 = new URL(startUrl);
+    http7.protocol = "http:";
+    const res2 = await safeFetch(http7.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
+    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http7.toString(), observed: "HTTP 200 without redirect to HTTPS" });
   }
   if (/^[\d.]+$/.test(u.hostname) || u.hostname === "localhost" || u.hostname.split(".").length < 2) return;
   const alt = new URL(startUrl);
@@ -36768,7 +36931,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
         if (failing.length) sink.emit("perf.cwv-poor", { url: result.origin, observed: `${m.formFactor}: ${failing.join(", ")} (CrUX p75, ${m.collectionPeriod?.first ?? ""}\u2013${m.collectionPeriod?.last ?? ""})` });
       }
     } else sink.emit("perf.cwv-unmeasured", { observed: fieldData.message });
-  } else sink.emit("perf.cwv-unmeasured", { observed: "No CrUX API key configured (SEARVEX_CRUX_API_KEY)" });
+  } else sink.emit("perf.cwv-unmeasured", { observed: "No CrUX API key configured (searvex crux auth, or SEARVEX_CRUX_API_KEY)" });
   const inventory = buildInventory(ctx);
   const findings = sink.findings();
   prioritise(findings, (id) => sink.affected(id), ctx);
@@ -36776,7 +36939,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
     "Website mode sees only publicly reachable pages; it has no access to real traffic, rankings, Search Console or analytics data unless an integration is configured.",
     "Response times are single-location lab samples, not Core Web Vitals field data."
   ];
-  if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (orphans, duplicates, hreflang return links) are based on the crawled subset.`);
+  if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
   if (!opts.checkExternal) limitations.push("Outbound links were not checked (use --check-external).");
   if (!result.pages.some((p) => p.rendered)) limitations.push("JavaScript was not executed (run with --render to compare rendered DOM); client-rendered content is only detected heuristically.");
   return {
@@ -36910,7 +37073,7 @@ function renderHtml(r, kb) {
 document.getElementById('t').textContent='Searvex audit \u2014 '+R.target;
 document.getElementById('meta').textContent=R.generatedAt+' \xB7 Searvex '+R.tool.version+' \xB7 rules '+R.tool.rulesVersion+' \xB7 '+R.runId;
 var issues=R.findings.filter(function(f){return f.severity!=='info'});
-[['Health score*',R.scores.overall+'/100'],['Pages crawled',R.crawl.crawled+(R.crawl.truncated?' (limit)':'')],['Issues',issues.length],['Critical / high',R.findings.filter(function(f){return f.severity==='critical'||f.severity==='high'}).length],['Site type (heuristic)',R.inventory.businessModel.label],['Evidence','\u2713'+R.measurement.verified+' ~'+R.measurement.heuristic+' ?'+R.measurement.unmeasurable]].forEach(function(c){document.getElementById('cards').appendChild(el('div',{class:'card'},[el('span',{class:'muted',text:c[0]}),el('b',{text:String(c[1])})]))});
+[['Health score*',R.scores.notApplicable?'n/a':R.scores.overall+'/100'],['Pages crawled',R.crawl.crawled+(R.crawl.truncated?' (limit)':'')],['Issues',issues.length],['Critical / high',R.findings.filter(function(f){return f.severity==='critical'||f.severity==='high'}).length],['Site type (heuristic)',R.inventory.businessModel.label],['Evidence','\u2713'+R.measurement.verified+' ~'+R.measurement.heuristic+' ?'+R.measurement.unmeasurable]].forEach(function(c){document.getElementById('cards').appendChild(el('div',{class:'card'},[el('span',{class:'muted',text:c[0]}),el('b',{text:String(c[1])})]))});
 var SEV=['critical','high','medium','low'],ch=document.getElementById('charts');
 ch.appendChild(bars('Issues by severity (rules)',SEV.map(function(s){return[s,issues.filter(function(f){return f.severity===s}).length,s]})));
 ch.appendChild(bars('Score by category (100 = no findings)',Object.keys(R.scores.byCategory).sort(function(a,b){return R.scores.byCategory[a]-R.scores.byCategory[b]}).map(function(k){var v=R.scores.byCategory[k];return[k,v,v>=90?'good':v>=70?'medium':'critical']}),{max:100}));
@@ -37004,7 +37167,7 @@ function renderMarkdown(r, opts = {}) {
   L.push(`Generated ${r.generatedAt} \xB7 Searvex ${r.tool.version} \xB7 rules ${r.tool.rulesVersion} \xB7 run \`${r.runId}\``, "");
   L.push("## Summary", "");
   L.push(`| Metric | Value |`, `|---|---|`);
-  L.push(`| Searvex health score\xB9 | **${r.scores.overall}/100** |`);
+  L.push(`| Searvex health score\xB9 | **${scoreLabel(r.scores)}** |`);
   L.push(`| Pages crawled | ${r.crawl.crawled}${r.crawl.truncated ? ` (limit reached, ${r.crawl.queuedRemaining} queued)` : ""} |`);
   L.push(`| Indexable HTML pages | ${r.inventory.pages.filter((p) => p.indexable).length} |`);
   L.push(`| Likely site type (heuristic) | ${md(r.inventory.businessModel.label)} |`);
@@ -37368,6 +37531,26 @@ function detectApp(dir, rel2 = ".") {
   if (has2(dir, "_config.yml") && has2(dir, "_layouts", "_posts")) out.push({ framework: "jekyll", root: rel2, evidence: "_config.yml + _layouts" });
   return out;
 }
+var STATIC_DIRS = ["", "public", "dist", "out", "build", "_site"];
+function staticHtmlIndexes(dir) {
+  const found = [];
+  for (const d of STATIC_DIRS) {
+    const base = path4.join(dir, d);
+    if (fs4.existsSync(path4.join(base, "index.html"))) {
+      found.push(path4.posix.join(d, "index.html"));
+      continue;
+    }
+    let subs = [];
+    try {
+      subs = fs4.readdirSync(base, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    const locales = subs.filter((s) => s.isDirectory() && /^[a-z]{2,3}([-_][a-z0-9]{2,8})?$/i.test(s.name) && fs4.existsSync(path4.join(base, s.name, "index.html")));
+    if (locales.length) found.push(...locales.map((s) => path4.posix.join(d, s.name, "index.html")));
+  }
+  return found;
+}
 function detect(root2) {
   const candidates = detectApp(root2);
   const pkg = readJson(path4.join(root2, "package.json"));
@@ -37375,18 +37558,22 @@ function detect(root2) {
   const pnpmWs = fs4.existsSync(path4.join(root2, "pnpm-workspace.yaml")) ? (fs4.readFileSync(path4.join(root2, "pnpm-workspace.yaml"), "utf8").match(/-\s*['"]?([^'"\n]+)['"]?/g) ?? []).map((l) => l.replace(/^-\s*['"]?|['"]?$/g, "")) : [];
   const patterns = [...ws, ...pnpmWs];
   const workspaces = [];
-  for (const pattern of patterns.length ? patterns : ["apps/*", "packages/*", "sites/*"]) {
+  for (const pattern of patterns.length ? patterns : ["apps/*", "packages/*", "sites/*", "services/*"]) {
     const base = pattern.replace(/\/\*+$/, "");
     const dir = path4.join(root2, base);
     if (!fs4.existsSync(dir) || !fs4.statSync(dir).isDirectory()) continue;
     const children2 = pattern.endsWith("*") ? fs4.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path4.posix.join(base, d.name)) : [base];
     for (const c of children2) {
       const found = detectApp(path4.join(root2, c), c);
+      if (!found.length) {
+        const idx = staticHtmlIndexes(path4.join(root2, c));
+        if (idx.length) found.push({ framework: "static-html", root: c, evidence: idx.slice(0, 3).map((f) => path4.posix.join(c, f)).join(", ") });
+      }
       if (found.length) workspaces.push(c);
       candidates.push(...found);
     }
   }
-  const htmlFiles = ["index.html", "public/index.html", "dist/index.html", "out/index.html", "build/index.html", "_site/index.html"].filter((f) => fs4.existsSync(path4.join(root2, f)));
+  const htmlFiles = staticHtmlIndexes(root2);
   if (!candidates.length && htmlFiles.length) candidates.push({ framework: "static-html", root: ".", evidence: htmlFiles.join(", ") });
   const framework = candidates[0]?.framework ?? "unknown";
   const packageManager = has2(root2, "pnpm-lock.yaml") ? "pnpm" : has2(root2, "yarn.lock") ? "yarn" : has2(root2, "bun.lockb", "bun.lock") ? "bun" : has2(root2, "package-lock.json") ? "npm" : has2(root2, "composer.lock") ? "composer" : void 0;
@@ -37748,7 +37935,11 @@ function rel(appRoot, f) {
 function find4(files, re) {
   return files.filter((f) => re.test(f.rel));
 }
-function imgWithoutAlt(text4) {
+function blankTemplateExpressions(text4) {
+  return text4.replace(/\{!!.*?!!\}|\{\{.*?\}\}|<\?(?:php|=)[\s\S]*?\?>/gs, (m) => m.replace(/[^\n]/g, " "));
+}
+function imgWithoutAlt(source) {
+  const text4 = blankTemplateExpressions(source);
   const lines = [];
   const re = /<(img|Image)\b([^>]*?)\/?>/g;
   let m;
@@ -37757,7 +37948,8 @@ function imgWithoutAlt(text4) {
   }
   return lines;
 }
-function anchorsWithoutHref(text4) {
+function anchorsWithoutHref(source) {
+  const text4 = blankTemplateExpressions(source);
   const lines = [];
   const re = /<a\b([^>]*)>/g;
   let m;
@@ -37906,6 +38098,8 @@ function scanLayouts(layoutFiles, read, sink, scan, idioms) {
 function scanSources(files, read, sink) {
   for (const f of files) {
     if (!/\.(tsx|jsx|vue|svelte|astro|php|html?)$/.test(f.rel) || /(^|\/)(dist|build|out|public|_site|static)\//.test(f.rel) || /\.(test|spec|stories)\./.test(f.rel)) continue;
+    if (NON_SITE_DIRS.test(f.rel)) continue;
+    if (ADMIN_VIEWS.test(f.rel)) continue;
     const src = read(f.rel);
     const ast = isJsSource(f.rel) ? parseSource(src, f.rel) : null;
     const noAlt = ast ? jsxImagesWithoutAlt(ast) : imgWithoutAlt(src);
@@ -37916,16 +38110,26 @@ function scanSources(files, read, sink) {
 }
 function staticCrawl(htmlFiles, dirBase, read, scan, files, siteOrigin) {
   const pages = [];
+  const sitemapFiles = files.filter((f) => f.rel.startsWith(dirBase) && /sitemap[^/]*\.xml$/i.test(f.rel)).map((f) => f.rel);
+  const smUrls = sitemapFiles.flatMap((s) => parseSitemapXml(read(s), s).urls);
+  const smSet = new Set(smUrls.map((u) => normalizeUrl(u.loc)).filter((u) => !!u));
   for (const f of htmlFiles) {
     let urlPath = "/" + f.slice(dirBase.length).replace(/^\/+/, "");
     urlPath = urlPath.replace(/(^|\/)index\.html?$/i, "$1");
-    const url = new URL(urlPath, siteOrigin).toString();
     const html3 = read(f);
+    const clean = urlPath.replace(/\.html?$/i, "");
+    if (clean !== urlPath) {
+      const cleanUrl = normalizeUrl(new URL(clean, siteOrigin).toString());
+      const canonical = /<link\b[^>]*rel=["']?canonical["']?[^>]*href=["']([^"']+)["']/i.exec(html3)?.[1] ?? /<link\b[^>]*href=["']([^"']+)["'][^>]*rel=["']?canonical["']?/i.exec(html3)?.[1];
+      if (cleanUrl && (smSet.has(cleanUrl) || canonical && normalizeUrl(canonical, siteOrigin) === cleanUrl)) urlPath = clean;
+    }
+    const url = new URL(urlPath, siteOrigin).toString();
     scan.urlToFile.set(url, f);
     pages.push({
+      // Hosts serve 404.html & co. with an error status, so page-level SEO checks do not apply to them.
       url,
       finalUrl: url,
-      status: 200,
+      status: errorPageStatus(urlPath) ?? 200,
       depth: urlPath.split("/").filter(Boolean).length,
       redirects: [],
       contentType: "text/html",
@@ -37942,10 +38146,34 @@ function staticCrawl(htmlFiles, dirBase, read, scan, files, siteOrigin) {
   }
   const robotsRel = [`${dirBase}robots.txt`, "public/robots.txt", "robots.txt"].find((r) => files.some((f) => f.rel === r));
   const robots = robotsRel ? parseRobots(new URL("/robots.txt", siteOrigin).toString(), read(robotsRel), 200) : { ...parseRobots(new URL("/robots.txt", siteOrigin).toString(), "", 404), state: "missing" };
-  const sitemapFiles = files.filter((f) => f.rel.startsWith(dirBase) && /sitemap[^/]*\.xml$/i.test(f.rel)).map((f) => f.rel);
-  const smUrls = sitemapFiles.flatMap((s) => parseSitemapXml(read(s), s).urls);
-  const smSet = new Set(smUrls.map((u) => u.loc));
-  for (const p of pages) p.inSitemap = smSet.has(p.url);
+  const byNorm = /* @__PURE__ */ new Set();
+  for (const p of pages) {
+    const n = normalizeUrl(p.url);
+    if (n) byNorm.add(n);
+    p.inSitemap = !!n && smSet.has(n);
+  }
+  for (const loc of smSet) {
+    if (byNorm.has(loc) || !loc.startsWith(siteOrigin)) continue;
+    const urlPath = new URL(loc).pathname;
+    pages.push({
+      url: loc,
+      finalUrl: loc,
+      status: 404,
+      depth: urlPath.split("/").filter(Boolean).length,
+      redirects: [],
+      contentType: "",
+      timingMs: 0,
+      bytes: 0,
+      truncated: false,
+      headers: {},
+      xRobots: [],
+      xRobotsByBot: {},
+      blockedByRobots: false,
+      inSitemap: true,
+      foundOn: "sitemap",
+      error: MISSING_IN_REPO
+    });
+  }
   return {
     runId: "repository",
     startUrl: new URL("/", siteOrigin).toString(),
@@ -37958,6 +38186,12 @@ function staticCrawl(htmlFiles, dirBase, read, scan, files, siteOrigin) {
     stats: { crawled: pages.length, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: 0, avgResponseMs: 0 },
     truncated: false
   };
+}
+var MISSING_IN_REPO = "no file in the repository serves this URL";
+function routeMatches(route, urlPath) {
+  const norm4 = (s) => (s.replace(/\/+$/, "") || "/").toLowerCase();
+  const re = norm4(route).split("/").map((seg) => /^\[\[?\.\.\.[^\]]+\]\]?$/.test(seg) ? ".+" : /^\{[^}]+\}$|^\[[^\]]+\]$|^:[\w]+$/.test(seg) ? "[^/]+" : seg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("/");
+  return new RegExp(`^${re}$`).test(norm4(urlPath));
 }
 function inferSiteOrigin(htmls) {
   const counts = /* @__PURE__ */ new Map();
@@ -37975,6 +38209,15 @@ function inferSiteOrigin(htmls) {
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 }
 var OUTPUT_DIRS = /(^|\/)(dist|build|out|_site|public|node_modules|vendor)\//;
+var NON_SITE_DIRS = /(^|\/)(tests?|__tests__|specs?|e2e|cypress|playwright|fixtures?|__fixtures__|testdata|bench|benchmarks?|examples?|samples?|evals?|snapshots?|__snapshots__|stories|storybook-static|coverage)\//i;
+var TEMPLATE_DIRS = /(^|\/)(templates|layouts|_layouts|_includes|includes|partials)\//i;
+var ADMIN_VIEWS = /(^|\/)resources\/views\/(vendor\/)?filament\//;
+var isHtmlDocument = (src) => /<!doctype\s+html|<html[\s>]/i.test(src);
+function errorPageStatus(urlPath) {
+  if (/(^|\/)(404|_not-found)(\.html?|\/)?$/i.test(urlPath)) return 404;
+  if (/(^|\/)(500|50x)(\.html?|\/)?$/i.test(urlPath)) return 500;
+  return null;
+}
 function scanApp(root2, appRoot, framework, files, read, sink, opts) {
   const scan = {
     appRoot,
@@ -38029,10 +38272,10 @@ function scanApp(root2, appRoot, framework, files, read, sink, opts) {
       break;
     }
     case "laravel": {
-      const layouts = find4(appFiles, /resources\/views\/.*\.blade\.php$/).map((f) => f.rel).filter((f) => /<head\b/i.test(read(f)));
+      const layouts = find4(appFiles, /resources\/views\/.*\.blade\.php$/).map((f) => f.rel).filter((f) => !ADMIN_VIEWS.test(f) && /<head\b/i.test(read(f)));
       scanLayouts(layouts, read, sink, scan, { titleRe: /<title\b/i, langRe: /\blang\s*=/ });
-      const routes = appFiles.find((f) => f.rel === rel(appRoot, "routes/web.php"));
-      if (routes) {
+      const routeFiles = appFiles.filter((f) => f.rel.startsWith(rel(appRoot, "routes") + "/") && /\.php$/.test(f.rel) && !/\/(api|console|channels)\.php$/.test(f.rel));
+      for (const routes of routeFiles) {
         const src = read(routes.rel);
         for (const m of src.matchAll(/Route::(get|view|match|any)\s*\(\s*['"]([^'"]+)['"]/g)) {
           const r = m[2].startsWith("/") ? m[2] : "/" + m[2];
@@ -38073,7 +38316,7 @@ function scanApp(root2, appRoot, framework, files, read, sink, opts) {
   for (const d of ["", "public/", "dist/", "out/", "build/", "_site/", "docs/"].map((x) => appRoot === "." ? x : `${appRoot}/${x}`)) {
     const isOutput = ["dist/", "out/", "build/", "_site/"].some((x) => d.endsWith(x));
     if (SPA || !staticKinds && !isOutput) continue;
-    const html3 = appFiles.filter((f) => f.rel.startsWith(d) && /\.html?$/i.test(f.rel)).filter((f) => d !== (appRoot === "." ? "" : `${appRoot}/`) || !OUTPUT_DIRS.test(f.rel.slice(d.length))).filter((f) => !/(^|\/)(googl[a-z0-9]+|yandex_[a-z0-9]+|BingSiteAuth)\.html$/i.test(f.rel));
+    const html3 = appFiles.filter((f) => f.rel.startsWith(d) && /\.html?$/i.test(f.rel)).filter((f) => d !== (appRoot === "." ? "" : `${appRoot}/`) || !OUTPUT_DIRS.test(f.rel.slice(d.length))).filter((f) => !/(^|\/)(googl[a-z0-9]+|yandex_[a-z0-9]+|BingSiteAuth)\.html$/i.test(f.rel)).filter((f) => !NON_SITE_DIRS.test(f.rel.slice(d.length)) && !TEMPLATE_DIRS.test(f.rel.slice(d.length)) && isHtmlDocument(read(f.rel)));
     if (!html3.length) continue;
     let origin = PLACEHOLDER_ORIGIN;
     scan.originSource = "placeholder";
@@ -38127,6 +38370,7 @@ function scanRepository(root2, sink, opts = {}) {
 }
 
 // src/repo/audit.ts
+var NOTHING_TO_AUDIT = "No website found: the repository has no web framework, HTML pages or server templates that Searvex can audit (tests, fixtures, examples and benchmarks are ignored). Point Searvex at the folder of the site, or at its deployed URL.";
 var NETWORK_ONLY = /* @__PURE__ */ new Set(["perf.slow-ttfb", "perf.no-compression", "https.not-used", "canonical.http-https", "canonical.www-duplicate", "http.server-error", "http.fetch-error", "robots.unreachable", "geo.citations-unmeasured", "perf.cwv-unmeasured"]);
 var emptyContent = { topTerms: [], pageTerms: [], clusters: [], cannibalization: [], nearDuplicates: [], exactDuplicates: [] };
 function auditRepository(root2, opts = {}) {
@@ -38148,6 +38392,8 @@ function auditRepository(root2, opts = {}) {
   let first2 = true;
   for (const app of scan.apps) {
     if (!app.staticSite) continue;
+    const otherRoutes = scan.apps.filter((a) => a !== app).flatMap((a) => a.routes.map((r) => r.route));
+    app.staticSite.pages = app.staticSite.pages.filter((p) => p.error !== MISSING_IN_REPO || !otherRoutes.some((r) => routeMatches(r, new URL(p.url).pathname)));
     const inner = new FindingSink(kb);
     const ctx = buildContext(app.staticSite);
     runTechnicalChecks(ctx, inner);
@@ -38181,6 +38427,8 @@ function auditRepository(root2, opts = {}) {
     if (app.originSource === "inferred") limitations.push(`App "${app.appRoot}": site origin ${app.staticSite.origin} was inferred from canonical/og:url/hreflang URLs; pass --site-url to override.`);
     if (app.originSource === "placeholder") limitations.push(`App "${app.appRoot}": site URL unknown; canonical cross-domain checks were skipped. Pass --site-url for complete results.`);
   }
+  const nothingToAudit = !scan.routes.length && scan.apps.every((a) => a.framework === "unknown" && !a.staticSite) && !findings.some((f) => f.severity !== "info");
+  if (nothingToAudit) limitations.unshift(NOTHING_TO_AUDIT);
   if (scan.skipped.secrets) limitations.push(`${scan.skipped.secrets} secret-bearing file(s) (.env, keys, credentials) were skipped and never read.`);
   if (scan.skipped.symlinks) limitations.push(`${scan.skipped.symlinks} symlink(s) were not followed.`);
   if (scan.skipped.truncated) limitations.push("File limit reached; repository scan is partial.");
@@ -38208,7 +38456,7 @@ function auditRepository(root2, opts = {}) {
     findings,
     geo,
     content,
-    scores: computeScores(findings, Math.max(1, scan.routes.length)),
+    scores: nothingToAudit ? { ...computeScores(findings, 1), notApplicable: NOTHING_TO_AUDIT } : computeScores(findings, Math.max(1, scan.routes.length)),
     measurement: {
       verified: findings.filter((f) => f.confidence === "verified").length,
       heuristic: findings.filter((f) => f.confidence === "heuristic").length,
@@ -38366,9 +38614,10 @@ function planFixes(report, scan, opts = {}) {
       return null;
     }
   };
-  const stage = (ruleId, title, rationale, file2, after2, action = "modify") => {
+  const stage = (ruleId, title, rationale, file2, after0, action = "modify") => {
     const prev2 = pending.get(file2);
     const original0 = prev2 ? prev2.before : action === "create" ? null : original(file2);
+    const after2 = original0 !== null && usesCrlf(original0) ? after0.replace(/\r?\n/g, "\r\n") : after0;
     const stepBefore = prev2 ? prev2.after : original0;
     if (stepBefore === after2) return;
     pending.set(file2, { path: file2, action: original0 === null ? "create" : "modify", before: original0, after: after2 });
@@ -38590,6 +38839,10 @@ Sitemap: ${sitemapUrl}
 Sitemap: ${sitemapUrl}
 `);
 }
+function usesCrlf(text4) {
+  const crlf = (text4.match(/\r\n/g) ?? []).length;
+  return crlf > 0 && crlf >= (text4.match(/\n/g) ?? []).length - crlf;
+}
 function sitemapXml(urls) {
   const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -38609,9 +38862,20 @@ function changesDir(root2) {
 }
 function atomicWrite(file2, content) {
   fs6.mkdirSync(path10.dirname(file2), { recursive: true });
+  const mode = fs6.existsSync(file2) ? fs6.statSync(file2).mode & 4095 : void 0;
   const tmp = `${file2}.searvex-${process.pid}.tmp`;
-  fs6.writeFileSync(tmp, content);
-  fs6.renameSync(tmp, file2);
+  try {
+    fs6.writeFileSync(tmp, content, mode === void 0 ? void 0 : { mode });
+    if (mode !== void 0) fs6.chmodSync(tmp, mode);
+    fs6.renameSync(tmp, file2);
+  } catch (e) {
+    fs6.rmSync(tmp, { force: true });
+    throw e;
+  }
+}
+var hashOf = (abs) => fs6.existsSync(abs) ? sha(fs6.readFileSync(abs, "utf8")) : null;
+function interruptedChanges(root2) {
+  return listChanges(root2).filter((m) => m.status === "applying");
 }
 var ConflictError = class extends Error {
 };
@@ -38633,28 +38897,34 @@ function applyFixes(root2, fixes) {
   }
   fs6.mkdirSync(path10.join(dir, "backup"), { recursive: true });
   ensureSelfIgnored(root2);
-  const manifest = { changeId, createdAt: (/* @__PURE__ */ new Date()).toISOString(), root: root2, fixes: fixes.map((f) => ({ id: f.id, ruleId: f.ruleId, title: f.title })), files: [], status: "applied" };
+  const manifest = { changeId, createdAt: (/* @__PURE__ */ new Date()).toISOString(), root: root2, fixes: fixes.map((f) => ({ id: f.id, ruleId: f.ruleId, title: f.title })), files: [], status: "applying" };
   let n = 0;
+  for (const [p, c] of finalByPath) {
+    let backup = null;
+    if (c.action === "modify") {
+      backup = `backup/${n++}`;
+      fs6.writeFileSync(path10.join(dir, backup), c.before ?? "");
+    }
+    manifest.files.push({ path: p, action: c.action, beforeHash: c.before === null ? null : sha(c.before), afterHash: sha(c.after), backup });
+  }
+  writeManifest(root2, manifest);
   const written = [];
   try {
-    for (const [p, c] of finalByPath) {
-      const abs = resolveInside(root2, p);
-      let backup = null;
-      if (c.action === "modify") {
-        backup = `backup/${n++}`;
-        fs6.writeFileSync(path10.join(dir, backup), c.before ?? "");
-      }
-      atomicWrite(abs, c.after);
-      const entry = { path: p, action: c.action, beforeHash: c.before === null ? null : sha(c.before), afterHash: sha(c.after), backup };
-      written.push(entry);
-      manifest.files.push(entry);
+    for (const e of manifest.files) {
+      atomicWrite(resolveInside(root2, e.path), finalByPath.get(e.path).after);
+      written.push(e);
     }
   } catch (e) {
-    for (const w of written.reverse()) restoreEntry(root2, dir, w);
+    try {
+      for (const w of written.reverse()) restoreEntry(root2, dir, w);
+    } catch (undo) {
+      throw new Error(`Applying ${changeId} failed (${e.message}) and undoing it failed (${undo.message}); run "searvex rollback ${changeId}" to restore the files.`);
+    }
     fs6.rmSync(dir, { recursive: true, force: true });
     throw e;
   }
-  fs6.writeFileSync(path10.join(dir, "manifest.json"), JSON.stringify(manifest, null, 2));
+  manifest.status = "applied";
+  writeManifest(root2, manifest);
   return manifest;
 }
 function restoreEntry(root2, dir, e) {
@@ -38676,14 +38946,16 @@ function rollback(root2, changeId, opts = {}) {
   if (m.status === "rolled-back") throw new Error(`Change ${changeId} was already rolled back`);
   const dir = path10.join(changesDir(root2), changeId);
   const conflicts = [];
+  const pending = [];
   for (const e of m.files) {
-    const abs = resolveInside(root2, e.path);
-    const current = fs6.existsSync(abs) ? sha(fs6.readFileSync(abs, "utf8")) : null;
+    const current = hashOf(resolveInside(root2, e.path));
+    if (current === e.beforeHash) continue;
+    pending.push(e);
     if (current !== e.afterHash) conflicts.push(e.path);
   }
   if (conflicts.length && !opts.force) return { restored: [], conflicts };
   const restored = [];
-  for (const e of [...m.files].reverse()) {
+  for (const e of pending.reverse()) {
     restoreEntry(root2, dir, e);
     restored.push(e.path);
   }
@@ -38758,6 +39030,8 @@ Dry run \u2014 no files changed. Preview diff: ${store2.file("plan.patch")}`);
     console.log("Apply with: searvex optimize <path> --apply [same options]");
     return 0;
   }
+  const interrupted = interruptedChanges(root2);
+  if (interrupted.length) throw new UsageError(`An earlier change was interrupted while applying (${interrupted.map((m) => m.changeId).join(", ")}). Restore it first: searvex rollback ${interrupted[0].changeId} ${target}`);
   if (gitDirty(root2)) console.log("\nNote: the git working tree has uncommitted changes; Searvex keeps its own backups, but committing first is recommended.");
   if (!v["yes"]) {
     if (!process.stdin.isTTY) throw new UsageError("Refusing to apply without confirmation in a non-interactive shell; pass --yes after reviewing the dry run.");
@@ -38776,7 +39050,16 @@ Apply ${plan.fixes.length} fix(es) to ${new Set(plan.fixes.flatMap((f) => f.chan
   }
   console.log(`
 Applied change ${manifest.changeId} (${manifest.files.length} file(s)). Verifying\u2026`);
-  const after2 = auditRepository(root2, { siteUrl, kb });
+  let after2;
+  try {
+    after2 = auditRepository(root2, { siteUrl, kb });
+  } catch (e) {
+    manifest.status = "verification-failed";
+    manifest.verification = { error: e.message };
+    writeManifest(root2, manifest);
+    reportUndo(rollback(root2, manifest.changeId), manifest, target);
+    throw e;
+  }
   const count = (r, id) => r.findings.find((f) => f.ruleId === id)?.count ?? 0;
   const targeted = [...new Set(plan.fixes.map((f) => f.ruleId))];
   const results = targeted.map((id) => ({ ruleId: id, before: count(before2.report, id), after: count(after2.report, id) }));
@@ -38788,9 +39071,9 @@ Applied change ${manifest.changeId} (${manifest.files.length} file(s)). Verifyin
   if (introduced.length || notImproved.length) {
     manifest.status = "verification-failed";
     writeManifest(root2, manifest);
-    const rb = rollback(root2, manifest.changeId, { force: true });
     console.log(`
-Verification failed (${introduced.length ? "new issues: " + introduced.join(", ") : "no improvement for " + notImproved.map((r) => r.ruleId).join(", ")}). Rolled back ${rb.restored.length} file(s).`);
+Verification failed (${introduced.length ? "new issues: " + introduced.join(", ") : "no improvement for " + notImproved.map((r) => r.ruleId).join(", ")}).`);
+    reportUndo(rollback(root2, manifest.changeId), manifest, target);
     return 1;
   }
   manifest.status = "verified";
@@ -38799,6 +39082,10 @@ Verification failed (${introduced.length ? "new issues: " + introduced.join(", "
 Verified. Health score ${before2.report.scores.overall} \u2192 ${after2.report.scores.overall}.`);
   console.log(`Undo with: searvex rollback ${manifest.changeId} ${target}`);
   return 0;
+}
+function reportUndo(rb, m, target) {
+  if (!rb.conflicts.length) return console.log(`Rolled back ${rb.restored.length} file(s).`);
+  console.log(`Not rolled back: ${rb.conflicts.join(", ")} changed again after the fix was applied. Review them, then run: searvex rollback ${m.changeId} ${target} --yes`);
 }
 async function commandRollback(flags) {
   const id = flags.positionals[1];
@@ -38822,11 +39109,11 @@ Re-run with --yes to overwrite those edits with the original content.`);
 import path14 from "node:path";
 
 // src/integrations/gsc.ts
-import http2 from "node:http";
+import http3 from "node:http";
 import https3 from "node:https";
 var API_BASE = () => process.env["SEARVEX_GSC_API_BASE"] ?? "https://www.googleapis.com/webmasters/v3";
 function request(method, url, token, body) {
-  const mod = url.startsWith("https:") ? https3 : http2;
+  const mod = url.startsWith("https:") ? https3 : http3;
   return new Promise((resolve, reject) => {
     const req = mod.request(url, { method, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, timeout: 3e4 }, (r) => {
       const chunks = [];
@@ -38877,17 +39164,22 @@ async function querySearchConsole(q) {
 }
 
 // src/integrations/google-oauth.ts
-import crypto5 from "node:crypto";
+import crypto6 from "node:crypto";
 import fs9 from "node:fs";
-import http3 from "node:http";
+import http4 from "node:http";
 import https4 from "node:https";
 
 // src/integrations/credentials.ts
+import { spawnSync } from "node:child_process";
+import crypto5 from "node:crypto";
 import fs8 from "node:fs";
 import os from "node:os";
 import path12 from "node:path";
 function configDir() {
   if (process.env["SEARVEX_CONFIG_DIR"]) return process.env["SEARVEX_CONFIG_DIR"];
+  return defaultConfigDir();
+}
+function defaultConfigDir() {
   if (process.platform === "win32") return path12.join(process.env["APPDATA"] ?? path12.join(os.homedir(), "AppData", "Roaming"), "searvex");
   return path12.join(process.env["XDG_CONFIG_HOME"] ?? path12.join(os.homedir(), ".config"), "searvex");
 }
@@ -38930,7 +39222,129 @@ var FileCredentialStore = class {
     fs8.renameSync(tmp, this.file);
   }
 };
-var defaultCredentialStore = () => new FileCredentialStore();
+var CredentialStoreError = class extends Error {
+};
+var runTool = (cmd, args, input) => {
+  const r = spawnSync(cmd, args, { input, encoding: "utf8", timeout: 15e3, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+  if (r.error) return { status: null, stdout: "", stderr: r.error.code ?? r.error.message };
+  return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+};
+function keychainKind(platform = process.platform) {
+  if (platform === "darwin") return "macos";
+  if (platform === "win32") return "windows-dpapi";
+  if (platform === "linux" || platform === "freebsd" || platform === "openbsd") return "secret-service";
+  return null;
+}
+function keychainService(dir) {
+  const resolved = path12.resolve(dir);
+  if (resolved === path12.resolve(defaultConfigDir())) return "searvex";
+  return `searvex-${crypto5.createHash("sha256").update(resolved).digest("hex").slice(0, 12)}`;
+}
+var PS_PROTECT = "$ErrorActionPreference='Stop';Add-Type -AssemblyName System.Security;$s=[Console]::In.ReadToEnd();[Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($s),$null,'CurrentUser'))";
+var PS_UNPROTECT = "$ErrorActionPreference='Stop';Add-Type -AssemblyName System.Security;$s=[Console]::In.ReadToEnd().Trim();[Console]::Out.Write([Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($s),$null,'CurrentUser')))";
+var KeychainCredentialStore = class {
+  constructor(kind, run = runTool, dir = configDir()) {
+    this.kind = kind;
+    this.run = run;
+    this.dir = dir;
+    this.legacy = new FileCredentialStore(dir);
+    this.service = keychainService(dir);
+  }
+  kind;
+  run;
+  dir;
+  legacy;
+  service;
+  get(name) {
+    const raw = this.read(checkName(name));
+    if (raw === null) return this.legacy.get(name);
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new CredentialStoreError(`The ${this.label()} entry "${this.service}/${name}" is not a Searvex credential; remove it and authorize again.`);
+    }
+  }
+  set(name, cred) {
+    const json = JSON.stringify(cred);
+    this.write(checkName(name), json);
+    if (this.read(name) !== json) throw new CredentialStoreError(`The ${this.label()} did not store the credential. Unlock it, or use SEARVEX_CREDENTIAL_STORE=file.`);
+    this.legacy.delete(name);
+  }
+  delete(name) {
+    const removed = this.remove(checkName(name));
+    return this.legacy.delete(name) || removed;
+  }
+  describe() {
+    return `${this.label()} (service "${this.service}")`;
+  }
+  label() {
+    return { macos: "macOS Keychain", "secret-service": "Secret Service keyring (libsecret)", "windows-dpapi": "Windows DPAPI (current user)" }[this.kind];
+  }
+  dpapiFile(name) {
+    return path12.join(this.dir, "credentials.dpapi", `${name}.b64`);
+  }
+  fail(action, r) {
+    const tool = { macos: "security", "secret-service": "secret-tool", "windows-dpapi": "powershell.exe" }[this.kind];
+    const why = r.status === null ? `${tool} is not available (${r.stderr})` : `${tool} exited with ${r.status}`;
+    throw new CredentialStoreError(`Cannot ${action} the credential in the ${this.label()}: ${why}. Use SEARVEX_CREDENTIAL_STORE=file to keep it in the config directory instead.`);
+  }
+  read(name) {
+    if (this.kind === "windows-dpapi") {
+      const f = this.dpapiFile(name);
+      if (!fs8.existsSync(f)) return null;
+      const r2 = this.run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", PS_UNPROTECT], fs8.readFileSync(f, "utf8"));
+      if (r2.status !== 0) this.fail("read", r2);
+      return r2.stdout;
+    }
+    const r = this.kind === "macos" ? this.run("security", ["find-generic-password", "-s", this.service, "-a", name, "-w"]) : this.run("secret-tool", ["lookup", "service", this.service, "account", name]);
+    if (r.status === null) this.fail("read", r);
+    if (r.status !== 0) return null;
+    const out = r.stdout.replace(/\n$/, "");
+    if (this.kind === "macos" && /^(?:[0-9a-f]{2})+$/i.test(out) && !out.startsWith("{")) return Buffer.from(out, "hex").toString("utf8");
+    return out || null;
+  }
+  write(name, json) {
+    if (this.kind === "windows-dpapi") {
+      const r2 = this.run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", PS_PROTECT], json);
+      if (r2.status !== 0 || !r2.stdout.trim()) this.fail("store", r2);
+      const f = this.dpapiFile(name);
+      fs8.mkdirSync(path12.dirname(f), { recursive: true, mode: 448 });
+      const tmp = `${f}.${process.pid}.tmp`;
+      fs8.writeFileSync(tmp, r2.stdout.trim(), { mode: 384 });
+      fs8.renameSync(tmp, f);
+      return;
+    }
+    const r = this.kind === "macos" ? this.run("security", ["-i"], `add-generic-password -U -s ${this.service} -a ${name} -l Searvex-${name} -X ${Buffer.from(json, "utf8").toString("hex")}
+`) : this.run("secret-tool", ["store", `--label=Searvex ${name}`, "service", this.service, "account", name], json);
+    if (r.status !== 0) this.fail("store", r);
+  }
+  remove(name) {
+    if (this.kind === "windows-dpapi") {
+      const f = this.dpapiFile(name);
+      if (!fs8.existsSync(f)) return false;
+      fs8.rmSync(f);
+      return true;
+    }
+    if (this.read(name) === null) return false;
+    const r = this.kind === "macos" ? this.run("security", ["delete-generic-password", "-s", this.service, "-a", name]) : this.run("secret-tool", ["clear", "service", this.service, "account", name]);
+    if (r.status !== 0) this.fail("delete", r);
+    return true;
+  }
+};
+function checkName(name) {
+  if (!/^[a-z0-9][a-z0-9-]{0,40}$/.test(name)) throw new CredentialStoreError(`Invalid credential name: ${name}`);
+  return name;
+}
+function defaultCredentialStore() {
+  const choice = (process.env["SEARVEX_CREDENTIAL_STORE"] ?? "file").toLowerCase();
+  if (choice === "file") return new FileCredentialStore();
+  if (choice === "keychain") {
+    const kind = keychainKind();
+    if (!kind) throw new CredentialStoreError(`No OS keychain support on ${process.platform}; use SEARVEX_CREDENTIAL_STORE=file.`);
+    return new KeychainCredentialStore(kind);
+  }
+  throw new CredentialStoreError(`SEARVEX_CREDENTIAL_STORE must be "file" or "keychain" (got "${choice}").`);
+}
 
 // src/integrations/google-oauth.ts
 var GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
@@ -38952,9 +39366,8 @@ function loadClientFile(file2) {
   return { clientId: c.client_id, clientSecret: c.client_secret };
 }
 var store = () => defaultCredentialStore();
-function readCredentials() {
-  const s = store();
-  return s instanceof FileCredentialStore ? s.readAll() : {};
+function getCredential(name) {
+  return store().get(name);
 }
 function saveCredential(name, cred) {
   const s = store();
@@ -38970,12 +39383,12 @@ async function revokeToken(token) {
 }
 var b64url = (b) => b.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 function pkcePair() {
-  const verifier = b64url(crypto5.randomBytes(48));
-  return { verifier, challenge: b64url(crypto5.createHash("sha256").update(verifier).digest()) };
+  const verifier = b64url(crypto6.randomBytes(48));
+  return { verifier, challenge: b64url(crypto6.createHash("sha256").update(verifier).digest()) };
 }
 function postForm(url, form) {
   const body = new URLSearchParams(form).toString();
-  const mod = url.startsWith("https:") ? https4 : http3;
+  const mod = url.startsWith("https:") ? https4 : http4;
   return new Promise((resolve, reject) => {
     const req = mod.request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "content-length": Buffer.byteLength(body) }, timeout: 3e4 }, (res) => {
       const chunks = [];
@@ -38998,8 +39411,8 @@ function postForm(url, form) {
 }
 async function authorize(client, scope, onUrl, timeoutMs = 5 * 60 * 1e3) {
   const { verifier, challenge } = pkcePair();
-  const state = b64url(crypto5.randomBytes(16));
-  const server = http3.createServer();
+  const state = b64url(crypto6.randomBytes(16));
+  const server = http4.createServer();
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const redirectUri = `http://127.0.0.1:${server.address().port}`;
   try {
@@ -39335,16 +39748,165 @@ function importGscFiles(files) {
   }
   return out;
 }
-function pageHosts(exp) {
-  const m = /* @__PURE__ */ new Map();
-  for (const p of exp.tables.pages ?? []) {
+
+// src/integrations/property.ts
+var PropertyError = class extends Error {
+};
+function parseProperty(raw, opts = {}) {
+  const s = raw.trim();
+  const dm = /^sc-domain:(.+)$/i.exec(s);
+  if (dm) {
+    const domain = dm[1].trim().toLowerCase().replace(/\.$/, "");
+    if (!/^[a-z0-9.-]+\.[a-z0-9-]+$/i.test(domain) || domain.includes("..")) throw new PropertyError(`Invalid domain property: ${raw}`);
+    return { kind: "domain", raw: s, domain };
+  }
+  let u;
+  try {
+    u = new URL(s);
+  } catch {
+    throw new PropertyError(`Invalid property "${raw}": use sc-domain:example.com or a URL prefix such as https://example.com/`);
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new PropertyError(`Invalid property protocol: ${raw}`);
+  return { kind: "url-prefix", raw: s, protocol: u.protocol, host: u.host.toLowerCase(), path: u.pathname || "/", anyProtocol: !!opts.anyProtocol };
+}
+function urlInProperty(url, p) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+  if (p.kind === "domain") {
+    const h = u.hostname.toLowerCase();
+    return h === p.domain || h.endsWith(`.${p.domain}`);
+  }
+  if (!p.anyProtocol && u.protocol !== p.protocol) return false;
+  return u.host.toLowerCase() === p.host && u.pathname.startsWith(p.path);
+}
+function describeProperty(p) {
+  return p.kind === "domain" ? `domain property ${p.domain} (all subdomains and protocols)` : `URL-prefix property ${p.anyProtocol ? "" : p.protocol + "//"}${p.host}${p.path}`;
+}
+var MIN_COVERAGE = 0.5;
+function matchAuditToProperty(audit, p) {
+  const urls = (audit.inventory?.pages ?? []).map((x) => x.url);
+  const hosts = /* @__PURE__ */ new Map();
+  for (const url of urls) {
     try {
-      const h = new URL(p.key).host.toLowerCase();
-      m.set(h, (m.get(h) ?? 0) + 1);
+      const h = new URL(url).host.toLowerCase();
+      hosts.set(h, (hosts.get(h) ?? 0) + 1);
     } catch {
     }
   }
+  const primaryHost = [...hosts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? safeHost(audit.crawl?.startUrl ?? audit.target);
+  if (!urls.length) {
+    const start = audit.crawl?.startUrl ?? audit.target;
+    const ok = urlInProperty(start, p);
+    return { coverage: ok ? 1 : 0, pages: 0, primaryHost, matches: ok, reason: ok ? "start URL inside the property (no pages crawled)" : `start URL ${start} is outside the ${describeProperty(p)}` };
+  }
+  const inside = urls.filter((u) => urlInProperty(u, p)).length;
+  const coverage = inside / urls.length;
+  const matches = coverage >= MIN_COVERAGE;
+  return {
+    coverage,
+    pages: urls.length,
+    primaryHost,
+    matches,
+    reason: matches ? `${inside}/${urls.length} crawled pages inside the property` : `only ${inside}/${urls.length} crawled pages (host ${primaryHost}) are inside the ${describeProperty(p)}`
+  };
+}
+function assertAuditInProperty(audit, p, source) {
+  const match = matchAuditToProperty(audit, p);
+  if (!match.matches) throw new PropertyError(`${source} belongs to the ${describeProperty(p)}, but the audit of ${audit.target} does not: ${match.reason}. Search data of another website is never combined with this audit.`);
+  return match;
+}
+function hostsOf(urls) {
+  const m = /* @__PURE__ */ new Map();
+  for (const url of urls) {
+    const h = safeHost(url);
+    if (h) m.set(h, (m.get(h) ?? 0) + 1);
+  }
   return [...m].map(([host, pages]) => ({ host, pages })).sort((a, b) => b.pages - a.pages);
+}
+function propertyForExport(raw, pageUrls) {
+  const urls = pageUrls ?? [];
+  const hosts = hostsOf(urls);
+  if (raw) {
+    const p = parseProperty(raw);
+    if (urls.length) {
+      const outside = urls.filter((u) => !urlInProperty(u, p));
+      if (outside.length === urls.length) throw new PropertyError(`The export's pages (${hosts.slice(0, 3).map((h) => h.host).join(", ")}) do not belong to the ${describeProperty(p)}. Check that you exported the right property.`);
+      if (outside.length) {
+        let hint = "";
+        try {
+          hint = ` It looks like an export of ${propertyForExport(void 0, urls)?.raw ?? "another property"}.`;
+        } catch {
+        }
+        throw new PropertyError(`${outside.length} of ${urls.length} pages in the export are outside the ${describeProperty(p)} (e.g. ${outside[0]}), so it was not exported from that property.${hint}`);
+      }
+    }
+    return p;
+  }
+  if (!hosts.length) return void 0;
+  if (hosts.length === 1) return parseProperty(`https://${hosts[0].host}/`, { anyProtocol: true });
+  const domain = commonDomain(hosts.map((h) => h.host));
+  if (!domain) throw new PropertyError(`The export contains pages from several sites (${hosts.slice(0, 5).map((h) => h.host).join(", ")}): pass --property (e.g. sc-domain:example.com).`);
+  return parseProperty(`sc-domain:${domain}`);
+}
+var REGISTRY_SLD = /* @__PURE__ */ new Set(["ac", "av", "bbs", "bel", "biz", "co", "com", "dr", "edu", "gen", "gov", "info", "k12", "ltd", "mil", "name", "ne", "net", "nom", "or", "org", "plc", "pol", "sch", "tel", "tv", "web"]);
+function commonDomain(hosts) {
+  const split = hosts.map((h) => h.toLowerCase().replace(/:\d+$/, "").replace(/\.$/, "").split(".").reverse());
+  const common = [];
+  for (let i = 0; ; i++) {
+    const label = split[0][i];
+    if (label === void 0 || !split.every((s) => s[i] === label)) break;
+    common.push(label);
+  }
+  if (common.length < 2) return null;
+  const [tld, sld] = common;
+  if (common.length === 2 && tld.length === 2 && REGISTRY_SLD.has(sld)) return null;
+  return common.reverse().join(".");
+}
+function safeHost(url) {
+  try {
+    return new URL(url).host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+function selectAuditForProperty(workspace, ref, p) {
+  if (ref !== "latest") {
+    const audit = new RunStore(workspace, ref).readJson("report.json");
+    if (!audit || audit.mode !== "website") throw new PropertyError(`No website audit report found for --audit ${ref}`);
+    const match = matchAuditToProperty(audit, p);
+    if (!match.matches) throw new PropertyError(`Audit ${ref} (${audit.target}) does not belong to this property: ${match.reason}. Run an audit of this site first or pass the matching run id.`);
+    return { runId: ref, audit, match };
+  }
+  const candidates = [];
+  const others = [];
+  for (const id of RunStore.list(workspace)) {
+    const audit = new RunStore(workspace, id).readJson("report.json");
+    if (audit?.mode !== "website") continue;
+    const match = matchAuditToProperty(audit, p);
+    if (match.matches) candidates.push({ runId: id, audit, match });
+    else others.push(`${id} (${audit.target})`);
+  }
+  if (!candidates.length) {
+    const hint = others.length ? ` Audits in this workspace belong to other sites: ${others.slice(-5).join(", ")}.` : "";
+    throw new PropertyError(`No website audit in ${workspace} matches the ${describeProperty(p)}.${hint} Run "searvex audit <url>" for this site first.`);
+  }
+  const byHost = /* @__PURE__ */ new Map();
+  for (const c of candidates) {
+    const k = c.match.primaryHost ?? "?";
+    (byHost.get(k) ?? byHost.set(k, []).get(k)).push(c);
+  }
+  if (byHost.size === 1) return candidates.at(-1);
+  if (p.kind === "domain") {
+    const apex = [...byHost].filter(([h]) => h === p.domain || h === `www.${p.domain}`);
+    if (apex.length === 1) return apex[0][1].at(-1);
+  }
+  const list = [...byHost].map(([h, xs]) => `${h}: ${xs.at(-1).runId}`).join("; ");
+  throw new PropertyError(`Ambiguous --audit latest: audits of several hosts match the ${describeProperty(p)} (${list}). Pass the run id explicitly.`);
 }
 
 // src/commands/monitor.ts
@@ -39411,49 +39973,807 @@ function findBaseline(workspace, target, exclude) {
   }
   return null;
 }
+function sameSite2(a, b) {
+  if (a === b) return true;
+  try {
+    return new URL(a).host.toLowerCase() === new URL(b).host.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+function propertyOrUsage(fn) {
+  try {
+    return fn();
+  } catch (e) {
+    if (e instanceof PropertyError || e instanceof GscImportError) throw new UsageError(e.message);
+    throw e;
+  }
+}
 async function commandMonitor(flags) {
   const v = flags.values;
   const target = flags.positionals[1];
   if (!target || !/^https?:\/\//i.test(target)) throw new UsageError("monitor requires a URL");
   const kb = loadKnowledge();
   const workspace = path14.resolve(String(v["out"] ?? process.cwd()));
+  const imports = v["import"] ?? [];
+  let exp;
+  let importProperty;
+  if (imports.length) {
+    try {
+      exp = importGscFiles(imports);
+    } catch (e) {
+      if (e instanceof GscImportError) throw new UsageError(e.message);
+      throw e;
+    }
+    importProperty = propertyOrUsage(() => propertyForExport(v["property"], exp.tables.pages?.map((p) => p.key)));
+    if (!importProperty)
+      throw new UsageError(`The export (${exp.files.join(", ")}) has no pages table, so Searvex cannot tell which website it belongs to. Include the pages table (export the ZIP) or pass --property (e.g. sc-domain:example.com) to state the property it was exported from.`);
+  }
+  const explicitSite = v["site-url"];
+  const site = imports.length ? void 0 : explicitSite ?? process.env["SEARVEX_GSC_SITE"];
+  const apiProperty = site ? propertyOrUsage(() => parseProperty(site)) : void 0;
   log(v, `Re-auditing ${target}\u2026`);
   const { report, store: store2 } = await auditWebsite(target, { workspace, kb, crawl: crawlOptionsFrom(v) });
   writeReports(store2, report, kb, ["json", "md", "html"]);
   const explicit = v["baseline"];
   const base = explicit ? { id: explicit, report: new RunStore(workspace, explicit).readJson("report.json") } : findBaseline(workspace, report.target, store2.runId);
   if (explicit && !base?.report) throw new UsageError(`Baseline run ${explicit} has no report.json`);
+  if (explicit && (base.report.mode !== "website" || !sameSite2(base.report.target, report.target)))
+    throw new UsageError(`Baseline run ${explicit} is an audit of ${base.report.target}, not of ${report.target}; runs of different websites cannot be compared.`);
   const diff = diffReports(base?.report ?? null, report, base?.id ?? null);
   let gsc;
-  const token = await gscAccessToken();
-  const site = v["site-url"] ?? process.env["SEARVEX_GSC_SITE"];
-  if (token && site) {
-    log(v, `Querying Search Console for ${site} (read-only)\u2026`);
-    gsc = { rows: await querySearchConsole({ token, siteUrl: site, days: 28, dimensions: ["query"] }), source: `Search Console API, ${site}, last 28 days` };
-  }
-  for (const file2 of v["import"] ?? []) {
-    let exp;
-    try {
-      exp = importGscFiles([file2]);
-    } catch (e) {
-      if (e instanceof GscImportError) throw new UsageError(e.message);
-      throw e;
-    }
-    const table = exp.tables.queries ?? exp.tables.pages;
-    if (table?.length) gsc = { rows: table.map((r) => ({ keys: [r.key], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })), source: `imported ${path14.basename(file2)}` };
+  const notes = [];
+  if (exp && importProperty) {
+    const label = `The export ${exp.files.join(", ")}`;
+    propertyOrUsage(() => (assertAuditInProperty(report, importProperty, label), void 0));
     for (const w of exp.warnings) log(v, `warning: ${w}`);
+    const table = exp.tables.queries ?? exp.tables.pages;
+    const verified = exp.tables.pages?.length ? "property checked against the pages table" : "property as stated with --property (the export has no pages table to check it)";
+    if (table?.length) gsc = { rows: table.map((r) => ({ keys: [r.key], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })), source: `imported ${exp.files.join(", ")}, ${importProperty.raw}; ${verified}` };
+  } else if (site && apiProperty) {
+    const match = matchAuditToProperty(report, apiProperty);
+    if (!match.matches) {
+      if (explicitSite) throw new UsageError(`--site-url ${site} does not cover ${report.target}: ${match.reason}.`);
+      notes.push(`Search performance not measured: SEARVEX_GSC_SITE (${site}) does not cover ${report.target}.`);
+    } else {
+      const token = await gscAccessToken();
+      if (token) {
+        log(v, `Querying Search Console for ${site} (read-only)\u2026`);
+        gsc = { rows: await querySearchConsole({ token, siteUrl: site, days: 28, dimensions: ["query"] }), source: `Search Console API, ${site}, last 28 days` };
+      }
+    }
   }
-  store2.writeJson("monitor.json", { diff, gsc });
+  for (const n of notes) log(v, n);
+  store2.writeJson("monitor.json", { diff, gsc, notes });
   const out = store2.writeText("monitor.md", renderDiffMarkdown(diff, gsc));
   store2.writeText("monitor.html", renderMonitorHtml(diff));
-  if (v["json"]) process.stdout.write(JSON.stringify({ diff, gsc }, null, 2) + "\n");
+  if (v["json"]) process.stdout.write(JSON.stringify({ diff, gsc, notes }, null, 2) + "\n");
   else console.log(renderDiffMarkdown(diff, gsc) + `
 Saved: ${out}`);
   return diff.regression && v["fail-on"] ? 1 : 0;
 }
 
-// src/commands/research.ts
+// src/commands/gsc.ts
+import { spawn } from "node:child_process";
+import path16 from "node:path";
+
+// src/analyze/search-performance.ts
+function rowsToQueryPage(rows) {
+  return rows.filter((r) => r.keys.length >= 2).map((r) => ({ query: r.keys[0], page: r.keys[1], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
+}
+function median(xs) {
+  if (!xs.length) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+var r4 = (x) => Math.round(x * 1e4) / 1e4;
+var r1 = (x) => Math.round(x * 10) / 10;
+var LOW_SEARCH_VALUE = /* @__PURE__ */ new Set(["legal", "contact", "careers", "tag-archive", "author", "search"]);
+function pathOf(url) {
+  try {
+    return new URL(url).pathname.replace(/\/+$/, "") || "/";
+  } catch {
+    return null;
+  }
+}
+function hierarchical(pages) {
+  const paths = pages.map(pathOf).filter((p) => !!p);
+  for (const a of paths) for (const b of paths) if (a !== b && (a === "/" || b.startsWith(`${a}/`))) return true;
+  return false;
+}
+function analyzeSearchPerformance(input, opts) {
+  const inp = Array.isArray(input) ? { queryPage: input } : input;
+  const minImp = opts.minImpressions ?? 50;
+  const notes = [];
+  const notMeasured = [];
+  const joined = !!inp.queryPage;
+  const qp = inp.queryPage ?? [];
+  const sumOf = (xs, k) => xs.reduce((a, x) => a + x[k], 0);
+  const wPos = (xs) => {
+    const imp = xs.reduce((a, x) => a + x.impressions, 0);
+    return imp ? xs.reduce((a, x) => a + x.position * x.impressions, 0) / imp : 0;
+  };
+  const group = (xs, key) => {
+    const m = /* @__PURE__ */ new Map();
+    for (const x of xs) (m.get(key(x)) ?? m.set(key(x), []).get(key(x))).push(x);
+    return m;
+  };
+  let queryAgg;
+  let pageAgg;
+  let rows;
+  if (joined) {
+    queryAgg = [...group(qp, (d) => d.query)].map(([query, xs]) => ({ query, clicks: sumOf(xs, "clicks"), impressions: sumOf(xs, "impressions"), position: wPos(xs), pages: xs.length }));
+    pageAgg = [...group(qp, (d) => d.page)].map(([page, xs]) => {
+      const primary = [...xs].sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions)[0];
+      return { page, clicks: sumOf(xs, "clicks"), impressions: sumOf(xs, "impressions"), position: wPos(xs), queries: xs.length, primaryQuery: primary.query };
+    });
+    rows = qp;
+  } else {
+    queryAgg = (inp.queries ?? []).map((q) => ({ query: q.key, clicks: q.clicks, impressions: q.impressions, position: q.position, pages: null }));
+    pageAgg = (inp.pages ?? []).map((p) => ({ page: p.key, clicks: p.clicks, impressions: p.impressions, position: p.position, queries: null, primaryQuery: null }));
+    rows = queryAgg.map((q) => ({ query: q.query, page: null, clicks: q.clicks, impressions: q.impressions, ctr: q.impressions ? q.clicks / q.impressions : 0, position: q.position }));
+    notMeasured.push("Query \u2192 page mapping, queries shared by several pages and intent mismatches: the Search Console CSV export has no query \xD7 page combination (connect the API for these).");
+    if (!inp.queries?.length) notMeasured.push("Query analysis (top queries, striking distance, low CTR, intent mix): no queries table in the import.");
+    if (!inp.pages?.length) notMeasured.push("Page analysis (top pages, findings on traffic pages, pages without impressions): no pages table in the import.");
+  }
+  let totalClicks;
+  let totalImpr;
+  let basis;
+  if (inp.dates?.length) {
+    totalClicks = sumOf(inp.dates, "clicks");
+    totalImpr = sumOf(inp.dates, "impressions");
+    basis = "daily property totals";
+  } else if (joined) {
+    totalClicks = sumOf(qp, "clicks");
+    totalImpr = sumOf(qp, "impressions");
+    basis = "sum of query \xD7 page rows (anonymised queries excluded)";
+  } else if (pageAgg.length) {
+    totalClicks = sumOf(pageAgg, "clicks");
+    totalImpr = sumOf(pageAgg, "impressions");
+    basis = "sum of the pages table";
+  } else {
+    totalClicks = sumOf(queryAgg, "clicks");
+    totalImpr = sumOf(queryAgg, "impressions");
+    basis = "sum of the queries table (anonymised queries excluded)";
+  }
+  const topQueries = queryAgg.map((q) => ({ query: q.query, clicks: q.clicks, impressions: q.impressions, ctr: r4(q.clicks / Math.max(1, q.impressions)), position: r1(q.position), pages: q.pages })).sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
+  const topPages = pageAgg.map((p) => ({ page: p.page, clicks: p.clicks, impressions: p.impressions, ctr: r4(p.clicks / Math.max(1, p.impressions)), position: r1(p.position), queries: p.queries, primaryQuery: p.primaryQuery })).sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
+  const hasPositions = rows.some((d) => d.position > 0);
+  const strikingDistance = rows.filter((d) => d.position >= 8 && d.position <= 20 && d.impressions >= minImp).sort((a, b) => b.impressions - a.impressions).slice(0, 100).map((d) => ({ query: d.query, page: d.page, position: r1(d.position), impressions: d.impressions, clicks: d.clicks }));
+  const ctrByPos = /* @__PURE__ */ new Map();
+  for (const d of rows) if (d.impressions >= minImp && d.position > 0 && d.position <= 10) (ctrByPos.get(Math.round(d.position)) ?? ctrByPos.set(Math.round(d.position), []).get(Math.round(d.position))).push(d.ctr);
+  const lowCtr = rows.filter((d) => d.impressions >= minImp && d.position > 0 && d.position <= 10).map((d) => ({ d, med: median(ctrByPos.get(Math.round(d.position)) ?? []), n: (ctrByPos.get(Math.round(d.position)) ?? []).length })).filter((x) => x.n >= 5 && x.med > 0 && x.d.ctr < x.med * 0.5).sort((a, b) => b.d.impressions - a.d.impressions).slice(0, 100).map((x) => ({ query: x.d.query, page: x.d.page, position: r1(x.d.position), impressions: x.d.impressions, ctr: r4(x.d.ctr), siteMedianCtr: r4(x.med) }));
+  if (rows.length && !hasPositions) notMeasured.push("Striking distance and low CTR: the data has no positions.");
+  else if (rows.length && ![...ctrByPos.values()].some((v) => v.length >= 5)) notes.push("Not enough rows per position to compare CTR against the property's own median.");
+  const propertyLabel = opts.property?.raw ?? opts.source.split(" ").at(-1) ?? "";
+  const brands = opts.brands ?? brandTermsFrom(propertyLabel);
+  const qIntent = new Map(queryAgg.map((q) => [q.query, classifyQueryIntent(q.query, brands)]));
+  for (const q of topQueries) q.intent = qIntent.get(q.query)?.intent;
+  const mix = /* @__PURE__ */ new Map();
+  for (const q of topQueries) {
+    const k = q.intent ?? "unclassified";
+    const m = mix.get(k) ?? { queries: 0, clicks: 0, impressions: 0 };
+    m.queries++;
+    m.clicks += q.clicks;
+    m.impressions += q.impressions;
+    mix.set(k, m);
+  }
+  const intentMix = [...mix].map(([intent, m]) => ({ intent, ...m, ctr: r4(m.clicks / Math.max(1, m.impressions)) })).sort((a, b) => b.impressions - a.impressions);
+  const invByUrl = new Map((opts.audit?.inventory.pages ?? []).map((p) => [normalizeUrl(p.url) ?? p.url, p]));
+  const multiPageQueries = [];
+  if (joined) {
+    for (const [query, xs] of group(qp, (d) => d.query)) {
+      const impressions = sumOf(xs, "impressions");
+      if (impressions < minImp) continue;
+      const sharing = xs.filter((x) => x.impressions >= impressions * 0.1).sort((a, b) => b.impressions - a.impressions);
+      if (sharing.length < 2) continue;
+      const pages = sharing.map((x) => ({ page: x.page, impressions: x.impressions, clicks: x.clicks, position: r1(x.position) }));
+      const lead = sharing[0];
+      const intents = new Set(sharing.map((x) => invByUrl.get(normalizeUrl(x.page) ?? x.page)?.intent).filter(Boolean));
+      let pattern;
+      let reason;
+      if (qIntent.get(query)?.intent === "navigational") {
+        pattern = "navigational";
+        reason = "Brand or navigational query: several pages of the same site (often sitelinks) are expected.";
+      } else if (hierarchical(sharing.map((x) => x.page))) {
+        pattern = "hierarchy";
+        reason = "The pages are parent and child (or the homepage); showing both is usually expected.";
+      } else if (lead.position <= 3 && lead.impressions >= impressions * 0.6) {
+        pattern = "dominant";
+        reason = `One page clearly leads (position ${r1(lead.position)}, ${Math.round(lead.impressions / impressions * 100)}% of impressions); the others are secondary listings.`;
+      } else if (intents.size >= 2) {
+        pattern = "mixed-intent";
+        reason = `Pages built for different intents (${[...intents].join(", ")}) share the query; decide which one should serve it.`;
+      } else {
+        pattern = "possible-competition";
+        reason = "Comparable pages split impressions without a clear leader. Possible cannibalisation: confirm over time (alternating rankings) before merging or retargeting.";
+      }
+      multiPageQueries.push({ query, impressions, pattern, needsReview: pattern === "mixed-intent" || pattern === "possible-competition", reason, pages });
+    }
+    multiPageQueries.sort((a, b) => Number(b.needsReview) - Number(a.needsReview) || b.impressions - a.impressions);
+    notes.push("Several pages receiving impressions for one query is common; only entries marked for review are cannibalisation candidates, and one aggregated period cannot prove harm.");
+  }
+  let noImpressions = [];
+  const intentMismatches = [];
+  const findingsOnTrafficPages = [];
+  if (opts.audit && pageAgg.length) {
+    const inScope2 = (url) => !opts.property || urlInProperty(url, opts.property);
+    const seen = new Set(pageAgg.map((p) => normalizeUrl(p.page) ?? p.page));
+    const truncatedPages = !joined && pageAgg.length >= 1e3;
+    if (truncatedPages) notMeasured.push("Pages without impressions: the pages table is truncated at the export limit, so missing pages may still have impressions.");
+    else
+      noImpressions = opts.audit.inventory.pages.filter((p) => p.indexable && inScope2(p.url) && !seen.has(normalizeUrl(p.url) ?? p.url)).sort((a, b) => Number(LOW_SEARCH_VALUE.has(a.type)) - Number(LOW_SEARCH_VALUE.has(b.type))).map((p) => p.url);
+    const pageStats = new Map(topPages.map((p) => [normalizeUrl(p.page) ?? p.page, p]));
+    for (const f of opts.audit.findings) {
+      if (f.severity === "info") continue;
+      const hit = f.evidence.map((e) => e.url ? pageStats.get(normalizeUrl(e.url) ?? e.url) : void 0).filter((x) => !!x);
+      if (!hit.length) continue;
+      findingsOnTrafficPages.push({ ruleId: f.ruleId, title: f.title, severity: f.severity, pages: hit.length, clicks: hit.reduce((a, p) => a + p.clicks, 0), impressions: hit.reduce((a, p) => a + p.impressions, 0) });
+    }
+    findingsOnTrafficPages.sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
+    notes.push("Findings-on-traffic uses the evidence URLs recorded in the audit (up to 50 per rule).");
+  } else if (!opts.audit) notMeasured.push("Findings on traffic pages and pages without impressions: no audit joined (use --audit latest).");
+  if (opts.audit && joined) {
+    for (const d of qp) {
+      const qi = qIntent.get(d.query);
+      const page = invByUrl.get(normalizeUrl(d.page) ?? d.page);
+      if (!qi || !page?.intent || d.impressions < minImp || !intentConflict(qi.intent, page.intent)) continue;
+      intentMismatches.push({ query: d.query, queryIntent: qi.intent, signals: qi.signals, page: d.page, pageType: page.type, pageIntent: page.intent, impressions: d.impressions, clicks: d.clicks, position: r1(d.position) });
+    }
+    intentMismatches.sort((a, b) => b.impressions - a.impressions);
+  }
+  if (opts.audit && opts.property?.kind === "domain") notes.push("Domain property: the data covers every subdomain, the audit only the crawled site; pages on other subdomains are not joined.");
+  notes.push("Query and page intents are inferred from wording and page type (heuristic); clicks, impressions and positions are verified data.");
+  notes.push("Search Console anonymises rare queries; query-level totals are lower than property totals.");
+  return {
+    source: opts.source,
+    property: opts.property?.raw,
+    period: { days: opts.days, ...opts.period ?? {} },
+    granularity: joined ? "query-page" : "separate",
+    totals: { clicks: totalClicks, impressions: totalImpr, ctr: r4(totalClicks / Math.max(1, totalImpr)), queries: queryAgg.length, pages: pageAgg.length, basis },
+    topQueries: topQueries.slice(0, 100),
+    topPages: topPages.slice(0, 100),
+    strikingDistance,
+    lowCtr,
+    multiPageQueries: multiPageQueries.slice(0, 100),
+    intentMix,
+    intentMismatches: intentMismatches.slice(0, 100),
+    noImpressions: noImpressions.slice(0, 500),
+    findingsOnTrafficPages: findingsOnTrafficPages.slice(0, 50),
+    breakdowns: { countries: (inp.countries ?? []).slice(0, 25), devices: inp.devices ?? [] },
+    notMeasured,
+    notes
+  };
+}
+
+// src/integrations/preferences.ts
+import fs11 from "node:fs";
 import path15 from "node:path";
+var file = () => path15.join(configDir(), "search-data.json");
+function siteKey(urlOrHost) {
+  let h = urlOrHost.trim().toLowerCase();
+  try {
+    h = new URL(/^[a-z]+:\/\//.test(h) ? h : `https://${h}`).hostname;
+  } catch {
+  }
+  return h.replace(/^www\./, "");
+}
+function readAll() {
+  try {
+    return JSON.parse(fs11.readFileSync(file(), "utf8"));
+  } catch {
+    return {};
+  }
+}
+function getSitePreference(site) {
+  return readAll()[siteKey(site)] ?? null;
+}
+function setSitePreference(site, pref) {
+  const all2 = readAll();
+  const value = { ...pref, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
+  all2[siteKey(site)] = value;
+  fs11.mkdirSync(configDir(), { recursive: true, mode: 448 });
+  fs11.writeFileSync(file(), JSON.stringify(all2, null, 2), { mode: 384 });
+  return value;
+}
+
+// src/commands/gsc.ts
+var pct = (x) => `${(x * 100).toFixed(1)}%`;
+var dash = (x) => x === null || x === void 0 ? "\u2014" : String(x);
+var PATTERN_LABEL = {
+  navigational: "expected (brand/navigational)",
+  hierarchy: "expected (parent/child pages)",
+  dominant: "one page leads",
+  "mixed-intent": "**review: mixed intent**",
+  "possible-competition": "**review: possible cannibalisation**"
+};
+function renderSearchPerformanceMarkdown(r) {
+  const L = [`# Search performance \u2014 ${md(r.source)}`, ""];
+  const period = r.period.startDate ? `${r.period.startDate} \u2192 ${r.period.endDate} (${r.period.days} days)` : `Last ${r.period.days} days`;
+  L.push(`${period} \xB7 clicks **${r.totals.clicks}** \xB7 impressions **${r.totals.impressions}** \xB7 CTR ${pct(r.totals.ctr)} \xB7 ${r.totals.queries} queries \xB7 ${r.totals.pages} pages`, "");
+  L.push(`_Verified data for ${r.property ? md(r.property) : "this property"} (totals: ${r.totals.basis}). Searvex adds no estimates._`, "");
+  if (r.audit) L.push(`Joined audit \`${r.audit.runId}\` (${md(r.audit.target)}): ${Math.round(r.audit.coverage * 100)}% of its ${r.audit.pages} crawled pages are inside the property.`, "");
+  if (r.granularity === "separate") L.push("> Imported from a Search Console CSV export: queries and pages are separate tables, so query \u2192 page analysis is not available. Connect the API for the full analysis.", "");
+  const table = (head, rows) => {
+    L.push(`| ${head.join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((x) => `| ${x.join(" | ")} |`), "");
+  };
+  if (r.findingsOnTrafficPages.length) {
+    L.push("## Audit issues on pages that get search traffic", "");
+    table(["Issue", "Severity", "Pages", "Clicks", "Impressions"], r.findingsOnTrafficPages.slice(0, 15).map((f) => [`${md(f.title)} \`${f.ruleId}\``, f.severity, String(f.pages), String(f.clicks), String(f.impressions)]));
+  }
+  L.push("## Striking distance (positions 8\u201320 with real impressions)", "");
+  if (r.strikingDistance.length) table(["Query", "Page", "Position", "Impressions", "Clicks"], r.strikingDistance.slice(0, 20).map((x) => [md(x.query), x.page ? md(x.page) : "\u2014", String(x.position), String(x.impressions), String(x.clicks)]));
+  else L.push("_None above the impression threshold._", "");
+  L.push("## Low CTR versus this site's own median at the same position", "");
+  if (r.lowCtr.length) table(["Query", "Page", "Position", "Impressions", "CTR", "Site median"], r.lowCtr.slice(0, 20).map((x) => [md(x.query), x.page ? md(x.page) : "\u2014", String(x.position), String(x.impressions), pct(x.ctr), pct(x.siteMedianCtr)]));
+  else L.push("_None found (or not enough data per position)._", "");
+  if (r.intentMix.length) {
+    L.push("## Search intent mix (intent inferred from query wording)", "");
+    table(["Intent", "Queries", "Clicks", "Impressions", "CTR"], r.intentMix.map((m) => [m.intent, String(m.queries), String(m.clicks), String(m.impressions), pct(m.ctr)]));
+  }
+  if (r.intentMismatches.length) {
+    L.push("## Intent mismatches (query intent vs. type of the ranking page; inferred)", "");
+    table(["Query", "Query intent", "Page", "Page type", "Impressions", "Position"], r.intentMismatches.slice(0, 20).map((x) => [md(x.query), `${x.queryIntent} (${x.signals.slice(0, 2).map(md).join(", ")})`, md(x.page), x.pageType, String(x.impressions), String(x.position)]));
+  }
+  if (r.granularity === "query-page") {
+    L.push("## Queries shared by several pages", "");
+    L.push('_Several pages receiving impressions for one query is common and not harmful by itself. Only rows marked "review" are cannibalisation candidates; confirm them over time before merging or retargeting pages._', "");
+    if (r.multiPageQueries.length) for (const q of r.multiPageQueries.slice(0, 15)) L.push(`- **${md(q.query)}** (${q.impressions} impressions) \u2014 ${PATTERN_LABEL[q.pattern]}: ${q.pages.map((p) => `${md(p.page)} \u2014 ${p.impressions} imp, pos ${p.position}`).join("; ")}. ${md(q.reason)}`);
+    else L.push("_None._");
+    L.push("");
+  }
+  if (r.topPages.length) {
+    L.push(r.granularity === "query-page" ? "## Page \u2192 primary query" : "## Top pages", "");
+    table(["Page", "Clicks", "Impressions", "Position", "Primary query", "Queries"], r.topPages.slice(0, 25).map((p) => [md(p.page), String(p.clicks), String(p.impressions), String(p.position), p.primaryQuery ? md(p.primaryQuery) : "\u2014", dash(p.queries)]));
+  }
+  if (r.topQueries.length) {
+    L.push("## Top queries", "");
+    table(["Query", "Clicks", "Impressions", "CTR", "Position", "Pages", "Intent (inferred)"], r.topQueries.slice(0, 25).map((q) => [md(q.query), String(q.clicks), String(q.impressions), pct(q.ctr), String(q.position), dash(q.pages), q.intent ?? "\u2014"]));
+  }
+  if (r.breakdowns.devices.length) {
+    L.push("## Devices", "");
+    table(["Device", "Clicks", "Impressions", "CTR", "Position"], r.breakdowns.devices.map((d) => [md(d.key), String(d.clicks), String(d.impressions), pct(d.ctr), String(Math.round(d.position * 10) / 10)]));
+  }
+  if (r.breakdowns.countries.length) {
+    L.push("## Countries", "");
+    table(["Country", "Clicks", "Impressions", "CTR", "Position"], r.breakdowns.countries.slice(0, 10).map((d) => [md(d.key), String(d.clicks), String(d.impressions), pct(d.ctr), String(Math.round(d.position * 10) / 10)]));
+  }
+  if (r.noImpressions.length) L.push(`## Indexable pages without impressions (${r.noImpressions.length})`, "", ...r.noImpressions.slice(0, 30).map((u) => `- ${md(u)}`), "");
+  if (r.notMeasured.length) L.push("## Not measured", "", ...r.notMeasured.map((n) => `- ${md(n)}`), "");
+  L.push("## Notes", "", ...r.notes.map((n) => `- ${md(n)}`), "");
+  return L.join("\n");
+}
+function propertyOrUsage2(raw, opts) {
+  try {
+    return parseProperty(raw, opts);
+  } catch (e) {
+    throw new UsageError(e.message);
+  }
+}
+function resolveAudit(flags, workspace, property) {
+  const ref = flags.values["audit"];
+  if (!ref) return void 0;
+  try {
+    const sel = selectAuditForProperty(workspace, ref, property);
+    log(flags.values, `Joining audit ${sel.runId} (${sel.audit.target}): ${sel.match.reason}`);
+    return sel;
+  } catch (e) {
+    if (e instanceof PropertyError) throw new UsageError(e.message);
+    throw e;
+  }
+}
+function attachAudit(report, sel) {
+  if (sel) report.audit = { runId: sel.runId, target: sel.audit.target, coverage: Math.round(sel.match.coverage * 1e3) / 1e3, pages: sel.match.pages };
+}
+function saveReport(flags, workspace, kind, meta, report) {
+  const v = flags.values;
+  const store2 = new RunStore(workspace, RunStore.newRunId(kind));
+  store2.writeJson("meta.json", { kind, ...meta, audit: report.audit?.runId, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
+  store2.writeJson("search-performance.json", report);
+  const out = store2.writeText("search-performance.md", renderSearchPerformanceMarkdown(report));
+  if (v["json"]) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+  else if (!v["quiet"]) console.log(renderSearchPerformanceMarkdown(report) + `
+Saved: ${out}`);
+}
+function newestWebsiteAudit(workspace) {
+  for (const id of RunStore.list(workspace).reverse()) {
+    const a = new RunStore(workspace, id).readJson("report.json");
+    if (a?.mode === "website") return a;
+  }
+  return null;
+}
+async function verifyProperty(token, raw, workspace) {
+  const sites = (await listSites(token)).filter((s) => s.permissionLevel !== "siteUnverifiedUser");
+  const names = sites.map((s) => s.siteUrl);
+  if (raw) {
+    if (names.includes(raw)) return raw;
+    const p = propertyOrUsage2(raw);
+    const similar = names.filter((n) => {
+      try {
+        const q = parseProperty(n);
+        return p.kind === "domain" ? q.kind === "domain" && q.domain === p.domain : urlInProperty(`${p.protocol}//${p.host}${p.path}`, q);
+      } catch {
+        return false;
+      }
+    });
+    throw new UsageError(`Property ${raw} is not in your Search Console account (or you have no read access).${similar.length ? ` Did you mean: ${similar.join(", ")}?` : names.length ? ` Available: ${names.join(", ")}` : " No properties are available to this Google account."}`);
+  }
+  const audit = newestWebsiteAudit(workspace);
+  if (!audit) throw new UsageError(`Pass a property. Available: ${names.join(", ") || "(none)"}`);
+  const start = audit.crawl?.startUrl ?? audit.target;
+  const matches = names.filter((n) => {
+    try {
+      return urlInProperty(start, parseProperty(n));
+    } catch {
+      return false;
+    }
+  });
+  if (matches.length === 1) return matches[0];
+  throw new UsageError(matches.length ? `Several properties cover ${start}: ${matches.join(", ")}. Pass one explicitly.` : `No accessible property covers ${start}. Available: ${names.join(", ") || "(none)"}`);
+}
+function openBrowser(url, platform = process.platform, run = spawnDetached) {
+  if (!/^https:\/\/[^\s"'<>]+$/.test(url)) return false;
+  const [cmd, args] = platform === "darwin" ? ["open", [url]] : platform === "win32" ? ["rundll32", ["url.dll,FileProtocolHandler", url]] : ["xdg-open", [url]];
+  return run(cmd, args);
+}
+function spawnDetached(cmd, args) {
+  try {
+    const child = spawn(cmd, args, { stdio: "ignore", detached: true, windowsHide: true });
+    child.on("error", () => {
+    });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function commandGsc(flags) {
+  const v = flags.values;
+  const sub = flags.positionals[1];
+  const workspace = path16.resolve(String(v["out"] ?? process.cwd()));
+  if (sub === "auth") {
+    if (process.env["CI"]) throw new UsageError('gsc auth is interactive (browser consent) and is disabled in CI. Use "gsc import <export.zip>" or SEARVEX_GSC_TOKEN there.');
+    const existing = getCredential("gsc");
+    if (existing && !v["force"]) {
+      try {
+        await accessToken(existing);
+        console.log(`Already authorized (scope: ${existing.scope}, since ${existing.createdAt}). Use --force to authorize again, or "gsc logout" to remove it.`);
+        return 0;
+      } catch {
+        log(v, "Stored authorization is no longer valid; starting a new authorization.");
+      }
+    }
+    const clientFile = v["client"];
+    if (!clientFile) throw new UsageError('gsc auth requires --client <client_secret.json> (a "Desktop app" OAuth client you create in Google Cloud Console). No Google account access? Use "searvex gsc import <export.zip>" instead.');
+    let client;
+    try {
+      client = loadClientFile(clientFile);
+    } catch (e) {
+      if (e instanceof OAuthClientFileError) throw new UsageError(e.message);
+      throw e;
+    }
+    const cred = await authorize(client, GSC_SCOPE, (url) => {
+      const opened = !v["no-browser"] && process.stdout.isTTY && openBrowser(url);
+      console.log(opened ? "\nOpened your browser. If it did not open, visit this URL and approve read-only Search Console access:\n" : "\nOpen this URL in your browser and approve read-only Search Console access:\n");
+      console.log(url + "\n");
+      console.log("Waiting for Google to redirect back to http://127.0.0.1 \u2026 (Ctrl+C to cancel; times out after 5 minutes)");
+    });
+    saveCredential("gsc", cred);
+    console.log(`Authorized (scope: ${cred.scope}). Refresh token stored in ${defaultCredentialStore().describe()}.`);
+    return 0;
+  }
+  if (sub === "status") {
+    const cred = getCredential("gsc");
+    const envToken = !!process.env["SEARVEX_GSC_TOKEN"];
+    const status = { credential: cred ? "stored" : "none", envToken, store: defaultCredentialStore().describe() };
+    if (cred) {
+      status["scope"] = cred.scope;
+      status["since"] = cred.createdAt;
+      try {
+        await accessToken(cred);
+        status["valid"] = true;
+      } catch (e) {
+        status["valid"] = false;
+        status["error"] = e.message;
+      }
+    }
+    if (v["json"]) process.stdout.write(JSON.stringify(status, null, 2) + "\n");
+    else for (const [k, x] of Object.entries(status)) console.log(`${k}: ${String(x)}`);
+    return envToken || status["valid"] === true ? 0 : 1;
+  }
+  if (sub === "logout") {
+    const cred = getCredential("gsc");
+    if (!cred) {
+      console.log("No stored Search Console credential.");
+      return 0;
+    }
+    let revoked = false;
+    try {
+      revoked = await revokeToken(cred.refreshToken);
+    } catch (e) {
+      log(v, `Could not reach Google to revoke the token (${e.message}); removing it locally.`);
+    }
+    deleteCredential("gsc");
+    console.log(revoked ? "Revoked the authorization at Google and removed the stored credential." : 'Removed the stored credential. Google did not confirm revocation; you can remove "Searvex" access in your Google Account \u2192 Security \u2192 Third-party connections.');
+    return 0;
+  }
+  if (sub === "import") {
+    const files = flags.positionals.slice(2);
+    if (!files.length) throw new UsageError("gsc import requires the Search Console export (ZIP or CSV files): Performance \u2192 Export \u2192 Download CSV");
+    let exp;
+    try {
+      exp = importGscFiles(files);
+    } catch (e) {
+      if (e instanceof GscImportError) throw new UsageError(e.message);
+      throw e;
+    }
+    for (const w of exp.warnings) log(v, `warning: ${w}`);
+    const property = resolveImportProperty(v["property"], exp);
+    const sel = property ? resolveAudit(flags, workspace, property) : void 0;
+    if (!property && v["audit"]) throw new UsageError("Pass --property (e.g. sc-domain:example.com) to join an audit: the export has no pages table to infer the site from.");
+    const days = exp.period.days ?? num(v["days"], 0, 0, 1e4);
+    const report = analyzeSearchPerformance(
+      { queries: exp.tables.queries, pages: exp.tables.pages, dates: exp.tables.dates, countries: exp.tables.countries, devices: exp.tables.devices },
+      { days, source: `Search Console CSV export ${exp.files.join(", ")}`, audit: sel?.audit, property, period: exp.period.startDate ? { startDate: exp.period.startDate, endDate: exp.period.endDate } : void 0 }
+    );
+    attachAudit(report, sel);
+    report.notes.unshift(...exp.warnings);
+    if (exp.searchType) report.notes.push(`Search type: ${exp.searchType}.`);
+    if (exp.dateLabel) report.notes.push(`Date range in the export: ${exp.dateLabel}.`);
+    if (!exp.period.days) report.notMeasured.push("Exact period: the export has no dates table.");
+    saveReport(flags, workspace, "gsc-import", { target: property?.raw ?? null, files: exp.files, period: exp.period }, report);
+    if (property) setSitePreference(property.kind === "domain" ? property.domain : property.host, { choice: "csv", property: property.raw });
+    return 0;
+  }
+  const token = await gscAccessToken();
+  if (!token) throw new UsageError('No Search Console credential: run "searvex gsc auth --client client_secret.json", set SEARVEX_GSC_TOKEN, or import a CSV export with "searvex gsc import <file>"');
+  if (sub === "sites") {
+    const sites = await listSites(token);
+    if (v["json"]) process.stdout.write(JSON.stringify(sites, null, 2) + "\n");
+    else for (const s of sites) console.log(`${s.siteUrl}  (${s.permissionLevel})`);
+    return 0;
+  }
+  if (sub === "report") {
+    const siteUrl = await verifyProperty(token, flags.positionals[2], workspace);
+    const property = propertyOrUsage2(siteUrl);
+    const days = num(v["days"], 28, 1, 480);
+    const sel = resolveAudit(flags, workspace, property);
+    const rows = await querySearchConsole({ token, siteUrl, days, dimensions: ["query", "page"], maxRows: num(v["max-rows"], 25e3, 1, 1e5) });
+    const daily = await querySearchConsole({ token, siteUrl, days, dimensions: ["date"], maxRows: 1e3 });
+    const dates = daily.map((r) => ({ key: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
+    const report = analyzeSearchPerformance({ queryPage: rowsToQueryPage(rows), dates }, { days, source: `Search Console ${siteUrl}`, audit: sel?.audit, property });
+    attachAudit(report, sel);
+    saveReport(flags, workspace, "gsc", { target: siteUrl, days }, report);
+    setSitePreference(property.kind === "domain" ? property.domain : property.host, { choice: "google", property: siteUrl });
+    return 0;
+  }
+  throw new UsageError("gsc subcommands: auth --client <file> [--force] | status | sites | report [property] [--days 28] [--audit latest|<runId>] | import <export.zip|*.csv> [--property P] [--audit latest] | logout");
+}
+function resolveImportProperty(raw, exp) {
+  try {
+    return propertyForExport(raw, exp.tables.pages?.map((p) => p.key));
+  } catch (e) {
+    if (e instanceof PropertyError) throw new UsageError(e.message);
+    throw e;
+  }
+}
+function bingKey() {
+  const env = process.env["SEARVEX_BING_API_KEY"];
+  if (env) return { key: env, source: "SEARVEX_BING_API_KEY" };
+  const stored = getCredential("bing");
+  return stored?.refreshToken ? { key: stored.refreshToken, source: defaultCredentialStore().describe() } : null;
+}
+async function readSecret(prompt, input = process.stdin, output = process.stderr) {
+  if (!input.isTTY) {
+    const chunks = [];
+    for await (const c of input) chunks.push(Buffer.from(c));
+    return Buffer.concat(chunks).toString("utf8").trim();
+  }
+  output.write(prompt);
+  input.setRawMode(true);
+  input.resume();
+  return new Promise((resolve, reject) => {
+    let value = "";
+    const done = (fn) => {
+      input.setRawMode(false);
+      input.pause();
+      input.removeListener("data", onData);
+      output.write("\n");
+      fn();
+    };
+    const onData = (buf) => {
+      for (const ch of buf.toString("utf8")) {
+        if (ch === "\r" || ch === "\n") return done(() => resolve(value.trim()));
+        if (ch === "") return done(() => reject(new UsageError("Cancelled.")));
+        if (ch === "\x7F" || ch === "\b") value = value.slice(0, -1);
+        else if (ch >= " ") value += ch;
+      }
+    };
+    input.on("data", onData);
+  });
+}
+async function commandBing(flags) {
+  const v = flags.values;
+  const sub = flags.positionals[1];
+  const { getUserSites: getUserSites2, bingQueryPageRows: bingQueryPageRows2, getDailyTraffic: getDailyTraffic2, maskKey: maskKey2, BingApiError: BingApiError2 } = await Promise.resolve().then(() => (init_bing(), bing_exports));
+  const usage = "bing subcommands: auth | status | sites | report <siteUrl> [--days 28] [--audit latest|<runId>] [--max-pages 25] | logout";
+  if (sub === "auth") {
+    const existing = getCredential("bing");
+    if (existing && !v["force"]) {
+      console.log(`A Bing API key is already stored in ${defaultCredentialStore().describe()}. Use --force to replace it, or "bing logout".`);
+      return 0;
+    }
+    const key = await readSecret("Bing Webmaster API key (Settings \u2192 API access; input hidden): ");
+    if (!/^[A-Za-z0-9_-]{16,128}$/.test(key)) throw new UsageError("That does not look like a Bing Webmaster API key (16\u2013128 letters, digits, - or _). Nothing was stored.");
+    let sites;
+    try {
+      sites = await getUserSites2(key);
+    } catch (e) {
+      throw new UsageError(`Bing rejected the key; nothing was stored. ${maskKey2(e.message, key)}`);
+    }
+    saveCredential("bing", { clientId: "bing-webmaster-api-key", refreshToken: key, scope: "bing-webmaster:read", createdAt: (/* @__PURE__ */ new Date()).toISOString() });
+    console.log(`Stored the Bing API key in ${defaultCredentialStore().describe()}. Sites on this account: ${sites.length} (${sites.filter((s) => s.verified).length} verified).`);
+    return 0;
+  }
+  if (sub === "logout") {
+    const removed = deleteCredential("bing");
+    console.log(`${removed ? "Removed the stored Bing API key." : "No stored Bing API key."} Bing API keys stay valid until you regenerate them in Bing Webmaster Tools \u2192 Settings \u2192 API access.`);
+    return 0;
+  }
+  const k = bingKey();
+  const noKey = 'No Bing API key: run "searvex bing auth" (Bing Webmaster Tools \u2192 Settings \u2192 API access), or set SEARVEX_BING_API_KEY.';
+  if (!k && sub === "status") {
+    if (v["json"]) process.stdout.write(JSON.stringify({ key: "none", valid: false, hint: noKey }, null, 2) + "\n");
+    else console.log(`key: none
+${noKey}`);
+    return 1;
+  }
+  if (!k) throw new UsageError(noKey);
+  if (sub === "status" || sub === "sites") {
+    let sites;
+    try {
+      sites = await getUserSites2(k.key);
+    } catch (e) {
+      if (sub === "sites") throw e;
+      const status2 = { key: k.source, valid: false, error: e.message };
+      if (v["json"]) process.stdout.write(JSON.stringify(status2, null, 2) + "\n");
+      else for (const [n, x] of Object.entries(status2)) console.log(`${n}: ${String(x)}`);
+      return 1;
+    }
+    if (sub === "sites") {
+      if (v["json"]) process.stdout.write(JSON.stringify(sites, null, 2) + "\n");
+      else for (const s of sites) console.log(`${s.url}  (${s.verified ? "verified" : "not verified"})`);
+      return 0;
+    }
+    const status = { key: k.source, valid: true, sites: sites.length, verifiedSites: sites.filter((s) => s.verified).length };
+    if (v["json"]) process.stdout.write(JSON.stringify(status, null, 2) + "\n");
+    else for (const [n, x] of Object.entries(status)) console.log(`${n}: ${String(x)}`);
+    return 0;
+  }
+  if (sub !== "report") throw new UsageError(usage);
+  try {
+    return await bingReport(flags, k.key, { getUserSites: getUserSites2, bingQueryPageRows: bingQueryPageRows2, getDailyTraffic: getDailyTraffic2 });
+  } catch (e) {
+    if (e instanceof BingApiError2) throw new UsageError(e.message);
+    throw e;
+  }
+}
+async function bingReport(flags, key, api) {
+  const v = flags.values;
+  const { getUserSites: getUserSites2, bingQueryPageRows: bingQueryPageRows2, getDailyTraffic: getDailyTraffic2 } = api;
+  const k = { key };
+  const siteUrl = flags.positionals[2];
+  if (!siteUrl || !/^https?:\/\//.test(siteUrl)) throw new UsageError("bing report requires the verified site URL, e.g. https://example.com/");
+  const property = propertyOrUsage2(siteUrl, { anyProtocol: true });
+  const sites = await getUserSites2(k.key);
+  const norm4 = (u) => u.toLowerCase().replace(/\/+$/, "");
+  const site = sites.find((s) => norm4(s.url) === norm4(siteUrl));
+  if (!site?.verified) {
+    const hostOf2 = (u) => new URL(u).host;
+    const similar = sites.filter((s) => s.url && commonDomain([hostOf2(s.url), hostOf2(siteUrl)])).map((s) => s.url);
+    throw new UsageError(`${siteUrl} is ${site ? "not verified" : "not a site"} in this Bing Webmaster account.${similar.length ? ` Did you mean: ${similar.join(", ")}?` : sites.length ? ` Sites: ${sites.map((s) => s.url).join(", ")}` : " The account has no sites."}`);
+  }
+  const days = num(v["days"], 28, 1, 480);
+  const workspace = path16.resolve(String(v["out"] ?? process.cwd()));
+  const sel = resolveAudit(flags, workspace, property);
+  const { rows, pages } = await bingQueryPageRows2(site.url, k.key, { days, maxPages: num(v["max-pages"], 25, 1, 200) });
+  const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+  const daily = await getDailyTraffic2(site.url, k.key, since);
+  const dates = daily.map((d) => ({ key: d.date, clicks: d.clicks, impressions: d.impressions, ctr: d.impressions ? d.clicks / d.impressions : 0, position: 0 }));
+  const report = analyzeSearchPerformance({ queryPage: rows, dates }, { days, source: `Bing Webmaster Tools ${site.url}`, audit: sel?.audit, property });
+  attachAudit(report, sel);
+  report.totals.basis = dates.length ? `daily site totals (GetRankAndTrafficStats, ${dates[0].key} \u2013 ${dates.at(-1).key})` : `sum of query \xD7 page rows for the top ${pages} pages by clicks (not site totals)`;
+  report.notes.push(`Query \xD7 page rows come from GetPageQueryStats for the top ${pages} pages by clicks; positions are impression-weighted AvgImpressionPosition.`);
+  if (!rows.length) {
+    const why = report.totals.impressions ? "Bing reports site impressions but no page or query detail for this period yet" : "Bing reports no impressions for this site in this period";
+    report.notMeasured.push(`Query and page analysis: ${why}. New sites usually need days to weeks in Bing; check indexing in Bing Webmaster Tools (URL Inspection, Site Explorer).`);
+    log(v, `Note: ${why}.`);
+  }
+  saveReport(flags, workspace, "bing", { target: site.url, days }, report);
+  return 0;
+}
+async function commandConnect(flags) {
+  const v = flags.values;
+  const site = flags.positionals[1];
+  if (!site) throw new UsageError("connect requires the website URL, e.g. searvex connect https://example.com");
+  const choice = v["choice"];
+  if (choice && !["google", "csv", "skip"].includes(choice)) throw new UsageError("--choice must be google, csv or skip");
+  if (choice) setSitePreference(site, { choice, property: v["property"] });
+  const cred = getCredential("gsc");
+  const state = {
+    site: siteKey(site),
+    preference: getSitePreference(site),
+    googleAuthorized: !!cred || !!process.env["SEARVEX_GSC_TOKEN"],
+    nonInteractive: !!process.env["CI"] || !process.stdin.isTTY,
+    options: [
+      { id: "google", label: "Google ile ba\u011Flan", command: cred ? `searvex gsc report --audit latest` : `searvex gsc auth --client <Desktop OAuth client JSON>`, needs: cred ? "nothing (already authorized)" : 'your own Google Cloud "Desktop app" OAuth client (one-time, ~15 min)' },
+      { id: "csv", label: "CSV i\xE7e aktar", command: "searvex gsc import <export.zip> --audit latest", needs: "Search Console \u2192 Performance \u2192 Export \u2192 Download CSV" },
+      { id: "skip", label: "\u015Eimdilik ge\xE7", command: `searvex connect ${site} --choice skip`, needs: 'nothing; search metrics stay "Not measured"' }
+    ]
+  };
+  if (v["json"]) {
+    process.stdout.write(JSON.stringify(state, null, 2) + "\n");
+    return 0;
+  }
+  console.log(`Search data for ${state.site}: ${state.preference ? `${state.preference.choice} (since ${state.preference.updatedAt})` : "not chosen yet"}`);
+  console.log(`Google authorization: ${state.googleAuthorized ? "available" : "none"}
+`);
+  state.options.forEach((o, i) => console.log(`${i + 1}. ${o.label}
+   ${o.command}
+   needs: ${o.needs}`));
+  return 0;
+}
+
+// src/commands/crux.ts
+function cruxKey() {
+  const env = process.env["SEARVEX_CRUX_API_KEY"];
+  if (env) return { key: env, source: "SEARVEX_CRUX_API_KEY" };
+  const stored = getCredential("crux");
+  return stored?.refreshToken ? { key: stored.refreshToken, source: defaultCredentialStore().describe() } : null;
+}
+var PROBE_ORIGIN = "https://developer.chrome.com";
+async function commandCrux(flags) {
+  const v = flags.values;
+  const sub = flags.positionals[1];
+  if (sub === "auth") {
+    if (getCredential("crux") && !v["force"]) {
+      console.log(`A CrUX API key is already stored in ${defaultCredentialStore().describe()}. Use --force to replace it, or "crux logout".`);
+      return 0;
+    }
+    const key = await readSecret("Chrome UX Report API key (Google Cloud \u2192 Credentials; input hidden): ");
+    if (!/^[A-Za-z0-9_-]{20,100}$/.test(key)) throw new UsageError("That does not look like a Google API key. Nothing was stored.");
+    const probe = await queryCrux(PROBE_ORIGIN, key);
+    if (probe.status === "error") throw new UsageError(`Google rejected the key; nothing was stored. ${maskCruxKey(probe.message, key)}`);
+    saveCredential("crux", { clientId: "crux-api-key", refreshToken: key, scope: "chromeuxreport", createdAt: (/* @__PURE__ */ new Date()).toISOString() });
+    console.log(`Stored the CrUX API key in ${defaultCredentialStore().describe()}. Website audits now include real-user Core Web Vitals when an origin has enough traffic.`);
+    return 0;
+  }
+  if (sub === "logout") {
+    const removed = deleteCredential("crux");
+    console.log(`${removed ? "Removed the stored CrUX API key." : "No stored CrUX API key."} The key stays valid until you delete or restrict it in Google Cloud Console.`);
+    return 0;
+  }
+  if (sub === "status") {
+    const k = cruxKey();
+    if (!k) {
+      const hint = 'No CrUX API key: run "searvex crux auth", or set SEARVEX_CRUX_API_KEY.';
+      if (v["json"]) process.stdout.write(JSON.stringify({ key: "none", valid: false, hint }, null, 2) + "\n");
+      else console.log(`key: none
+${hint}`);
+      return 1;
+    }
+    const probe = await queryCrux(PROBE_ORIGIN, k.key);
+    const status = { key: k.source, valid: probe.status !== "error", ...probe.status === "error" ? { error: probe.message } : {} };
+    if (v["json"]) process.stdout.write(JSON.stringify(status, null, 2) + "\n");
+    else for (const [n, x] of Object.entries(status)) console.log(`${n}: ${String(x)}`);
+    return status.valid ? 0 : 1;
+  }
+  throw new UsageError("crux subcommands: auth [--force] | status | logout");
+}
+
+// src/commands/research.ts
+import path17 from "node:path";
 function profile(r) {
   return {
     url: r.target,
@@ -39491,7 +40811,7 @@ function renderResearchMarkdown(r) {
   L.push("## Site profiles", "", "| Site | Pages | Model (heuristic) | Main page types | Languages | Structured data |", "|---|---|---|---|---|---|", row(r.target), ...r.competitors.map(row), "");
   L.push("## Target topics", "", r.target.topTerms.slice(0, 30).map(md).join(", ") || "\u2014", "");
   if (r.competitors.length) {
-    L.push("## Content gaps (competitor topics missing on target)", "");
+    L.push("## Content gaps (competitor topics missing on target)", "", "_Hypotheses from competitor coverage, not verified demand: confirm with Search Console data (`searvex gsc report` / `gsc import`) or your own market knowledge before investing._", "");
     L.push(r.gaps.topics.length ? r.gaps.topics.map((t) => `- **${md(t.term)}** \u2014 prominent on ${t.competitors}/${r.competitors.length} competitors`).join("\n") : "_No consistent topic gaps found._", "");
     L.push("## Page-type gaps", "");
     L.push(r.gaps.pageTypes.length ? r.gaps.pageTypes.map((t) => `- **${t.type}** pages exist on ${t.competitors}/${r.competitors.length} competitors`).join("\n") : "_No page-type gaps._", "");
@@ -39509,7 +40829,7 @@ async function commandResearch(flags) {
   if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
   for (const c of competitors) if (!/^https?:\/\//i.test(c)) throw new UsageError(`Invalid competitor URL: ${c}`);
   const kb = loadKnowledge();
-  const workspace = path15.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path17.resolve(String(v["out"] ?? process.cwd()));
   const store2 = new RunStore(workspace, RunStore.newRunId("research"));
   const perSite = num(v["max-pages"], 150, 1, 1e5);
   const base = { ...crawlOptionsFrom(v), maxPages: perSite };
@@ -39546,40 +40866,7 @@ async function commandResearch(flags) {
 
 // src/commands/run.ts
 import fs12 from "node:fs";
-import path17 from "node:path";
-
-// src/integrations/preferences.ts
-import fs11 from "node:fs";
-import path16 from "node:path";
-var file = () => path16.join(configDir(), "search-data.json");
-function siteKey(urlOrHost) {
-  let h = urlOrHost.trim().toLowerCase();
-  try {
-    h = new URL(/^[a-z]+:\/\//.test(h) ? h : `https://${h}`).hostname;
-  } catch {
-  }
-  return h.replace(/^www\./, "");
-}
-function readAll() {
-  try {
-    return JSON.parse(fs11.readFileSync(file(), "utf8"));
-  } catch {
-    return {};
-  }
-}
-function getSitePreference(site) {
-  return readAll()[siteKey(site)] ?? null;
-}
-function setSitePreference(site, pref) {
-  const all2 = readAll();
-  const value = { ...pref, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
-  all2[siteKey(site)] = value;
-  fs11.mkdirSync(configDir(), { recursive: true, mode: 448 });
-  fs11.writeFileSync(file(), JSON.stringify(all2, null, 2), { mode: 384 });
-  return value;
-}
-
-// src/commands/run.ts
+import path18 from "node:path";
 var top = (r, n = 5) => r.findings.filter((f) => f.severity !== "info").slice(0, n);
 function renderRunSummary(s) {
   const L = ["# Searvex run summary", ""];
@@ -39588,7 +40875,7 @@ function renderRunSummary(s) {
   L.push("");
   if (s.website) {
     const r = s.website.report;
-    L.push("## 1. Website audit", "", `${md(r.target)} \u2014 health score **${r.scores.overall}/100**, ${r.crawl.crawled} pages${r.crawl.truncated ? " (page limit reached)" : ""}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, "");
+    L.push("## 1. Website audit", "", `${md(r.target)} \u2014 health score **${scoreLabel(r.scores)}**, ${r.crawl.crawled} pages${r.crawl.truncated ? " (page limit reached)" : ""}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, "");
     for (const f of top(r)) L.push(`- [${f.severity}] ${md(f.title)} \u2014 ${f.count} \xD7 (\`${f.ruleId}\`)`);
     L.push("", `Full report: \`.searvex/runs/${s.website.runId}/report.md\``, "");
     L.push("## 2. GEO / AI search readiness", "");
@@ -39610,7 +40897,7 @@ function renderRunSummary(s) {
   if (s.diff) L.push("## 3. Change since previous run", "", renderDiffMarkdown(s.diff).split("\n").slice(2).join("\n"), "");
   if (s.research) L.push("## 4. Competitor research", "", renderResearchMarkdown(s.research).split("\n").slice(2).join("\n"), "");
   if (s.repository) {
-    L.push("## 5. Repository audit", "", `Framework: ${s.repository.framework} \u2014 health score **${s.repository.report.scores.overall}/100**.`, "");
+    L.push("## 5. Repository audit", "", `Framework: ${s.repository.framework} \u2014 health score **${scoreLabel(s.repository.report.scores)}**.`, "");
     for (const f of top(s.repository.report)) L.push(`- [${f.severity}] ${md(f.title)} \u2014 ${f.count} \xD7 (\`${f.ruleId}\`)`);
     L.push("");
   }
@@ -39635,7 +40922,7 @@ async function commandRun(flags) {
   if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
   if (competitors.length && !url) throw new UsageError("--competitor requires a website URL");
   const kb = loadKnowledge();
-  const workspace = path17.resolve(String(v["out"] ?? (repo ?? process.cwd())));
+  const workspace = path18.resolve(String(v["out"] ?? (repo ?? process.cwd())));
   const opts = crawlOptionsFrom(v);
   const summary = { steps: [] };
   const step = (n, name, status, note) => {
@@ -39644,10 +40931,10 @@ async function commandRun(flags) {
   };
   if (url) {
     log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)\u2026`);
-    const { report, store: store3 } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v["check-external"], cruxApiKey: process.env["SEARVEX_CRUX_API_KEY"] });
+    const { report, store: store3 } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v["check-external"], cruxApiKey: cruxKey()?.key });
     const files = writeReports(store3, report, kb, ["json", "md", "html"]);
     summary.website = { report, runId: store3.runId, files };
-    summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!readCredentials()["gsc"] || !!process.env["SEARVEX_GSC_TOKEN"] };
+    summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!getCredential("gsc") || !!process.env["SEARVEX_GSC_TOKEN"] };
     step(1, "Website audit", "done", `${report.crawl.crawled} pages, score ${report.scores.overall}/100`);
     step(2, "GEO / AI search", "done", `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
     const base = findBaseline(workspace, report.target, store3.runId);
@@ -39683,7 +40970,7 @@ async function commandRun(flags) {
     log(v, `5. Auditing repository ${root2}\u2026`);
     const ra = auditRepository(root2, { siteUrl, kb });
     summary.repository = { report: ra.report, framework: ra.scan.apps.map((a) => a.framework + (a.appRoot === "." ? "" : "@" + a.appRoot)).join(", ") };
-    step(5, "Repository audit", "done", `${summary.repository.framework}, score ${ra.report.scores.overall}/100`);
+    step(5, "Repository audit", "done", `${summary.repository.framework}, score ${scoreLabel(ra.report.scores)}`);
     summary.plan = planFixes(ra.report, ra.scan, { siteUrl, lang: v["lang"] });
     step(6, "Fix plan (dry run)", "done", `${summary.plan.fixes.length} automatic fix(es), ${summary.plan.tasks.length} task(s); nothing applied`);
   } else {
@@ -39713,7 +41000,7 @@ Saved: ${out}`);
 
 // src/commands/ecosystem.ts
 import fs13 from "node:fs";
-import path18 from "node:path";
+import path19 from "node:path";
 var hostOf = (u) => new URL(u).hostname.replace(/^www\./, "");
 var norm3 = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 function snapshot(report, pages) {
@@ -39906,7 +41193,7 @@ async function commandEcosystem(flags) {
   if (urls.length > 20) throw new UsageError("At most 20 sites");
   for (const u of urls) if (!/^https?:\/\//i.test(u)) throw new UsageError(`Invalid URL: ${u}`);
   const kb = loadKnowledge();
-  const workspace = path18.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
   const opts = { ...crawlOptionsFrom(v), maxPages: num(v["max-pages"], 60, 1, 1e5) };
   const snaps = new Array(urls.length);
   let next2 = 0;
@@ -39942,629 +41229,6 @@ Saved: ${out}`);
   return 0;
 }
 
-// src/commands/gsc.ts
-import path19 from "node:path";
-
-// src/integrations/property.ts
-var PropertyError = class extends Error {
-};
-function parseProperty(raw, opts = {}) {
-  const s = raw.trim();
-  const dm = /^sc-domain:(.+)$/i.exec(s);
-  if (dm) {
-    const domain = dm[1].trim().toLowerCase().replace(/\.$/, "");
-    if (!/^[a-z0-9.-]+\.[a-z0-9-]+$/i.test(domain) || domain.includes("..")) throw new PropertyError(`Invalid domain property: ${raw}`);
-    return { kind: "domain", raw: s, domain };
-  }
-  let u;
-  try {
-    u = new URL(s);
-  } catch {
-    throw new PropertyError(`Invalid property "${raw}": use sc-domain:example.com or a URL prefix such as https://example.com/`);
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") throw new PropertyError(`Invalid property protocol: ${raw}`);
-  return { kind: "url-prefix", raw: s, protocol: u.protocol, host: u.host.toLowerCase(), path: u.pathname || "/", anyProtocol: !!opts.anyProtocol };
-}
-function urlInProperty(url, p) {
-  let u;
-  try {
-    u = new URL(url);
-  } catch {
-    return false;
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-  if (p.kind === "domain") {
-    const h = u.hostname.toLowerCase();
-    return h === p.domain || h.endsWith(`.${p.domain}`);
-  }
-  if (!p.anyProtocol && u.protocol !== p.protocol) return false;
-  return u.host.toLowerCase() === p.host && u.pathname.startsWith(p.path);
-}
-function describeProperty(p) {
-  return p.kind === "domain" ? `domain property ${p.domain} (all subdomains and protocols)` : `URL-prefix property ${p.anyProtocol ? "" : p.protocol + "//"}${p.host}${p.path}`;
-}
-var MIN_COVERAGE = 0.5;
-function matchAuditToProperty(audit, p) {
-  const urls = (audit.inventory?.pages ?? []).map((x) => x.url);
-  const hosts = /* @__PURE__ */ new Map();
-  for (const url of urls) {
-    try {
-      const h = new URL(url).host.toLowerCase();
-      hosts.set(h, (hosts.get(h) ?? 0) + 1);
-    } catch {
-    }
-  }
-  const primaryHost = [...hosts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? safeHost(audit.crawl?.startUrl ?? audit.target);
-  if (!urls.length) {
-    const start = audit.crawl?.startUrl ?? audit.target;
-    const ok = urlInProperty(start, p);
-    return { coverage: ok ? 1 : 0, pages: 0, primaryHost, matches: ok, reason: ok ? "start URL inside the property (no pages crawled)" : `start URL ${start} is outside the ${describeProperty(p)}` };
-  }
-  const inside = urls.filter((u) => urlInProperty(u, p)).length;
-  const coverage = inside / urls.length;
-  const matches = coverage >= MIN_COVERAGE;
-  return {
-    coverage,
-    pages: urls.length,
-    primaryHost,
-    matches,
-    reason: matches ? `${inside}/${urls.length} crawled pages inside the property` : `only ${inside}/${urls.length} crawled pages (host ${primaryHost}) are inside the ${describeProperty(p)}`
-  };
-}
-function safeHost(url) {
-  try {
-    return new URL(url).host.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-function selectAuditForProperty(workspace, ref, p) {
-  if (ref !== "latest") {
-    const audit = new RunStore(workspace, ref).readJson("report.json");
-    if (!audit || audit.mode !== "website") throw new PropertyError(`No website audit report found for --audit ${ref}`);
-    const match = matchAuditToProperty(audit, p);
-    if (!match.matches) throw new PropertyError(`Audit ${ref} (${audit.target}) does not belong to this property: ${match.reason}. Run an audit of this site first or pass the matching run id.`);
-    return { runId: ref, audit, match };
-  }
-  const candidates = [];
-  const others = [];
-  for (const id of RunStore.list(workspace)) {
-    const audit = new RunStore(workspace, id).readJson("report.json");
-    if (audit?.mode !== "website") continue;
-    const match = matchAuditToProperty(audit, p);
-    if (match.matches) candidates.push({ runId: id, audit, match });
-    else others.push(`${id} (${audit.target})`);
-  }
-  if (!candidates.length) {
-    const hint = others.length ? ` Audits in this workspace belong to other sites: ${others.slice(-5).join(", ")}.` : "";
-    throw new PropertyError(`No website audit in ${workspace} matches the ${describeProperty(p)}.${hint} Run "searvex audit <url>" for this site first.`);
-  }
-  const byHost = /* @__PURE__ */ new Map();
-  for (const c of candidates) {
-    const k = c.match.primaryHost ?? "?";
-    (byHost.get(k) ?? byHost.set(k, []).get(k)).push(c);
-  }
-  if (byHost.size === 1) return candidates.at(-1);
-  if (p.kind === "domain") {
-    const apex = [...byHost].filter(([h]) => h === p.domain || h === `www.${p.domain}`);
-    if (apex.length === 1) return apex[0][1].at(-1);
-  }
-  const list = [...byHost].map(([h, xs]) => `${h}: ${xs.at(-1).runId}`).join("; ");
-  throw new PropertyError(`Ambiguous --audit latest: audits of several hosts match the ${describeProperty(p)} (${list}). Pass the run id explicitly.`);
-}
-
-// src/analyze/search-performance.ts
-function rowsToQueryPage(rows) {
-  return rows.filter((r) => r.keys.length >= 2).map((r) => ({ query: r.keys[0], page: r.keys[1], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
-}
-function median(xs) {
-  if (!xs.length) return 0;
-  const s = [...xs].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-}
-var r4 = (x) => Math.round(x * 1e4) / 1e4;
-var r1 = (x) => Math.round(x * 10) / 10;
-var LOW_SEARCH_VALUE = /* @__PURE__ */ new Set(["legal", "contact", "careers", "tag-archive", "author", "search"]);
-function pathOf(url) {
-  try {
-    return new URL(url).pathname.replace(/\/+$/, "") || "/";
-  } catch {
-    return null;
-  }
-}
-function hierarchical(pages) {
-  const paths = pages.map(pathOf).filter((p) => !!p);
-  for (const a of paths) for (const b of paths) if (a !== b && (a === "/" || b.startsWith(`${a}/`))) return true;
-  return false;
-}
-function analyzeSearchPerformance(input, opts) {
-  const inp = Array.isArray(input) ? { queryPage: input } : input;
-  const minImp = opts.minImpressions ?? 50;
-  const notes = [];
-  const notMeasured = [];
-  const joined = !!inp.queryPage;
-  const qp = inp.queryPage ?? [];
-  const sumOf = (xs, k) => xs.reduce((a, x) => a + x[k], 0);
-  const wPos = (xs) => {
-    const imp = xs.reduce((a, x) => a + x.impressions, 0);
-    return imp ? xs.reduce((a, x) => a + x.position * x.impressions, 0) / imp : 0;
-  };
-  const group = (xs, key) => {
-    const m = /* @__PURE__ */ new Map();
-    for (const x of xs) (m.get(key(x)) ?? m.set(key(x), []).get(key(x))).push(x);
-    return m;
-  };
-  let queryAgg;
-  let pageAgg;
-  let rows;
-  if (joined) {
-    queryAgg = [...group(qp, (d) => d.query)].map(([query, xs]) => ({ query, clicks: sumOf(xs, "clicks"), impressions: sumOf(xs, "impressions"), position: wPos(xs), pages: xs.length }));
-    pageAgg = [...group(qp, (d) => d.page)].map(([page, xs]) => {
-      const primary = [...xs].sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions)[0];
-      return { page, clicks: sumOf(xs, "clicks"), impressions: sumOf(xs, "impressions"), position: wPos(xs), queries: xs.length, primaryQuery: primary.query };
-    });
-    rows = qp;
-  } else {
-    queryAgg = (inp.queries ?? []).map((q) => ({ query: q.key, clicks: q.clicks, impressions: q.impressions, position: q.position, pages: null }));
-    pageAgg = (inp.pages ?? []).map((p) => ({ page: p.key, clicks: p.clicks, impressions: p.impressions, position: p.position, queries: null, primaryQuery: null }));
-    rows = queryAgg.map((q) => ({ query: q.query, page: null, clicks: q.clicks, impressions: q.impressions, ctr: q.impressions ? q.clicks / q.impressions : 0, position: q.position }));
-    notMeasured.push("Query \u2192 page mapping, queries shared by several pages and intent mismatches: the Search Console CSV export has no query \xD7 page combination (connect the API for these).");
-    if (!inp.queries?.length) notMeasured.push("Query analysis (top queries, striking distance, low CTR, intent mix): no queries table in the import.");
-    if (!inp.pages?.length) notMeasured.push("Page analysis (top pages, findings on traffic pages, pages without impressions): no pages table in the import.");
-  }
-  let totalClicks;
-  let totalImpr;
-  let basis;
-  if (inp.dates?.length) {
-    totalClicks = sumOf(inp.dates, "clicks");
-    totalImpr = sumOf(inp.dates, "impressions");
-    basis = "daily property totals";
-  } else if (joined) {
-    totalClicks = sumOf(qp, "clicks");
-    totalImpr = sumOf(qp, "impressions");
-    basis = "sum of query \xD7 page rows (anonymised queries excluded)";
-  } else if (pageAgg.length) {
-    totalClicks = sumOf(pageAgg, "clicks");
-    totalImpr = sumOf(pageAgg, "impressions");
-    basis = "sum of the pages table";
-  } else {
-    totalClicks = sumOf(queryAgg, "clicks");
-    totalImpr = sumOf(queryAgg, "impressions");
-    basis = "sum of the queries table (anonymised queries excluded)";
-  }
-  const topQueries = queryAgg.map((q) => ({ query: q.query, clicks: q.clicks, impressions: q.impressions, ctr: r4(q.clicks / Math.max(1, q.impressions)), position: r1(q.position), pages: q.pages })).sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
-  const topPages = pageAgg.map((p) => ({ page: p.page, clicks: p.clicks, impressions: p.impressions, ctr: r4(p.clicks / Math.max(1, p.impressions)), position: r1(p.position), queries: p.queries, primaryQuery: p.primaryQuery })).sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
-  const hasPositions = rows.some((d) => d.position > 0);
-  const strikingDistance = rows.filter((d) => d.position >= 8 && d.position <= 20 && d.impressions >= minImp).sort((a, b) => b.impressions - a.impressions).slice(0, 100).map((d) => ({ query: d.query, page: d.page, position: r1(d.position), impressions: d.impressions, clicks: d.clicks }));
-  const ctrByPos = /* @__PURE__ */ new Map();
-  for (const d of rows) if (d.impressions >= minImp && d.position > 0 && d.position <= 10) (ctrByPos.get(Math.round(d.position)) ?? ctrByPos.set(Math.round(d.position), []).get(Math.round(d.position))).push(d.ctr);
-  const lowCtr = rows.filter((d) => d.impressions >= minImp && d.position > 0 && d.position <= 10).map((d) => ({ d, med: median(ctrByPos.get(Math.round(d.position)) ?? []), n: (ctrByPos.get(Math.round(d.position)) ?? []).length })).filter((x) => x.n >= 5 && x.med > 0 && x.d.ctr < x.med * 0.5).sort((a, b) => b.d.impressions - a.d.impressions).slice(0, 100).map((x) => ({ query: x.d.query, page: x.d.page, position: r1(x.d.position), impressions: x.d.impressions, ctr: r4(x.d.ctr), siteMedianCtr: r4(x.med) }));
-  if (rows.length && !hasPositions) notMeasured.push("Striking distance and low CTR: the data has no positions.");
-  else if (rows.length && ![...ctrByPos.values()].some((v) => v.length >= 5)) notes.push("Not enough rows per position to compare CTR against the property's own median.");
-  const propertyLabel = opts.property?.raw ?? opts.source.split(" ").at(-1) ?? "";
-  const brands = opts.brands ?? brandTermsFrom(propertyLabel);
-  const qIntent = new Map(queryAgg.map((q) => [q.query, classifyQueryIntent(q.query, brands)]));
-  for (const q of topQueries) q.intent = qIntent.get(q.query)?.intent;
-  const mix = /* @__PURE__ */ new Map();
-  for (const q of topQueries) {
-    const k = q.intent ?? "unclassified";
-    const m = mix.get(k) ?? { queries: 0, clicks: 0, impressions: 0 };
-    m.queries++;
-    m.clicks += q.clicks;
-    m.impressions += q.impressions;
-    mix.set(k, m);
-  }
-  const intentMix = [...mix].map(([intent, m]) => ({ intent, ...m, ctr: r4(m.clicks / Math.max(1, m.impressions)) })).sort((a, b) => b.impressions - a.impressions);
-  const invByUrl = new Map((opts.audit?.inventory.pages ?? []).map((p) => [normalizeUrl(p.url) ?? p.url, p]));
-  const multiPageQueries = [];
-  if (joined) {
-    for (const [query, xs] of group(qp, (d) => d.query)) {
-      const impressions = sumOf(xs, "impressions");
-      if (impressions < minImp) continue;
-      const sharing = xs.filter((x) => x.impressions >= impressions * 0.1).sort((a, b) => b.impressions - a.impressions);
-      if (sharing.length < 2) continue;
-      const pages = sharing.map((x) => ({ page: x.page, impressions: x.impressions, clicks: x.clicks, position: r1(x.position) }));
-      const lead = sharing[0];
-      const intents = new Set(sharing.map((x) => invByUrl.get(normalizeUrl(x.page) ?? x.page)?.intent).filter(Boolean));
-      let pattern;
-      let reason;
-      if (qIntent.get(query)?.intent === "navigational") {
-        pattern = "navigational";
-        reason = "Brand or navigational query: several pages of the same site (often sitelinks) are expected.";
-      } else if (hierarchical(sharing.map((x) => x.page))) {
-        pattern = "hierarchy";
-        reason = "The pages are parent and child (or the homepage); showing both is usually expected.";
-      } else if (lead.position <= 3 && lead.impressions >= impressions * 0.6) {
-        pattern = "dominant";
-        reason = `One page clearly leads (position ${r1(lead.position)}, ${Math.round(lead.impressions / impressions * 100)}% of impressions); the others are secondary listings.`;
-      } else if (intents.size >= 2) {
-        pattern = "mixed-intent";
-        reason = `Pages built for different intents (${[...intents].join(", ")}) share the query; decide which one should serve it.`;
-      } else {
-        pattern = "possible-competition";
-        reason = "Comparable pages split impressions without a clear leader. Possible cannibalisation: confirm over time (alternating rankings) before merging or retargeting.";
-      }
-      multiPageQueries.push({ query, impressions, pattern, needsReview: pattern === "mixed-intent" || pattern === "possible-competition", reason, pages });
-    }
-    multiPageQueries.sort((a, b) => Number(b.needsReview) - Number(a.needsReview) || b.impressions - a.impressions);
-    notes.push("Several pages receiving impressions for one query is common; only entries marked for review are cannibalisation candidates, and one aggregated period cannot prove harm.");
-  }
-  let noImpressions = [];
-  const intentMismatches = [];
-  const findingsOnTrafficPages = [];
-  if (opts.audit && pageAgg.length) {
-    const inScope2 = (url) => !opts.property || urlInProperty(url, opts.property);
-    const seen = new Set(pageAgg.map((p) => normalizeUrl(p.page) ?? p.page));
-    const truncatedPages = !joined && pageAgg.length >= 1e3;
-    if (truncatedPages) notMeasured.push("Pages without impressions: the pages table is truncated at the export limit, so missing pages may still have impressions.");
-    else
-      noImpressions = opts.audit.inventory.pages.filter((p) => p.indexable && inScope2(p.url) && !seen.has(normalizeUrl(p.url) ?? p.url)).sort((a, b) => Number(LOW_SEARCH_VALUE.has(a.type)) - Number(LOW_SEARCH_VALUE.has(b.type))).map((p) => p.url);
-    const pageStats = new Map(topPages.map((p) => [normalizeUrl(p.page) ?? p.page, p]));
-    for (const f of opts.audit.findings) {
-      if (f.severity === "info") continue;
-      const hit = f.evidence.map((e) => e.url ? pageStats.get(normalizeUrl(e.url) ?? e.url) : void 0).filter((x) => !!x);
-      if (!hit.length) continue;
-      findingsOnTrafficPages.push({ ruleId: f.ruleId, title: f.title, severity: f.severity, pages: hit.length, clicks: hit.reduce((a, p) => a + p.clicks, 0), impressions: hit.reduce((a, p) => a + p.impressions, 0) });
-    }
-    findingsOnTrafficPages.sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
-    notes.push("Findings-on-traffic uses the evidence URLs recorded in the audit (up to 50 per rule).");
-  } else if (!opts.audit) notMeasured.push("Findings on traffic pages and pages without impressions: no audit joined (use --audit latest).");
-  if (opts.audit && joined) {
-    for (const d of qp) {
-      const qi = qIntent.get(d.query);
-      const page = invByUrl.get(normalizeUrl(d.page) ?? d.page);
-      if (!qi || !page?.intent || d.impressions < minImp || !intentConflict(qi.intent, page.intent)) continue;
-      intentMismatches.push({ query: d.query, queryIntent: qi.intent, signals: qi.signals, page: d.page, pageType: page.type, pageIntent: page.intent, impressions: d.impressions, clicks: d.clicks, position: r1(d.position) });
-    }
-    intentMismatches.sort((a, b) => b.impressions - a.impressions);
-  }
-  if (opts.audit && opts.property?.kind === "domain") notes.push("Domain property: the data covers every subdomain, the audit only the crawled site; pages on other subdomains are not joined.");
-  notes.push("Query and page intents are inferred from wording and page type (heuristic); clicks, impressions and positions are verified data.");
-  notes.push("Search Console anonymises rare queries; query-level totals are lower than property totals.");
-  return {
-    source: opts.source,
-    property: opts.property?.raw,
-    period: { days: opts.days, ...opts.period ?? {} },
-    granularity: joined ? "query-page" : "separate",
-    totals: { clicks: totalClicks, impressions: totalImpr, ctr: r4(totalClicks / Math.max(1, totalImpr)), queries: queryAgg.length, pages: pageAgg.length, basis },
-    topQueries: topQueries.slice(0, 100),
-    topPages: topPages.slice(0, 100),
-    strikingDistance,
-    lowCtr,
-    multiPageQueries: multiPageQueries.slice(0, 100),
-    intentMix,
-    intentMismatches: intentMismatches.slice(0, 100),
-    noImpressions: noImpressions.slice(0, 500),
-    findingsOnTrafficPages: findingsOnTrafficPages.slice(0, 50),
-    breakdowns: { countries: (inp.countries ?? []).slice(0, 25), devices: inp.devices ?? [] },
-    notMeasured,
-    notes
-  };
-}
-
-// src/commands/gsc.ts
-var pct = (x) => `${(x * 100).toFixed(1)}%`;
-var dash = (x) => x === null || x === void 0 ? "\u2014" : String(x);
-var PATTERN_LABEL = {
-  navigational: "expected (brand/navigational)",
-  hierarchy: "expected (parent/child pages)",
-  dominant: "one page leads",
-  "mixed-intent": "**review: mixed intent**",
-  "possible-competition": "**review: possible cannibalisation**"
-};
-function renderSearchPerformanceMarkdown(r) {
-  const L = [`# Search performance \u2014 ${md(r.source)}`, ""];
-  const period = r.period.startDate ? `${r.period.startDate} \u2192 ${r.period.endDate} (${r.period.days} days)` : `Last ${r.period.days} days`;
-  L.push(`${period} \xB7 clicks **${r.totals.clicks}** \xB7 impressions **${r.totals.impressions}** \xB7 CTR ${pct(r.totals.ctr)} \xB7 ${r.totals.queries} queries \xB7 ${r.totals.pages} pages`, "");
-  L.push(`_Verified data for ${r.property ? md(r.property) : "this property"} (totals: ${r.totals.basis}). Searvex adds no estimates._`, "");
-  if (r.audit) L.push(`Joined audit \`${r.audit.runId}\` (${md(r.audit.target)}): ${Math.round(r.audit.coverage * 100)}% of its ${r.audit.pages} crawled pages are inside the property.`, "");
-  if (r.granularity === "separate") L.push("> Imported from a Search Console CSV export: queries and pages are separate tables, so query \u2192 page analysis is not available. Connect the API for the full analysis.", "");
-  const table = (head, rows) => {
-    L.push(`| ${head.join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((x) => `| ${x.join(" | ")} |`), "");
-  };
-  if (r.findingsOnTrafficPages.length) {
-    L.push("## Audit issues on pages that get search traffic", "");
-    table(["Issue", "Severity", "Pages", "Clicks", "Impressions"], r.findingsOnTrafficPages.slice(0, 15).map((f) => [`${md(f.title)} \`${f.ruleId}\``, f.severity, String(f.pages), String(f.clicks), String(f.impressions)]));
-  }
-  L.push("## Striking distance (positions 8\u201320 with real impressions)", "");
-  if (r.strikingDistance.length) table(["Query", "Page", "Position", "Impressions", "Clicks"], r.strikingDistance.slice(0, 20).map((x) => [md(x.query), x.page ? md(x.page) : "\u2014", String(x.position), String(x.impressions), String(x.clicks)]));
-  else L.push("_None above the impression threshold._", "");
-  L.push("## Low CTR versus this site's own median at the same position", "");
-  if (r.lowCtr.length) table(["Query", "Page", "Position", "Impressions", "CTR", "Site median"], r.lowCtr.slice(0, 20).map((x) => [md(x.query), x.page ? md(x.page) : "\u2014", String(x.position), String(x.impressions), pct(x.ctr), pct(x.siteMedianCtr)]));
-  else L.push("_None found (or not enough data per position)._", "");
-  if (r.intentMix.length) {
-    L.push("## Search intent mix (intent inferred from query wording)", "");
-    table(["Intent", "Queries", "Clicks", "Impressions", "CTR"], r.intentMix.map((m) => [m.intent, String(m.queries), String(m.clicks), String(m.impressions), pct(m.ctr)]));
-  }
-  if (r.intentMismatches.length) {
-    L.push("## Intent mismatches (query intent vs. type of the ranking page; inferred)", "");
-    table(["Query", "Query intent", "Page", "Page type", "Impressions", "Position"], r.intentMismatches.slice(0, 20).map((x) => [md(x.query), `${x.queryIntent} (${x.signals.slice(0, 2).map(md).join(", ")})`, md(x.page), x.pageType, String(x.impressions), String(x.position)]));
-  }
-  if (r.granularity === "query-page") {
-    L.push("## Queries shared by several pages", "");
-    L.push('_Several pages receiving impressions for one query is common and not harmful by itself. Only rows marked "review" are cannibalisation candidates; confirm them over time before merging or retargeting pages._', "");
-    if (r.multiPageQueries.length) for (const q of r.multiPageQueries.slice(0, 15)) L.push(`- **${md(q.query)}** (${q.impressions} impressions) \u2014 ${PATTERN_LABEL[q.pattern]}: ${q.pages.map((p) => `${md(p.page)} \u2014 ${p.impressions} imp, pos ${p.position}`).join("; ")}. ${md(q.reason)}`);
-    else L.push("_None._");
-    L.push("");
-  }
-  if (r.topPages.length) {
-    L.push(r.granularity === "query-page" ? "## Page \u2192 primary query" : "## Top pages", "");
-    table(["Page", "Clicks", "Impressions", "Position", "Primary query", "Queries"], r.topPages.slice(0, 25).map((p) => [md(p.page), String(p.clicks), String(p.impressions), String(p.position), p.primaryQuery ? md(p.primaryQuery) : "\u2014", dash(p.queries)]));
-  }
-  if (r.topQueries.length) {
-    L.push("## Top queries", "");
-    table(["Query", "Clicks", "Impressions", "CTR", "Position", "Pages", "Intent (inferred)"], r.topQueries.slice(0, 25).map((q) => [md(q.query), String(q.clicks), String(q.impressions), pct(q.ctr), String(q.position), dash(q.pages), q.intent ?? "\u2014"]));
-  }
-  if (r.breakdowns.devices.length) {
-    L.push("## Devices", "");
-    table(["Device", "Clicks", "Impressions", "CTR", "Position"], r.breakdowns.devices.map((d) => [md(d.key), String(d.clicks), String(d.impressions), pct(d.ctr), String(Math.round(d.position * 10) / 10)]));
-  }
-  if (r.breakdowns.countries.length) {
-    L.push("## Countries", "");
-    table(["Country", "Clicks", "Impressions", "CTR", "Position"], r.breakdowns.countries.slice(0, 10).map((d) => [md(d.key), String(d.clicks), String(d.impressions), pct(d.ctr), String(Math.round(d.position * 10) / 10)]));
-  }
-  if (r.noImpressions.length) L.push(`## Indexable pages without impressions (${r.noImpressions.length})`, "", ...r.noImpressions.slice(0, 30).map((u) => `- ${md(u)}`), "");
-  if (r.notMeasured.length) L.push("## Not measured", "", ...r.notMeasured.map((n) => `- ${md(n)}`), "");
-  L.push("## Notes", "", ...r.notes.map((n) => `- ${md(n)}`), "");
-  return L.join("\n");
-}
-function propertyOrUsage(raw, opts) {
-  try {
-    return parseProperty(raw, opts);
-  } catch (e) {
-    throw new UsageError(e.message);
-  }
-}
-function resolveAudit(flags, workspace, property) {
-  const ref = flags.values["audit"];
-  if (!ref) return void 0;
-  try {
-    const sel = selectAuditForProperty(workspace, ref, property);
-    log(flags.values, `Joining audit ${sel.runId} (${sel.audit.target}): ${sel.match.reason}`);
-    return sel;
-  } catch (e) {
-    if (e instanceof PropertyError) throw new UsageError(e.message);
-    throw e;
-  }
-}
-function attachAudit(report, sel) {
-  if (sel) report.audit = { runId: sel.runId, target: sel.audit.target, coverage: Math.round(sel.match.coverage * 1e3) / 1e3, pages: sel.match.pages };
-}
-function saveReport(flags, workspace, kind, meta, report) {
-  const v = flags.values;
-  const store2 = new RunStore(workspace, RunStore.newRunId(kind));
-  store2.writeJson("meta.json", { kind, ...meta, audit: report.audit?.runId, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
-  store2.writeJson("search-performance.json", report);
-  const out = store2.writeText("search-performance.md", renderSearchPerformanceMarkdown(report));
-  if (v["json"]) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
-  else if (!v["quiet"]) console.log(renderSearchPerformanceMarkdown(report) + `
-Saved: ${out}`);
-}
-function newestWebsiteAudit(workspace) {
-  for (const id of RunStore.list(workspace).reverse()) {
-    const a = new RunStore(workspace, id).readJson("report.json");
-    if (a?.mode === "website") return a;
-  }
-  return null;
-}
-async function verifyProperty(token, raw, workspace) {
-  const sites = (await listSites(token)).filter((s) => s.permissionLevel !== "siteUnverifiedUser");
-  const names = sites.map((s) => s.siteUrl);
-  if (raw) {
-    if (names.includes(raw)) return raw;
-    const p = propertyOrUsage(raw);
-    const similar = names.filter((n) => {
-      try {
-        const q = parseProperty(n);
-        return p.kind === "domain" ? q.kind === "domain" && q.domain === p.domain : urlInProperty(`${p.protocol}//${p.host}${p.path}`, q);
-      } catch {
-        return false;
-      }
-    });
-    throw new UsageError(`Property ${raw} is not in your Search Console account (or you have no read access).${similar.length ? ` Did you mean: ${similar.join(", ")}?` : names.length ? ` Available: ${names.join(", ")}` : " No properties are available to this Google account."}`);
-  }
-  const audit = newestWebsiteAudit(workspace);
-  if (!audit) throw new UsageError(`Pass a property. Available: ${names.join(", ") || "(none)"}`);
-  const start = audit.crawl?.startUrl ?? audit.target;
-  const matches = names.filter((n) => {
-    try {
-      return urlInProperty(start, parseProperty(n));
-    } catch {
-      return false;
-    }
-  });
-  if (matches.length === 1) return matches[0];
-  throw new UsageError(matches.length ? `Several properties cover ${start}: ${matches.join(", ")}. Pass one explicitly.` : `No accessible property covers ${start}. Available: ${names.join(", ") || "(none)"}`);
-}
-async function commandGsc(flags) {
-  const v = flags.values;
-  const sub = flags.positionals[1];
-  const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
-  if (sub === "auth") {
-    if (process.env["CI"]) throw new UsageError('gsc auth is interactive (browser consent) and is disabled in CI. Use "gsc import <export.zip>" or SEARVEX_GSC_TOKEN there.');
-    const existing = readCredentials()["gsc"];
-    if (existing && !v["force"]) {
-      try {
-        await accessToken(existing);
-        console.log(`Already authorized (scope: ${existing.scope}, since ${existing.createdAt}). Use --force to authorize again, or "gsc logout" to remove it.`);
-        return 0;
-      } catch {
-        log(v, "Stored authorization is no longer valid; starting a new authorization.");
-      }
-    }
-    const clientFile = v["client"];
-    if (!clientFile) throw new UsageError('gsc auth requires --client <client_secret.json> (a "Desktop app" OAuth client you create in Google Cloud Console). No Google account access? Use "searvex gsc import <export.zip>" instead.');
-    let client;
-    try {
-      client = loadClientFile(clientFile);
-    } catch (e) {
-      if (e instanceof OAuthClientFileError) throw new UsageError(e.message);
-      throw e;
-    }
-    const cred = await authorize(client, GSC_SCOPE, (url) => {
-      console.log("\nOpen this URL in your browser and approve read-only Search Console access:\n");
-      console.log(url + "\n");
-      console.log("Waiting for Google to redirect back to http://127.0.0.1 \u2026 (Ctrl+C to cancel; times out after 5 minutes)");
-    });
-    saveCredential("gsc", cred);
-    console.log(`Authorized (scope: ${cred.scope}). Refresh token stored in ${defaultCredentialStore().describe()}.`);
-    return 0;
-  }
-  if (sub === "status") {
-    const cred = readCredentials()["gsc"];
-    const envToken = !!process.env["SEARVEX_GSC_TOKEN"];
-    const status = { credential: cred ? "stored" : "none", envToken, store: defaultCredentialStore().describe() };
-    if (cred) {
-      status["scope"] = cred.scope;
-      status["since"] = cred.createdAt;
-      try {
-        await accessToken(cred);
-        status["valid"] = true;
-      } catch (e) {
-        status["valid"] = false;
-        status["error"] = e.message;
-      }
-    }
-    if (v["json"]) process.stdout.write(JSON.stringify(status, null, 2) + "\n");
-    else for (const [k, x] of Object.entries(status)) console.log(`${k}: ${String(x)}`);
-    return cred || envToken ? 0 : 1;
-  }
-  if (sub === "logout") {
-    const cred = readCredentials()["gsc"];
-    if (!cred) {
-      console.log("No stored Search Console credential.");
-      return 0;
-    }
-    let revoked = false;
-    try {
-      revoked = await revokeToken(cred.refreshToken);
-    } catch (e) {
-      log(v, `Could not reach Google to revoke the token (${e.message}); removing it locally.`);
-    }
-    deleteCredential("gsc");
-    console.log(revoked ? "Revoked the authorization at Google and removed the stored credential." : 'Removed the stored credential. Google did not confirm revocation; you can remove "Searvex" access in your Google Account \u2192 Security \u2192 Third-party connections.');
-    return 0;
-  }
-  if (sub === "import") {
-    const files = flags.positionals.slice(2);
-    if (!files.length) throw new UsageError("gsc import requires the Search Console export (ZIP or CSV files): Performance \u2192 Export \u2192 Download CSV");
-    let exp;
-    try {
-      exp = importGscFiles(files);
-    } catch (e) {
-      if (e instanceof GscImportError) throw new UsageError(e.message);
-      throw e;
-    }
-    for (const w of exp.warnings) log(v, `warning: ${w}`);
-    const property = resolveImportProperty(v["property"], exp);
-    const sel = property ? resolveAudit(flags, workspace, property) : void 0;
-    if (!property && v["audit"]) throw new UsageError("Pass --property (e.g. sc-domain:example.com) to join an audit: the export has no pages table to infer the site from.");
-    const days = exp.period.days ?? num(v["days"], 0, 0, 1e4);
-    const report = analyzeSearchPerformance(
-      { queries: exp.tables.queries, pages: exp.tables.pages, dates: exp.tables.dates, countries: exp.tables.countries, devices: exp.tables.devices },
-      { days, source: `Search Console CSV export ${exp.files.join(", ")}`, audit: sel?.audit, property, period: exp.period.startDate ? { startDate: exp.period.startDate, endDate: exp.period.endDate } : void 0 }
-    );
-    attachAudit(report, sel);
-    report.notes.unshift(...exp.warnings);
-    if (exp.searchType) report.notes.push(`Search type: ${exp.searchType}.`);
-    if (exp.dateLabel) report.notes.push(`Date range in the export: ${exp.dateLabel}.`);
-    if (!exp.period.days) report.notMeasured.push("Exact period: the export has no dates table.");
-    saveReport(flags, workspace, "gsc-import", { target: property?.raw ?? null, files: exp.files, period: exp.period }, report);
-    if (property) setSitePreference(property.kind === "domain" ? property.domain : property.host, { choice: "csv", property: property.raw });
-    return 0;
-  }
-  const token = await gscAccessToken();
-  if (!token) throw new UsageError('No Search Console credential: run "searvex gsc auth --client client_secret.json", set SEARVEX_GSC_TOKEN, or import a CSV export with "searvex gsc import <file>"');
-  if (sub === "sites") {
-    const sites = await listSites(token);
-    if (v["json"]) process.stdout.write(JSON.stringify(sites, null, 2) + "\n");
-    else for (const s of sites) console.log(`${s.siteUrl}  (${s.permissionLevel})`);
-    return 0;
-  }
-  if (sub === "report") {
-    const siteUrl = await verifyProperty(token, flags.positionals[2], workspace);
-    const property = propertyOrUsage(siteUrl);
-    const days = num(v["days"], 28, 1, 480);
-    const sel = resolveAudit(flags, workspace, property);
-    const rows = await querySearchConsole({ token, siteUrl, days, dimensions: ["query", "page"], maxRows: num(v["max-rows"], 25e3, 1, 1e5) });
-    const report = analyzeSearchPerformance(rowsToQueryPage(rows), { days, source: `Search Console ${siteUrl}`, audit: sel?.audit, property });
-    attachAudit(report, sel);
-    saveReport(flags, workspace, "gsc", { target: siteUrl, days }, report);
-    setSitePreference(property.kind === "domain" ? property.domain : property.host, { choice: "google", property: siteUrl });
-    return 0;
-  }
-  throw new UsageError("gsc subcommands: auth --client <file> [--force] | status | sites | report [property] [--days 28] [--audit latest|<runId>] | import <export.zip|*.csv> [--property P] [--audit latest] | logout");
-}
-function resolveImportProperty(raw, exp) {
-  const hosts = pageHosts(exp);
-  if (raw) {
-    const p = propertyOrUsage(raw);
-    const pages = exp.tables.pages ?? [];
-    if (pages.length) {
-      const inside = pages.filter((x) => urlInProperty(x.key, p)).length;
-      if (inside / pages.length < 0.5) throw new UsageError(`The export's pages (${hosts.slice(0, 3).map((h) => h.host).join(", ")}) do not belong to the ${describeProperty(p)}. Check that you exported the right property.`);
-    }
-    return p;
-  }
-  if (!hosts.length) return void 0;
-  const total = hosts.reduce((a, h) => a + h.pages, 0);
-  if (hosts.length > 1 && hosts[0].pages / total < 0.9) throw new UsageError(`The export contains pages from several hosts (${hosts.slice(0, 5).map((h) => h.host).join(", ")}): pass --property (e.g. sc-domain:example.com).`);
-  return parseProperty(`https://${hosts[0].host}/`, { anyProtocol: true });
-}
-async function commandBing(flags) {
-  const v = flags.values;
-  const sub = flags.positionals[1];
-  const apiKey = process.env["SEARVEX_BING_API_KEY"];
-  if (sub !== "report") throw new UsageError("bing subcommands: report <siteUrl> [--days 28] [--audit latest|<runId>] [--max-pages 25]");
-  if (!apiKey) throw new UsageError("Set SEARVEX_BING_API_KEY (Bing Webmaster Tools \u2192 Settings \u2192 API access)");
-  const siteUrl = flags.positionals[2];
-  if (!siteUrl || !/^https?:\/\//.test(siteUrl)) throw new UsageError("bing report requires the verified site URL, e.g. https://example.com/");
-  const property = propertyOrUsage(siteUrl, { anyProtocol: true });
-  const days = num(v["days"], 28, 1, 480);
-  const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
-  const sel = resolveAudit(flags, workspace, property);
-  const { bingQueryPageRows: bingQueryPageRows2 } = await Promise.resolve().then(() => (init_bing(), bing_exports));
-  const { rows, pages } = await bingQueryPageRows2(siteUrl, apiKey, { days, maxPages: num(v["max-pages"], 25, 1, 200) });
-  const report = analyzeSearchPerformance(rows, { days, source: `Bing Webmaster Tools ${siteUrl}`, audit: sel?.audit, property });
-  attachAudit(report, sel);
-  report.totals.basis = `sum of query \xD7 page rows for the top ${pages} pages by clicks (not site totals)`;
-  report.notes.push(`Query \xD7 page rows come from GetPageQueryStats for the top ${pages} pages by clicks; positions are impression-weighted AvgImpressionPosition.`);
-  saveReport(flags, workspace, "bing", { target: siteUrl, days }, report);
-  return 0;
-}
-async function commandConnect(flags) {
-  const v = flags.values;
-  const site = flags.positionals[1];
-  if (!site) throw new UsageError("connect requires the website URL, e.g. searvex connect https://example.com");
-  const choice = v["choice"];
-  if (choice && !["google", "csv", "skip"].includes(choice)) throw new UsageError("--choice must be google, csv or skip");
-  if (choice) setSitePreference(site, { choice, property: v["property"] });
-  const cred = readCredentials()["gsc"];
-  const state = {
-    site: siteKey(site),
-    preference: getSitePreference(site),
-    googleAuthorized: !!cred || !!process.env["SEARVEX_GSC_TOKEN"],
-    nonInteractive: !!process.env["CI"] || !process.stdin.isTTY,
-    options: [
-      { id: "google", label: "Google ile ba\u011Flan", command: cred ? `searvex gsc report --audit latest` : `searvex gsc auth --client <Desktop OAuth client JSON>`, needs: cred ? "nothing (already authorized)" : 'your own Google Cloud "Desktop app" OAuth client (one-time, ~15 min)' },
-      { id: "csv", label: "CSV i\xE7e aktar", command: "searvex gsc import <export.zip> --audit latest", needs: "Search Console \u2192 Performance \u2192 Export \u2192 Download CSV" },
-      { id: "skip", label: "\u015Eimdilik ge\xE7", command: `searvex connect ${site} --choice skip`, needs: 'nothing; search metrics stay "Not measured"' }
-    ]
-  };
-  if (v["json"]) {
-    process.stdout.write(JSON.stringify(state, null, 2) + "\n");
-    return 0;
-  }
-  console.log(`Search data for ${state.site}: ${state.preference ? `${state.preference.choice} (since ${state.preference.updatedAt})` : "not chosen yet"}`);
-  console.log(`Google authorization: ${state.googleAuthorized ? "available" : "none"}
-`);
-  state.options.forEach((o, i) => console.log(`${i + 1}. ${o.label}
-   ${o.command}
-   needs: ${o.needs}`));
-  return 0;
-}
-
 // src/cli.ts
 var HELP = `Searvex ${SEARVEX_VERSION} \u2014 open-source search intelligence & optimization engine
 
@@ -40583,10 +41247,18 @@ Commands
   connect <url>         Optional search data for a site: shows the three choices (Google / CSV / skip)
                         and records one with --choice google|csv|skip; never starts OAuth by itself
   gsc <auth|status|sites|report|import|logout>
-                        Google Search Console (read-only): OAuth with your own Desktop client (--client),
+                        Google Search Console (read-only): OAuth with your own Desktop client (--client;
+                        opens your browser, --no-browser to only print the URL),
                         property check, query/page analysis with a property-matched --audit join;
                         "gsc import <export.zip>" reads a Performance CSV export without any account access
-  bing report <siteUrl> Bing Webmaster Tools query/page analysis (SEARVEX_BING_API_KEY, read-only)
+  bing <auth|status|sites|report|logout>
+                        Bing Webmaster Tools (read-only API key): "bing auth" stores the key (hidden input)
+                        in the credential store; "bing report <siteUrl>" checks the site is verified, then
+                        analyses queries/pages
+                        (bing is experimental: not yet verified against the live service)
+  crux <auth|status|logout>
+                        Chrome UX Report API key for real-user Core Web Vitals (hidden input, stored in the
+                        credential store)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and
@@ -40615,10 +41287,12 @@ Common options
   -h, --help            Show help
 
 Environment (all optional, read-only integrations)
-  SEARVEX_CRUX_API_KEY  Chrome UX Report API key \u2192 real Core Web Vitals field data
+  SEARVEX_CRUX_API_KEY  Chrome UX Report API key (instead of "searvex crux auth")
   SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
-  SEARVEX_BING_API_KEY  Bing Webmaster Tools API key \u2192 "searvex bing report"
+  SEARVEX_BING_API_KEY  Bing Webmaster Tools API key (instead of "searvex bing auth")
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
+  SEARVEX_CREDENTIAL_STORE  file (default, 0600 file in the config dir) or keychain (macOS Keychain,
+                        Secret Service via secret-tool, Windows DPAPI)
 
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
 `;
@@ -40666,7 +41340,8 @@ function parse8(argv) {
       import: { type: "string", multiple: true },
       force: { type: "boolean" },
       property: { type: "string" },
-      choice: { type: "string" }
+      choice: { type: "string" },
+      "no-browser": { type: "boolean" }
     }
   });
   return { values, positionals };
@@ -40721,7 +41396,7 @@ function printSummary(report, files, v) {
   const counts = SEVERITY_ORDER.map((s) => `${s}: ${report.findings.filter((f) => f.severity === s).length}`).join("  ");
   console.log(`
 Searvex audit \u2014 ${report.target}`);
-  console.log(`Health score ${report.scores.overall}/100 (Searvex summary, not a search engine metric)`);
+  console.log(`Health score ${scoreLabel(report.scores)} (Searvex summary, not a search engine metric)`);
   console.log(`Pages: ${report.crawl.crawled}${report.crawl.truncated ? ` (limit reached; ${report.crawl.queuedRemaining} queued)` : ""}   Rules: ${report.tool.rulesVersion}`);
   console.log(`Findings by rule \u2014 ${counts}`);
   for (const f of report.findings.filter((x) => x.severity !== "info").slice(0, 12)) {
@@ -40751,7 +41426,7 @@ async function commandAudit(flags) {
       resumeRunId: v["resume"],
       kb,
       checkExternal: !!v["check-external"],
-      cruxApiKey: process.env["SEARVEX_CRUX_API_KEY"],
+      cruxApiKey: cruxKey()?.key,
       crawl: {
         ...opts,
         render: render3?.render,
@@ -40766,7 +41441,7 @@ async function commandAudit(flags) {
     if (render3) {
       const st = render3.stats;
       report.limitations.push(
-        `JavaScript rendering: Chromium ${st.sandbox ? "with" : "WITHOUT"} its OS sandbox${st.sandbox ? "" : " (not available on this system)"}, all traffic through Searvex's policy proxy; ${st.blockedRequests + st.proxy.blocked} browser request(s) blocked by the network policy${st.proxy.blockedTargets.length ? ` (${st.proxy.blockedTargets.slice(0, 5).join(", ")})` : ""}${st.proxy.budgetExceeded ? `; ${st.proxy.budgetExceeded} connection(s) cut at the per-page transfer limit` : ""}.`
+        `JavaScript rendering: Chromium ${st.sandbox ? "with" : "WITHOUT"} its OS sandbox${st.sandbox ? "" : " (not available on this system)"}, all traffic through Searvex's policy proxy; ${st.blockedRequests + st.proxy.blocked} browser request(s) blocked by the network policy${st.proxy.blockedTargets.length ? ` (${st.proxy.blockedTargets.slice(0, 5).join(", ")})` : ""}${st.proxy.budgetExceeded ? `; ${st.proxy.budgetExceeded} connection(s) cut at the per-page transfer limit` : ""}${st.deadlineExceeded ? `; ${st.deadlineExceeded} page(s) stopped at the hard time limit (scripts kept the browser busy)` : ""}.`
       );
     }
     const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
@@ -40917,6 +41592,8 @@ Run "searvex --help" for usage.`);
         return await commandGsc(flags);
       case "bing":
         return await commandBing(flags);
+      case "crux":
+        return await commandCrux(flags);
       case "connect":
         return await commandConnect(flags);
       case "audit":

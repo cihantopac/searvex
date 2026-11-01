@@ -1,6 +1,6 @@
 # Quality criteria, test results & benchmarks
 
-Last updated: 2026-10-30 (v0.7.0). Environment: macOS (Apple M4), Node 22.23.2; CI: Linux, macOS, Windows × Node 20/22/24 + Playwright job.
+Last updated: 2026-11-01 (v1.0.0). Environment: macOS (Apple M4), Node 22.23.2; CI: Linux, macOS, Windows × Node 20/22/24 + Playwright job.
 
 ## Criteria (definition of done)
 
@@ -19,7 +19,7 @@ Last updated: 2026-10-30 (v0.7.0). Environment: macOS (Apple M4), Node 22.23.2; 
 
 ## Automated tests
 
-`npm test` — automated tests across unit, integration and E2E files (count printed by the run; 282 at v0.7.0) (unit, integration, Playwright rendering, E2E on the bundled CLI).
+`npm test` — automated tests across unit, integration and E2E files (count printed by the run; 282 at v0.7.0, 351 at v1.0.0) (unit, integration, Playwright rendering, E2E on the bundled CLI).
 
 | Area | What is tested |
 |---|---|
@@ -34,7 +34,7 @@ Last updated: 2026-10-30 (v0.7.0). Environment: macOS (Apple M4), Node 22.23.2; 
 | Reports | HTML inert embedding of hostile content, Markdown escaping, SARIF structure |
 
 Coverage (v8, `src/**`, without the Playwright job): **lines 88.3% · statements 83.7% · functions 87.8% · branches 72.9%**.
-Not covered: live Search Console / CrUX API calls.
+Live Search Console calls are validated manually (section below); live CrUX and Bing calls are not covered yet.
 
 ## Real-world validation (2026-10-30)
 
@@ -146,6 +146,145 @@ was **synthetic**: Turkish headers and number formats, URLs taken from the real 
   active (macOS), ~1.7 s per page. A 15-page `--render` audit reproduced the locale-adaptive canonical
   switch and the Inertia duplicate titles found by hand in round 3.
 
+## Live Search Console validation (2026-11-01)
+
+Owner's own Desktop OAuth client and Google account (5 properties), credential in the macOS Keychain
+(`SEARVEX_CREDENTIAL_STORE=keychain`). Property data is not reproduced here.
+
+| Check | Result |
+|---|---|
+| Authorization (loopback + PKCE, read-only scope) and storage | ✅ token in the Keychain; no credentials file on disk |
+| Refresh-token → access-token exchange (`gsc status`) | ✅ valid |
+| Property discovery (`gsc sites`) | ✅ 5 properties with permission levels; the domain property matches what the CSV import inferred |
+| Same period via API vs. the real CSV exports (TR + EN) | ✅ identical rows and sums for date, device, country, query and page tables (512 clicks / 13,818 impressions) |
+| Pagination (`startRow`, 100 rows/page) | ✅ 544 query × page rows, identical set to one request, 0 duplicates; `max-rows` cap respected |
+| `gsc report` with `--audit` join, other-site audit, unknown property, URL-prefix look-alike | ✅ joined / refused / lists accessible properties / "Did you mean sc-domain:…?" |
+| Re-running `gsc auth` with a valid grant | ✅ reuses it ("Already authorized") |
+| Secrets in output | ✅ 10 commands, ~155 KB of output and run files scanned for the refresh token, a fresh access token, the client secret and Google token patterns: 0 matches |
+| `gsc logout` revocation at Google | ⏸ not run live (owner kept the grant); covered by the mock-server test and the documented endpoint; on failure the CLI says so and explains manual removal |
+
+Defects found and fixed in this round: API reports summed only query × page rows (322 clicks, anonymised
+queries excluded) while CSV reports showed property totals (512) — API reports now add the daily series;
+the keychain backend ignored `SEARVEX_CONFIG_DIR`, so a test run from a shell with the keychain selected
+deleted the real credential — keychain entries are now isolated per config directory (sentinel-verified);
+`gsc auth` now opens the browser.
+
+## Real-world validation round 7 — permitted product family (2026-11-01)
+
+The 7 permitted sites (Laravel + Inertia SSR, Turkish/English), ≤ 60 pages each, 1 s per-host delay,
+2 connections, robots.txt honoured. 48–64 s and ≤ 139 MB RSS per site (run in parallel). Every suspect finding
+was checked against the live HTML before changing Searvex; raw captures stay outside the repository.
+
+| Defect in Searvex | Evidence | Fix | Effect (before → after) |
+|---|---|---|---|
+| Page linked only through redirects reported as orphan | the English home was linked 169× as `/en/` (301) and `/language/en` (302), never as `/en` | inlinks through internal redirects count for reachability (orphans, inlink counts, link opportunities); broken-link checks still use the linked URL | 1 → 0 |
+| Cannibalisation across languages | Turkish `/help` pages clustered with English `/en/help` pages | candidates must share a language | mixed clusters split by language |
+| Cannibalisation between legal documents | each product's privacy/refund policy on the company site | legal pages excluded | 3 → 0 on the company site |
+| Image dimensions flagged on aspect-ratio utility classes | `<img class="aspect-[16/9] w-full">` cannot shift layout | Tailwind `aspect-*` classes count as sized | 119 → 2 evidence items across 6 sites |
+
+Findings confirmed as real site defects (reported to the owner, not changed in Searvex): two `<title>`
+elements per page (Inertia root template + page title; the generic first title is what browsers use, which
+also explains "same title on 56–57 pages"); duplicate root-template meta descriptions; English blog pages
+with `lang="tr"`; English help pages with a Turkish H1; help category pages sharing one H1 and a generic
+first title; payment logos with only a height; server-side language selection by `Accept-Language` on the
+same URL (`lang.locale-adaptive`).
+
+### Round 7 — JavaScript rendering (`--render`)
+
+Same 7 sites, ≤ 25 pages each, 1 s delay, Chromium with its OS sandbox through the policy proxy (0 requests
+blocked, no page hit the hard deadline); 29–34 s per site, two batches in parallel.
+
+Main result, confirmed in a real browser: on 6 of 7 sites the Turkish URLs switch to English in a browser
+whose locale is en-US (Googlebot renders as en-US) — title, `lang` and canonical (→ `/en`) change, and Turkish
+blog posts on one site render **"Böyle bir sayfa yok"** (not found) instead of the article; with a tr-TR
+browser the same URL shows the article.
+
+| Defect in Searvex | Evidence | Fix |
+|---|---|---|
+| Soft 404 not detected for Turkish wording | "Böyle bir sayfa yok" was missing, and `sayfa bulunamadı` could never match: JavaScript's `\b` treats `ı` as a non-word character | Unicode-aware boundaries; Turkish and other-language patterns; tests with near-misses ("bulunamadık", "Sayfa yoklama") |
+| One root cause spread over many findings without a link | render mismatch, hreflang target errors, non-canonical sitemap URLs, soft 404s all followed from the client-side switch, and the consequence ranked above the cause | consequences name their likely root cause; the root cause is ranked first ("likely root cause of N other findings") |
+| Orphans reported on crawls stopped at the page limit | uncrawled pages may link to them | not reported on truncated crawls; the limitation says why |
+
+## Real-world validation round 8 — independent sites (2026-11-01)
+
+To check that Searvex is not tuned to one product family: 6 public sites of different kinds, ≤ 20 pages each,
+1.5 s per-host delay, 1 connection, robots.txt honoured — a multilingual browser vendor (www.mozilla.org), a
+government portal (www.gov.uk), a framework site (nextjs.org), WordPress.org News, Sphinx documentation
+(docs.python.org) and a Turkish public institution (tubitak.gov.tr). 13–111 s, ≤ 340 MB RSS per site.
+
+Findings checked against the live HTML and official documentation were real: nextjs.org has no robots.txt
+(404); mozilla.org's `/en-US/` does not link back to the `x-default` home; WordPress.org and GOV.UK list
+noindexed pages in their sitemaps (`noindex,follow` / `noindex, nofollow` confirmed); Sphinx's `/3/`
+canonicalises to `/3/index.html` while the sitemap lists `/3/`; GOV.UK attachment pages repeat the parent's
+title; Drupal pages on tubitak.gov.tr carry two `<title>` elements.
+
+| Defect in Searvex | Evidence | Fix | Effect |
+|---|---|---|---|
+| Valid 3-letter language codes reported as high-severity mistakes with "correct the code" | `ast`, `ach`, `ceb` have no ISO 639-1 code; Google supports only ISO 639-1 and ignores those alternates (documentation re-read 2026-11-01) — the site has nothing to correct | low severity with that explanation; 3-letter codes that have a 2-letter equivalent (`tur` → `tr`) stay high with the correction | mozilla.org 82 → 86, wordpress.org 86 → 93 |
+| A finding's severity depended on the order of its occurrences | first emission decided | the most severe occurrence wins | — |
+
+## Live CrUX validation (2026-11-01)
+
+Owner's Google Cloud API key restricted to the Chrome UX Report API, stored with `searvex crux auth` in the
+macOS Keychain.
+
+| Check | Result |
+|---|---|
+| `crux auth` (hidden input, test query before storing), `crux status` | ✅ |
+| 7 product-family origins | ✅ all "not in the CrUX dataset (insufficient real-user traffic)" → reported as not measured, nothing estimated |
+| 3 public origins (web.dev, www.wikipedia.org, developer.chrome.com), phone + desktop | ✅ p75 LCP / INP / CLS and collection period identical to the raw API JSON in all 6 cases (CLS arrives as a string) |
+| Audit integration | ✅ field data or "not measured" in the report; an invalid key gives an explained error and the audit still completes |
+| Secrets in output | ✅ 15 files scanned for the stored and a wrong key: 0 matches |
+| Comparison with PageSpeed Insights field data | ⏸ PSI's key-less shared quota was exhausted (HTTP 429); CrUX is PSI's field-data source |
+
+## Live Bing Webmaster validation (2026-11-01)
+
+Owner's Bing Webmaster account (8 verified sites of the permitted product family), key stored with
+`searvex bing auth` in the macOS Keychain.
+
+| Check | Result |
+|---|---|
+| `bing auth` (hidden input, key checked with GetUserSites before storing) | ✅ |
+| `bing status` / `bing sites` | ✅ 8 sites, all verified |
+| `bing report` on all 8 sites (90 days) | ✅ runs in 1–2 s each; **all values 0** — confirmed against the raw API: GetQueryStats and GetPageStats return no rows, GetRankAndTrafficStats returns 10 days (2026-10-20 – 10-29) with 0 clicks and 0 impressions for every site. The sites have no Bing impressions yet |
+| Wrong site (www vs apex, http vs https, a site of another account) | ✅ refused with "Did you mean …" or the account's site list |
+| Invalid key | ✅ "Bing rejected the API key (InvalidApiKey) …" (was a raw API error) |
+| Secrets in output | ✅ 12 commands, all output and run files scanned for the key (raw and URL-encoded): 0 matches |
+| Parsing of non-empty QueryStats / PageStats from the live API | ⏸ not verifiable until Bing has data for one of the sites; covered by recorded-shape tests |
+
+Defects found and fixed: totals were the sum of the top 25 pages ("not site totals") — they now come from
+the daily site series (GetRankAndTrafficStats); an empty Bing response produced bare zeros — it is now
+explained as "no impressions in this period" with next steps; unknown sites returned empty data that read
+as "no traffic" — `bing report` now requires a verified site of the account; the key could only be passed
+as an environment variable — `bing auth` stores it in the credential store.
+
+## Real-world validation round 6 — local repositories (2026-11-01)
+
+Five of the owner's local repositories, audited read-only in repository mode (`--out` outside the repository;
+`git status` and the file list before and after are identical). Types: a Next.js 16 personal site with a
+static export, a monorepo (static TR/EN site + Laravel 12 API/creator portal + Flutter app) behind a Caddy
+proxy, and three TypeScript CLI tools whose only HTML is test data. Project names and content are withheld;
+regression fixtures are anonymised reconstructions (`test/integration/repo-realworld.test.ts`).
+
+| Defect in Searvex | Evidence (verified against the source) | Fix | Effect |
+|---|---|---|---|
+| HTML in `fixtures/`, `tests/`, `bench/`, `examples/`, `evals/` audited as the website | CLI tools scored 73–95 with "missing title/viewport" on test fixtures | those folders are not site content; fragments without `<html>`/doctype and server template folders are not pages | 3 repos: 13–80 false findings → 0; score now **n/a (nothing to audit)** instead of 100 |
+| Static site in a workspace folder (`apps/site/public/{en,tr}/`) not found | 0 pages reported for a 16-file site with a sitemap | static detection in workspace folders and locale sub-folders; `services/*` searched | 0 → 14 pages audited |
+| `about.html` mapped to `/about.html` while canonical and sitemap use `/about` | every non-home page silently non-canonical → excluded from indexable checks | clean-URL mapping when the canonical or sitemap uses it | page checks run on all 14 pages |
+| Sitemap URLs without a file were ignored | `/en/heroes` linked from 7 pages, in the sitemap, no file | recorded as missing; dropped when another app in the repository routes it (here Laravel `routes/public.php`, proxied by Caddy); otherwise reported as heuristic | real gap would be shown; this case correctly not reported |
+| Laravel routes read from `routes/web.php` only | routes in `routes/public.php` (required from web.php) | all route files except api/console/channels | — |
+| `alt=""` hidden by Blade expressions (`=>`, `?->` end the tag in the regex) | 14 "image without alt" on decorative images with `alt=""` | template expressions blanked before tag matching | 14 → 4 → 0 false findings |
+| Admin-panel (Filament) views and PHP tests checked as public pages | uncrawlable-link findings in `tests/Feature/*.php` and Filament views | excluded | 4 → 0 |
+| Error pages (`404.html`, `_not-found/`) checked as pages | "noindex + canonical conflict", underscore URL on Next.js error pages | modelled with the status a host serves (404/500) | 3 + 1 false findings → 0 |
+| Next.js `<Image fill>` flagged for missing width/height | 23 images on 3 pages; `position:absolute` at 100% of a sized parent cannot shift layout | images sized by layout (fill, inline aspect-ratio) are exempt | 3 findings → 0 |
+| Organization markup requested on a personal site | homepage describes a `Person` | Person/ProfilePage homepages exempt (rule exception recorded) | 1 → 0 |
+| `noindex, noindex` in evidence | Googlebot and Bingbot directives concatenated | de-duplicated | — |
+
+Remaining findings were checked: the default Laravel welcome view without description/canonical and two short
+imprint pages are real; "canonical/description missing" on two creator-portal layouts is technically true but
+irrelevant, because those pages are behind a login — Searvex does not resolve auth middleware statically
+(documented limitation, low severity). Repository audits took 0.1–0.5 s and ≤ 135 MB RSS each.
+
 ## Benchmarks
 
 `npm run build && node scripts/benchmark.mjs <pages> <concurrency>` — synthetic site on localhost
@@ -157,6 +296,16 @@ was **synthetic**: Turkish headers and number formats, URLs taken from the real 
 | 20,000 | 8 | 17.0 s | 1,179 | 3.5 s | 562 MB |
 | 20,000 (v0.3.0: template-aware duplicates, hashed shingles) | 8 | 18.7 s | 1,069 | 3.8 s | 584 MB |
 | 7-site ecosystem, 40 pages each, real network, 1 s/host delay | parallel | 82 s total | — | — | — |
+| **v1.0.0 RC (2026-11-01)**, 500 | 8 | 0.7 s | 686 | 0.2 s | 127 MB |
+| v1.0.0 RC, 5,000 (best of 3) | 8 | 4.6 s | 1,096 | 1.0 s | 259 MB |
+| v1.0.0 RC, 20,000 | 8 | 32.1 s | 623 | 7.1 s | 614 MB |
+| v1.0.0 RC, 50,000 | 8 | 83.1 s | 602 | 21.6 s | 1,111 MB |
+
+The v1.0.0 RC rows were measured on a loaded machine (load average 5–7); throughput varied 2–4× between
+runs. Under identical conditions v0.7.0 and the RC were equal (5,000 pages: 1,134 vs 1,096 pages/s, 1.03 vs
+1.02 s analysis, 261 vs 259 MB). Memory is the reliable figure: ~22 KB per page, 1.1 GB at 50,000 pages.
+Supported scale for v1.0.0: 50,000 pages per run in memory; larger sites with `--include` sections or
+`--resume`.
 
 Real sites are bounded by politeness (per-host delay, Crawl-delay), not by Searvex throughput.
 Memory grows ~25 KB/page (stored text capped at 20,000 chars/page).

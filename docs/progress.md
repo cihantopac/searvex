@@ -2,7 +2,16 @@
 
 Use this file to resume work after an interrupted session. Newest entries first.
 
-## Current state — 2026-10-30
+## Current state — 2026-11-01
+
+- Version **1.0.0 release candidate** on branch `release/v1.0-readiness` (PR #4). All blocking criteria in
+  [release-checklist.md](release-checklist.md) are ✅; readiness report at its end. Waiting for the owner to
+  merge and to approve `npm publish` and the GitHub release. Bing is experimental; the plugin directory icon
+  waits for the owner's brand decision.
+- Live integrations configured on the owner's machine (macOS Keychain): Search Console OAuth, Bing API key,
+  CrUX API key. Private exports and captures in `.searvex/` (git-ignored).
+
+## State — 2026-10-30
 
 - Version 0.7.0 (branch `feat/v0.7-data-integrity`, PR pending owner merge): property-aware search-data
   joins, Search Console CSV/ZIP import, `connect` onboarding (Google ile bağlan / CSV içe aktar / Şimdilik
@@ -31,6 +40,75 @@ Use this file to resume work after an interrupted session. Newest entries first.
 4. After changes to `src/`, run `npm run bundle` so the plugin bundle stays in sync (CI checks this).
 
 ## Session log
+
+### 2026-11-01 — independent-site round 8
+- 6 public sites (multilingual, government, framework, WordPress, Sphinx docs, Turkish institution). Most
+  findings verified real. Fixed: 3-letter hreflang codes without an ISO 639-1 equivalent are low severity
+  with an honest explanation; aggregated severity no longer depends on emission order.
+
+### 2026-11-01 — live CrUX
+- `crux auth/status/logout` (hidden key input, credential store, actionable errors). Live: the product-family
+  origins have no CrUX data (reported as not measured); 3 public origins parsed identically to the raw API.
+  CrUX is now **supported**; only Bing stays experimental.
+
+### 2026-11-01 — product-family round 7 (render)
+- `--render` on the 7 sites: client-side switch to English for en-US browsers on 6 sites (Turkish blog posts
+  render "not found" on one), confirmed in a real browser. Fixed: Turkish soft-404 wording (Unicode
+  boundaries), root-cause linking in "Fix first", no orphans on truncated crawls.
+
+### 2026-11-01 — product-family round 7 (raw)
+- 7 permitted sites re-audited; 4 Searvex defects fixed (orphans through redirects, cross-language and legal
+  cannibalisation, aspect-ratio utility classes), regression fixtures in `website-realworld.test.ts`; re-run
+  compared before/after. Real site defects listed in quality.md for the owner. `--render` round still open.
+
+### 2026-11-01 — live Bing Webmaster API
+- `bing auth/status/sites/logout` added (hidden key input, credential store); reports require a verified
+  site; totals from the daily site series; empty data explained; actionable InvalidApiKey/quota errors.
+- Live on 8 verified sites: everything works, but Bing has 0 impressions for all of them so far, so the
+  parsing of real query/page rows is not verified live. Bing stays **experimental**; re-run
+  `bing report` on one of the sites in a few weeks and compare with Bing Webmaster Tools' UI.
+
+### 2026-11-01 — live Search Console API
+- Owner authorised with their own Desktop client; credential in the macOS Keychain. Verified live (quality.md):
+  refresh, property list, report, pagination, CSV parity, audit join, error messages, 0 secrets in output.
+- Fixed: API totals now include anonymised queries (daily series); keychain entries isolated per config dir
+  (a test run had deleted the real credential — owner re-authorised); `gsc auth` opens the browser.
+- Not run live: `gsc logout` revocation (owner kept the grant). Search Console API is now **supported**;
+  Bing and CrUX remain experimental.
+
+### 2026-11-01 — first real Search Console export (Turkish UI)
+- Real domain-property export ("Son 3 ay", 7 CSVs) imported end to end; totals cross-checked against the
+  devices and countries tables (identical), row counts against Python's csv module (identical).
+- Real format differs from the earlier guesses ("Pozisyon", "En alakalı sayfalar", dot decimals, dates in
+  `Grafik.csv`); all were already recognised. Fixtures now follow the real structure.
+- Fixed (data integrity): pages of several subdomains were attributed to the most common host; such an export
+  can only come from a domain property and is now scoped as `sc-domain:`. An explicit `--property` that does
+  not contain every page of the export is refused (a URL-prefix property never exports other hosts).
+- English-UI export of the same property (`Chart.csv`, `Top queries`, `Filter,Value`): imported without
+  warnings; property, period, totals, top queries/pages, striking distance and intent mix identical to the
+  Turkish export. CSV import is now **supported**; GSC API, Bing and CrUX stay experimental.
+- The raw exports stay in `.searvex/fixtures-private/` (git-ignored).
+
+### 2026-11-01 — local repository round
+- Audited 5 local repositories read-only (quality.md round 6); fixed 11 repository-mode defects (non-site
+  folders, workspace static sites, clean URLs, missing sitemap URLs vs routes of other apps, all Laravel route
+  files, Blade expressions in tag regexes, admin views, error pages, Next.js fill images, personal-site
+  Organization exception, n/a score when there is nothing to audit). The product-family repositories are on
+  the owner's Windows PC; audit them there or copy them here.
+- Live integrations: still waiting for the owner's accounts (owner guide).
+
+### 2026-10-31 — v1.0.0 readiness round (branch `release/v1.0-readiness`)
+- Release checklist with evidence per criterion: [release-checklist.md](release-checklist.md).
+- Fixed (P0): `monitor --import` accepted exports of any website (and queries-only exports with no way to
+  attribute them); `--site-url`/`SEARVEX_GSC_SITE` and `--baseline` were not checked against the monitored
+  site. Shared `propertyForExport` / `assertAuditInProperty` now serve `gsc import` and `monitor`.
+- Fixed (P0): a page whose scripts never yield hung `--render` indefinitely (reproduced: > 40 s, never
+  returned). Hard per-page deadline, bounded context/browser close, browser restart.
+- Fixed (P0): optimizer wrote its manifest only after all files (a crash left untracked edits); failed
+  verification force-overwrote files edited during verification; CRLF files got LF insertions; file modes
+  were reset. Journal-first apply, `applying` state, recovery via `rollback`.
+- Verified without change: SSRF numeric/IPv6/NAT64 encodings, connection-time DNS validation against
+  rebinding names (`*.nip.io` → 0 requests reached the local server).
 
 ### 2026-10-30 — v0.7.0 data integrity round
 - Assessment found: `--audit latest` ignored the property (could join another site's audit); CSV import only
@@ -98,8 +176,7 @@ Use this file to resume work after an interrupted session. Newest entries first.
 | 9 | Plugin icon missing (directory warning) | listing only | add 512 px PNG before directory submission |
 | 10 | Each user needs their own Google Cloud Desktop OAuth client | setup friction | CSV import as the no-account path; hosted OAuth only with a future SaaS (owner decision) |
 | 16 | Render mode residual risk: browser zero-days; no OS sandbox in some containers; CPU-heavy scripts only bounded by the page timeout | renderer compromise on hostile sites | consider a separate low-privilege process/container option; documented in security.md |
-| 17 | `monitor --import` does not check that the export belongs to the monitored site | wrong performance section in monitor output | reuse property checks |
-| 18 | Turkish/other-language Search Console header wording verified only against published UI terms | localised imports may need synonyms | confirm with the owner's real exports |
+| 18 | Search Console exports in UI languages other than Turkish and English not checked against a real download | those imports may need synonyms | real exports when users report them |
 | 11 | Entity/answerability signals are heuristics | could be over-read | keep `info`, documented |
 | 13 | Language detector covers 8 languages, ~30-word minimum | other locales not judged | extend word lists / n-gram model |
 | 14 | Cannibalisation uses title/H1 terms only | misses body-level intent overlap | combine with GSC query data |

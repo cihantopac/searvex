@@ -6,7 +6,7 @@ import { importGscFiles, parseGscTable, parseLocaleNumber } from '../../src/inte
 import { readZip } from '../../src/integrations/zip.js';
 import { decodeText, detectDelimiter } from '../../src/integrations/csv.js';
 import { analyzeSearchPerformance } from '../../src/analyze/search-performance.js';
-import { parseProperty } from '../../src/integrations/property.js';
+import { parseProperty, propertyForExport } from '../../src/integrations/property.js';
 import { makeZip } from '../helpers/search-data.js';
 
 // Shapes of a Search Console "Download CSV" export in the English UI.
@@ -126,5 +126,74 @@ describe('analysis of a CSV import (separate tables)', () => {
   it('joins the audit by page, ignoring audit pages outside the property', () => {
     expect(r.findingsOnTrafficPages[0]).toMatchObject({ ruleId: 'meta.description-missing', clicks: 13 });
     expect(r.noImpressions).toEqual(['https://www.site.example/new']);
+  });
+});
+
+/**
+ * Exact structure of a real Search Console export downloaded with the Turkish UI (2026-11-01, domain property,
+ * "Son 3 ay"): file names, headers, number format (dot decimals, "3.11%"), ISO dates, empty appearance table,
+ * filters "Arama türü" / "Tarih". Values are synthetic; the real file stays outside the repository.
+ */
+describe('real Turkish-UI export structure', () => {
+  const dates = Array.from({ length: 92 }, (_, i) => new Date(Date.UTC(2026, 6, 30 + i)).toISOString().slice(0, 10));
+  const zip = makeZip([
+    { name: 'Grafik.csv', text: `Tarih,Tıklamalar,Gösterimler,TO,Pozisyon\n${dates.map((d) => `${d},6,193,3.11%,11.4`).join('\n')}\n` },
+    { name: 'Sorgular.csv', text: 'En çok yapılan sorgular,Tıklamalar,Gösterimler,TO,Pozisyon\nörnek yazılım,179,322,55.59%,3.33\n"crm, fiyat",51,236,21.61%,3.94\nörnek uygulama,49,1019,4.81%,8.44\n' },
+    { name: 'Sayfa sayısı.csv', text: 'En alakalı sayfalar,Tıklamalar,Gösterimler,TO,Pozisyon\nhttps://example.com.tr/,201,744,27.02%,6.02\nhttps://example.com.tr/urunler/,90,1041,8.65%,7.6\nhttps://www.example.com.tr/,1,20,5%,9\nhttps://crm.example.com.tr/,1,10,10%,4\n' },
+    { name: 'Ülkeler.csv', text: 'Ülke,Tıklamalar,Gösterimler,TO,Pozisyon\nTürkiye,470,11793,3.99%,10.55\n' },
+    { name: 'Cihazlar.csv', text: 'Cihaz,Tıklamalar,Gösterimler,TO,Pozisyon\nMasaüstü,300,5416,5.54%,13.44\nMobil,211,8319,2.54%,9.02\nTablet,1,83,1.2%,8.61\n' },
+    { name: 'Arama görünümü.csv', text: 'Arama Görünümü,Tıklamalar,Gösterimler,TO,Pozisyon\n' },
+    { name: 'Filtreler.csv', text: 'Filtre uygula,Değer\nArama türü,Web (metin tabanlı)\nTarih,Son 3 ay\n' },
+  ]);
+
+  it('reads every table, the period and the filters without warnings', () => {
+    const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-tr-')), 'export.zip');
+    fs.writeFileSync(f, zip);
+    const exp = importGscFiles([f]);
+    expect(Object.keys(exp.tables).sort()).toEqual(['appearance', 'countries', 'dates', 'devices', 'pages', 'queries']);
+    expect(exp.tables.appearance).toEqual([]);
+    expect(exp.tables.queries!.map((r) => r.key)).toEqual(['örnek yazılım', 'crm, fiyat', 'örnek uygulama']);
+    expect(exp.tables.queries![0]).toMatchObject({ clicks: 179, impressions: 322, position: 3.33 });
+    expect(exp.tables.devices!.reduce((a, r) => a + r.clicks, 0)).toBe(512);
+    expect(exp.period).toEqual({ startDate: '2026-07-30', endDate: '2026-10-29', days: 92 });
+    expect(exp.searchType).toBe('Web (metin tabanlı)');
+    expect(exp.dateLabel).toBe('Son 3 ay');
+    expect(exp.warnings).toEqual([]);
+    // Pages of several subdomains: the export belongs to the domain property.
+    expect(propertyForExport(undefined, exp.tables.pages!.map((p) => p.key))!.raw).toBe('sc-domain:example.com.tr');
+    expect(() => propertyForExport('https://example.com.tr/', exp.tables.pages!.map((p) => p.key))).toThrow(/2 of 4 pages .* outside .* sc-domain:example\.com\.tr/);
+  });
+});
+
+/** Same real export downloaded with the English UI (2026-11-01): must give exactly the Turkish-UI result. */
+describe('real English-UI export structure', () => {
+  const rows = (dims: string[]) => dims.map((d, i) => `${d},${10 - i},${100 + i * 7},${((10 - i) / (100 + i * 7) * 100).toFixed(2)}%,${(3 + i * 1.5).toFixed(2)}`).join('\n');
+  const dates = ['2026-07-30', '2026-07-31', '2026-08-01'];
+  const tables = (ui: 'tr' | 'en') => {
+    const h = ui === 'tr' ? ['Tıklamalar', 'Gösterimler', 'TO', 'Pozisyon'] : ['Clicks', 'Impressions', 'CTR', 'Position'];
+    const t = (name: string, key: string, body: string) => ({ name, text: `${key},${h.join(',')}\n${body}\n` });
+    return makeZip(
+      ui === 'tr'
+        ? [t('Grafik.csv', 'Tarih', rows(dates)), t('Sorgular.csv', 'En çok yapılan sorgular', rows(['a', 'b c'])), t('Sayfa sayısı.csv', 'En alakalı sayfalar', rows(['https://example.org/', 'https://example.org/x'])), t('Ülkeler.csv', 'Ülke', rows(['Türkiye'])), t('Cihazlar.csv', 'Cihaz', rows(['Masaüstü', 'Mobil'])), { name: 'Arama görünümü.csv', text: 'Arama Görünümü,Tıklamalar,Gösterimler,TO,Pozisyon\n' }, { name: 'Filtreler.csv', text: 'Filtre uygula,Değer\nArama türü,Web (metin tabanlı)\nTarih,Son 3 ay\n' }]
+        : [t('Chart.csv', 'Date', rows(dates)), t('Queries.csv', 'Top queries', rows(['a', 'b c'])), t('Pages.csv', 'Top pages', rows(['https://example.org/', 'https://example.org/x'])), t('Countries.csv', 'Country', rows(['Turkey'])), t('Devices.csv', 'Device', rows(['Desktop', 'Mobile'])), { name: 'Search appearance.csv', text: 'Search Appearance,Clicks,Impressions,CTR,Position\n' }, { name: 'Filters.csv', text: 'Filter,Value\nSearch type,Web (text-based)\nDate,Last 3 months\n' }],
+    );
+  };
+  const load = (ui: 'tr' | 'en') => {
+    const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), `searvex-${ui}-`)), 'export.zip');
+    fs.writeFileSync(f, tables(ui));
+    return importGscFiles([f]);
+  };
+
+  it('reads the English export and matches the Turkish one table for table', () => {
+    const en = load('en');
+    const tr = load('tr');
+    expect(en.warnings).toEqual([]);
+    expect(en.searchType).toBe('Web (text-based)');
+    expect(en.dateLabel).toBe('Last 3 months');
+    expect(en.period).toEqual(tr.period);
+    for (const k of ['queries', 'pages', 'dates'] as const) expect(en.tables[k], k).toEqual(tr.tables[k]);
+    // Country and device names are localised; their figures are not.
+    const figures = (xs: Array<{ clicks: number; impressions: number; position: number }>) => xs.map((r) => [r.clicks, r.impressions, r.position]);
+    for (const k of ['countries', 'devices'] as const) expect(figures(en.tables[k]!), k).toEqual(figures(tr.tables[k]!));
   });
 });

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { FindingSink } from '../rules/engine.js';
 import { factsOf, type SiteContext } from './context.js';
+import { URL_RULES } from './inventory.js';
 
 /**
  * Content intelligence: term extraction, topic clusters, duplicates and cannibalisation.
@@ -239,7 +240,11 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
     sectionTermDf.set(g, m);
     for (const t of terms) m.set(t, (m.get(t) ?? 0) + 1);
   }
+  // Legal documents (each product's privacy policy, refund terms …) share titles by design and do not
+  // compete for searches; pages in different languages do not compete with each other either.
+  const legal = URL_RULES.find(([, t]) => t === 'legal')![0];
   for (const { p } of pages) {
+    if (legal.test(new URL(p.url).pathname)) continue;
     const terms = titleTerms.get(p.url)!;
     const section = groupOf(p.url);
     const gSize = sectionPages.get(section) ?? 0;
@@ -269,6 +274,7 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
         const key = a < b ? a + '|' + b : b + '|' + a;
         if (checked.has(key)) continue;
         checked.add(key);
+        if (langOf.get(a) !== langOf.get(b)) continue;
         const sa = specificTerms.get(a)!, sb = specificTerms.get(b)!;
         let shared = 0;
         for (const t of sa) if (sb.has(t)) shared++;
@@ -326,7 +332,7 @@ export function findLinkOpportunities(ctx: SiteContext, vectors: Map<string, Map
   const outlinks = new Map<string, Set<string>>();
   for (const [target, sources] of ctx.inlinks) for (const s of sources) (outlinks.get(s) ?? outlinks.set(s, new Set()).get(s)!).add(target);
   const links = (a: string, b: string) => outlinks.get(a)?.has(b) || outlinks.get(b)?.has(a);
-  const inl = (u: string) => ctx.inlinks.get(u)?.size ?? 0;
+  const inl = (u: string) => ctx.reachIn.get(u)?.size ?? 0;
   const seen = new Set<string>();
   const out: NonNullable<ContentReport['linkOpportunities']> = [];
   for (const urls of index.values()) {

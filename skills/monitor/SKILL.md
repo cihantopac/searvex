@@ -8,8 +8,8 @@ Run `node "${CLAUDE_PLUGIN_ROOT}/dist/searvex.mjs" monitor $ARGUMENTS` and read 
 
 If the user has Search Console access, run `node "${CLAUDE_PLUGIN_ROOT}/dist/searvex.mjs" gsc report <property> --audit latest`
 (after a one-time `gsc auth --client <their Desktop OAuth client JSON>`, which the user runs in their own terminal),
-or `gsc import <export.zip> --audit latest` for a Performance CSV export; for Bing use `bing report <siteUrl>` with
-SEARVEX_BING_API_KEY. These give verified queries, striking-distance opportunities, low-CTR pages and queries
+or `gsc import <export.zip> --audit latest` for a Performance CSV export; for Bing use `bing report <siteUrl>` after
+the user stored a key with `searvex bing auth` in their own terminal (never ask for the key in chat). These give verified queries, striking-distance opportunities, low-CTR pages and queries
 shared by several pages — present them as verified data, separately from heuristics.
 
 Report: score change, new and worsened issues (regressions first), resolved issues, and — only if real

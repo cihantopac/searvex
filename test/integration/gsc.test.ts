@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { accessToken, authorize, GSC_SCOPE, loadClientFile, readCredentials, saveCredential } from '../../src/integrations/google-oauth.js';
+import { accessToken, authorize, deleteCredential, GSC_SCOPE, loadClientFile, getCredential, saveCredential } from '../../src/integrations/google-oauth.js';
 import { makeZip, writeAudit } from '../helpers/search-data.js';
 import { querySearchConsole } from '../../src/integrations/gsc.js';
 import { analyzeSearchPerformance, type QueryPage } from '../../src/analyze/search-performance.js';
@@ -89,7 +89,7 @@ describe('Google OAuth (installed app, loopback + PKCE)', () => {
     const cred = await authorize({ clientId: 'cid.apps.googleusercontent.com', clientSecret: 'not-secret-for-desktop' }, GSC_SCOPE, browser());
     expect(cred.refreshToken).toBe('refresh-123');
     const file = saveCredential('gsc', cred);
-    expect(readCredentials()['gsc']!.refreshToken).toBe('refresh-123');
+    expect(getCredential('gsc')!.refreshToken).toBe('refresh-123');
     if (process.platform !== 'win32') expect(fs.statSync(file).mode & 0o777).toBe(0o600);
     expect(await accessToken(cred)).toBe('access-xyz');
   });
@@ -299,5 +299,57 @@ describe('queries shared by several pages are classified, not all called canniba
     expect(byQuery['crm plans']).toMatchObject({ pattern: 'mixed-intent', needsReview: true });
     expect(byQuery['crm sync']).toMatchObject({ pattern: 'possible-competition', needsReview: true });
     expect(r.multiPageQueries.slice(0, 2).every((q) => q.needsReview)).toBe(true);
+  });
+});
+
+/** Every byte Searvex prints or writes into a workspace is scanned for the credential values. */
+describe('credentials never reach output, logs or run files', () => {
+  const SECRETS = ['refresh-123', 'access-xyz', 'client-secret-do-not-print'];
+  const files = (dir: string): string[] =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(path.join(dir, e.name)) : [path.join(dir, e.name)]));
+
+  it('across sites, report (text and --json), status and a failed refresh', async () => {
+    const printed: string[] = [];
+    const sink = (...a: unknown[]) => void printed.push(a.map(String).join(' '));
+    const spies = [vi.spyOn(console, 'log').mockImplementation(sink), vi.spyOn(console, 'error').mockImplementation(sink), vi.spyOn(process.stdout, 'write').mockImplementation((c) => (sink(c), true)), vi.spyOn(process.stderr, 'write').mockImplementation((c) => (sink(c), true))];
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-leak-'));
+    try {
+      saveCredential('gsc', { clientId: 'cid', clientSecret: SECRETS[2], refreshToken: 'refresh-123', scope: GSC_SCOPE, createdAt: '2026-10-30T00:00:00Z' });
+      writeAudit(ws, 'run-20260101-000000-aaaaaa', 'https://site.example/', ['https://site.example/p0']);
+      expect(await main(['gsc', 'sites'])).toBe(0);
+      expect(await main(['gsc', 'status'])).toBe(0);
+      expect(await main(['gsc', 'report', 'sc-domain:site.example', '--audit', 'latest', '--out', ws])).toBe(0);
+      expect(await main(['gsc', 'report', 'sc-domain:site.example', '--out', ws, '--json'])).toBe(0);
+      expect(await main(['connect', 'https://site.example/', '--json'])).toBe(0);
+      // A refresh token Google no longer accepts: the error explains, without echoing the token.
+      saveCredential('gsc', { clientId: 'cid', clientSecret: SECRETS[2], refreshToken: 'refresh-123-revoked', scope: GSC_SCOPE, createdAt: '2026-10-30T00:00:00Z' });
+      expect(await main(['gsc', 'sites'])).not.toBe(0);
+    } finally {
+      spies.forEach((s) => s.mockRestore());
+      deleteCredential('gsc');
+    }
+    const written = files(path.join(ws, '.searvex')).map((f) => fs.readFileSync(f, 'utf8'));
+    fs.rmSync(ws, { recursive: true, force: true });
+    expect(written.length).toBeGreaterThan(3);
+    for (const secret of SECRETS) {
+      expect(printed.filter((p) => p.includes(secret)), `printed ${secret}`).toEqual([]);
+      expect(written.filter((w) => w.includes(secret)).length, `wrote ${secret}`).toBe(0);
+    }
+  });
+});
+
+describe('gsc auth opens the browser', () => {
+  it('uses the platform opener without a shell and refuses anything but an https URL', async () => {
+    const { openBrowser } = await import('../../src/commands/gsc.js');
+    const calls: string[][] = [];
+    const run = (cmd: string, args: string[]) => (calls.push([cmd, ...args]), true);
+    const url = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=x&scope=y&state=z';
+    expect(openBrowser(url, 'darwin', run)).toBe(true);
+    expect(openBrowser(url, 'win32', run)).toBe(true);
+    expect(openBrowser(url, 'linux', run)).toBe(true);
+    expect(calls).toEqual([['open', url], ['rundll32', 'url.dll,FileProtocolHandler', url], ['xdg-open', url]]);
+    expect(openBrowser('file:///etc/passwd', 'darwin', run)).toBe(false);
+    expect(openBrowser('https://x.example/"; rm -rf ~', 'linux', run)).toBe(false);
+    expect(calls).toHaveLength(3);
   });
 });

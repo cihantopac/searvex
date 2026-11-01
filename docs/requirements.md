@@ -15,12 +15,12 @@ tests plus, where noted, real-world validation ([quality.md](quality.md)).
 
 | Requirement | Status | Notes |
 |---|---|---|
-| Official source URL + check date per rule | ✅ | 84 rules; validator enforces allowlisted official domains |
+| Official source URL + check date per rule | ✅ | 90 rules; validator enforces allowlisted official domains |
 | Engine scope (Google/Bing/Yandex/AI) | ✅ | |
 | Description, applicability, fix, verification, exceptions | ✅ | |
 | Versioned, updatable, conflict detection | ✅ | `conflictsWith`, staleness warnings (>365 days) |
 | No myths as rules | ✅ | tests guard key myths |
-| Automatic source re-verification (fetch & diff) | ⬜ | manual process today ([knowledge-base.md](knowledge-base.md)) |
+| Automatic source re-verification (fetch & diff) | ✅ | `searvex rules check-sources` with snapshots (status, final URL, "last updated", content hash, bot-challenge detection) + weekly workflow; 64 sources re-checked 2026-11-01 |
 
 ## Analysis engines
 
@@ -32,12 +32,12 @@ tests plus, where noted, real-world validation ([quality.md](quality.md)).
 | Structured data & rich-result eligibility | ✅ | required properties transcribed from Google docs; retired types flagged |
 | Core Web Vitals | 🟡 | real field data via CrUX API key; no lab (Lighthouse) integration |
 | Mobile, accessibility | 🟡 | viewport, lang, alt, link names; no full a11y audit |
-| Pagination, faceted navigation, crawl budget | 🟡 | session/tracking params, depth; no facet detection yet |
+| Pagination, faceted navigation, crawl budget | 🟡 | session/tracking params, depth, parameter-explosion (facet) detection, paginated canonical-to-first; no log-file crawl-budget analysis |
 | Market & competitor intelligence | 🟡 | competitor crawl, topic/page-type/schema gaps; brand-family ecosystem analysis; discovery via agent web search; no SERP/volume data |
 | Keyword & content intelligence | 🟡 | TF-IDF terms, clusters, cannibalisation, near-duplicates; briefs by agent |
 | GEO/AEO | ✅ | crawler purpose matrix, snippet controls, entity consistency, clarity heuristic, honest citation status |
 | Optimization engine | ✅ | deterministic fixes for 9 rule types, tasks for judgement calls, dry-run/verify/rollback |
-| Analytics & monitoring | 🟡 | run diffs, regressions, GSC API (token) + CSV import; Bing/Yandex/GA4 APIs ⬜ |
+| Analytics & monitoring | 🟡 | run diffs, regressions, Search Console API + CSV import (property-checked), CrUX field data (supported); Bing Webmaster API (experimental); Yandex, GA4 not implemented |
 
 ## Platform
 
@@ -45,7 +45,7 @@ tests plus, where noted, real-world validation ([quality.md](quality.md)).
 |---|---|
 | Windows/macOS/Linux | ✅ CI green on all three × Node 20/22/24 |
 | No paid API or server required | ✅ |
-| Large sites: queue, cache, checkpoint, resume | ✅ (in-memory analysis tested to 20k pages) |
+| Large sites: queue, cache, checkpoint, resume | ✅ (in-memory analysis measured to 50k pages, 1.1 GB) |
 | JSON, Markdown, interactive HTML reports (+SARIF) | ✅ |
 | Extensible framework adapters | ✅ (per-app scanners in `src/repo/scan.ts`) |
 | Claude Code plugin + standalone CLI | ✅ |
@@ -54,7 +54,7 @@ tests plus, where noted, real-world validation ([quality.md](quality.md)).
 
 | Requirement | Status |
 |---|---|
-| SSRF, DNS rebinding, redirects to private networks | ✅ (render mode: residual rebinding window, documented) |
+| SSRF, DNS rebinding, redirects to private networks | ✅ (render mode goes through the policy proxy with connection-time DNS checks) |
 | Symlinks, path traversal, secret files | ✅ |
 | Prompt injection from crawled content | ✅ guidance in skills; content never treated as instructions; HTML report CSP |
 | Malicious HTML / XXE / entity expansion | ✅ static parsing, entity processing disabled |

@@ -38,6 +38,13 @@ export interface Scores {
   overall: number;
   byCategory: Partial<Record<Category, number>>;
   method: string;
+  /** Set when there was nothing to audit (e.g. a repository without any website); `overall` is then meaningless. */
+  notApplicable?: string;
+}
+
+/** "87/100", or "n/a" when nothing could be audited. */
+export function scoreLabel(s: Scores): string {
+  return s.notApplicable ? 'n/a (nothing to audit)' : `${s.overall}/100`;
 }
 
 const WEIGHT: Record<Severity, number> = { critical: 25, high: 10, medium: 4, low: 1.5, info: 0 };
@@ -148,7 +155,7 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
         if (failing.length) sink.emit('perf.cwv-poor', { url: result.origin, observed: `${m.formFactor}: ${failing.join(', ')} (CrUX p75, ${m.collectionPeriod?.first ?? ''}–${m.collectionPeriod?.last ?? ''})` });
       }
     } else sink.emit('perf.cwv-unmeasured', { observed: fieldData.message });
-  } else sink.emit('perf.cwv-unmeasured', { observed: 'No CrUX API key configured (SEARVEX_CRUX_API_KEY)' });
+  } else sink.emit('perf.cwv-unmeasured', { observed: 'No CrUX API key configured (searvex crux auth, or SEARVEX_CRUX_API_KEY)' });
   const inventory = buildInventory(ctx);
   const findings = sink.findings();
   prioritise(findings, (id) => sink.affected(id), ctx);
@@ -156,7 +163,7 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
     'Website mode sees only publicly reachable pages; it has no access to real traffic, rankings, Search Console or analytics data unless an integration is configured.',
     'Response times are single-location lab samples, not Core Web Vitals field data.',
   ];
-  if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (orphans, duplicates, hreflang return links) are based on the crawled subset.`);
+  if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
   if (!opts.checkExternal) limitations.push('Outbound links were not checked (use --check-external).');
   if (!result.pages.some((p) => p.rendered)) limitations.push('JavaScript was not executed (run with --render to compare rendered DOM); client-rendered content is only detected heuristically.');
   return {

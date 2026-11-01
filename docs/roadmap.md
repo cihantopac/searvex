@@ -1,33 +1,34 @@
-# Development plan
+# Roadmap
 
 Development loop for every module: Research → Design → Implement → Test → Audit → Find gaps → Fix →
 Retest → Benchmark → Improve. Results are recorded in [quality.md](quality.md) and [progress.md](progress.md).
 
-## Phase 1 — Foundation (done, v0.1.0)
+## Done
 
-Safe fetcher and crawler · sourced rule base with validator · technical/structured-data/GEO/content/
-inventory analyzers · reports (MD/HTML/JSON/SARIF) · repository mode with 7 framework families and
-monorepos · transactional optimizer · Claude Code plugin · real-site and real-repo validation · CI.
+- **v0.1–v0.3 — Foundation:** safe fetcher and crawler, sourced rule base with validator, technical /
+  structured-data / GEO / content / inventory analyzers, reports (Markdown, HTML, JSON, SARIF), repository mode
+  with framework adapters and monorepos, transactional optimizer, Claude Code plugin, CI on three OSes.
+- **v0.4–v0.7 — Depth & data:** official-source revalidation, impact-based prioritisation and URL templates,
+  facet / pagination detection, internal-link opportunities, inferred search intent, AST-based JS/TS checks,
+  Search Console (OAuth and CSV), Bing Webmaster, render isolation through a policy proxy.
+- **v1.0 — Release readiness** ([release-checklist.md](release-checklist.md)): property isolation in every
+  search-data path, renderer hard deadline, journal-first optimizer, OS keychain credential store, secure key
+  storage for Bing and CrUX, live validation of Search Console and CrUX, real-world rounds on the permitted
+  product family, independent sites and local repositories, reproducible package, licence notices.
 
-## Phase 2 — Depth & data (next)
+## Next (after v1.0)
 
-Ordered by value / dependency:
+Ordered by value; none is promised for a date.
 
-1. **Cross-platform verification:** run the CI matrix (Windows/Linux) and fix path/line-ending issues.
-2. **Rule re-verification tooling:** `searvex rules check-sources` that fetches sources and flags changes;
-   re-verify `excerpt`/`url-resolved` sources.
-3. **Rendering in CI:** Playwright job; raw-vs-rendered fixtures (SPA, streaming metadata).
-4. **Faceted navigation & pagination detection;** crawl budget heuristics for large e-commerce.
-5. **Lighthouse integration (optional dependency)** for lab CWV on sampled templates.
-6. **Search data integrations:** Bing Webmaster API (AI Performance when an API exists), Yandex Webmaster,
-   GA4 Data API; OAuth device-flow helper (read-only scopes).
-7. **More framework adapters & fixes:** SvelteKit, Remix, Nuxt fixes, WordPress block themes, Hugo; Next.js
-   `metadataBase`/canonical codemods using the TypeScript AST instead of regexes.
-8. **Template clustering:** group pages by DOM structure to report issues per template, not per URL.
-9. **Streaming analysis** for >50k-page sites (disk-backed indexes).
-10. **HTML report UX:** charts, per-template views, diff view for monitor.
-
-## Phase 3 — Ecosystem
-
-GitHub Action, MCP server exposing the engine, community rule packs (with the same sourcing rules),
-localisation of report text, plugin directory submission (needs a 512 px icon).
+1. **Bing live data check** once the owner's sites have Bing impressions (moves Bing from experimental to
+   supported).
+2. **Locale-adaptive root-cause view** in the HTML report: group consequences under their cause, not only in
+   "Fix first".
+3. **Login-protected routes in repository mode** (auth middleware in Laravel / Next.js) so metadata findings
+   on private layouts are suppressed.
+4. **Astro, Vue SFC and Blade parsing** with real parsers instead of regexes.
+5. **Disk-backed analysis** for sites above 50,000 pages.
+6. **Optional integrations:** PageSpeed Insights / Lighthouse lab data, GA4 Data API, Yandex Webmaster —
+   each only with live validation before it is advertised.
+7. **Ecosystem:** GitHub Action with SARIF upload, MCP server exposing the engine, plugin directory
+   submission (needs the final brand icon), community rule packs under the same sourcing rules.

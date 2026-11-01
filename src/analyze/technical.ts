@@ -19,6 +19,24 @@ export function isValidHreflang(code: string): boolean {
   return true;
 }
 
+/** Common ISO 639-2/3 codes that do have an ISO 639-1 equivalent (so the value can be corrected). */
+const ISO639_2_TO_1: Record<string, string> = {
+  eng: 'en', tur: 'tr', deu: 'de', ger: 'de', fra: 'fr', fre: 'fr', spa: 'es', ita: 'it', por: 'pt', nld: 'nl', dut: 'nl', rus: 'ru',
+  jpn: 'ja', zho: 'zh', chi: 'zh', kor: 'ko', ara: 'ar', pol: 'pl', swe: 'sv', dan: 'da', fin: 'fi', nor: 'no', ell: 'el', gre: 'el', heb: 'he',
+};
+
+/**
+ * Explain an hreflang value Google does not support. A 3-letter language code is valid BCP 47 but outside
+ * ISO 639-1: when the language has a 2-letter code it is a real mistake; when it has none (Asturian "ast",
+ * Cebuano "ceb"), Google simply ignores that one alternate and the site has nothing to correct.
+ */
+export function hreflangProblem(code: string): { observed: string; severity?: 'low' } {
+  const three = /^([a-z]{3})(?:-[a-z0-9]{2,8})*$/i.exec(code)?.[1]?.toLowerCase();
+  if (three && ISO639_2_TO_1[three]) return { observed: `${code} — use the ISO 639-1 code "${ISO639_2_TO_1[three]}"` };
+  if (three) return { observed: `${code} — valid BCP 47, but Google supports only ISO 639-1 codes and ignores this alternate; this language has no 2-letter code, so there is nothing to correct (other search engines may use it)`, severity: 'low' };
+  return { observed: code };
+}
+
 const SESSION_PARAM = /[?&](sid|sessionid|phpsessid|jsessionid|session_id|utm_[a-z]+|gclid|fbclid)=/i;
 
 export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
@@ -59,7 +77,7 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     if (p.redirects.length && p.foundOn && p.foundOn !== 'sitemap' && p.redirects.some((r) => [302, 303, 307].includes(r.status))) {
       sink.emit('redirect.temporary-internal', { url: p.url, observed: p.redirects.map((r) => `${r.status} → ${r.location}`).join(', '), expected: 'linked from ' + p.foundOn });
     }
-    if (p.inSitemap && (p.redirects.length || p.status !== 200)) sink.emit('index.sitemap-non200', { url: p.url, observed: p.redirects.length ? `redirects to ${p.finalUrl}` : `HTTP ${p.status}` });
+    if (p.inSitemap && (p.redirects.length || p.status !== 200)) sink.emit('index.sitemap-non200', { url: p.url, observed: p.redirects.length ? `redirects to ${p.finalUrl}` : p.error ? `${p.error} (HTTP ${p.status || 'error'})` : `HTTP ${p.status}` });
     if (p.bytes > 15 * 1024 * 1024 || p.truncated) sink.emit('index.oversized-html', { url: p.url, observed: `${Math.round(p.bytes / 1024 / 1024)} MB${p.truncated ? ' (truncated by crawler limit)' : ''}` });
 
     const f = factsOf(p);
@@ -71,7 +89,7 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     const noindex = isNoindex(p);
     const selfCanon = isSelfCanonical(p);
     if (noindex) {
-      sink.emit('index.noindex', { url: p.url, observed: robotsDirectives(p, ['googlebot', 'bingbot']).join(', ') });
+      sink.emit('index.noindex', { url: p.url, observed: [...new Set(robotsDirectives(p, ['googlebot', 'bingbot']))].join(', ') });
       if (p.inSitemap) sink.emit('index.noindex-in-sitemap', ev);
       if (f.canonical && !selfCanon) sink.emit('canonical.noindex-conflict', { url: p.url, observed: `noindex + canonical → ${f.canonical}` });
     }
@@ -134,7 +152,7 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     // Images
     const noAlt = f.images.filter((i) => i.alt === null && i.src);
     if (noAlt.length) sink.emit('img.alt-missing', { url: p.url, observed: `${noAlt.length} image(s), e.g. ${noAlt[0]!.src.slice(0, 120)}` });
-    const noDim = f.images.filter((i) => i.src && (!i.width || !i.height));
+    const noDim = f.images.filter((i) => i.src && (!i.width || !i.height) && !i.sizedByLayout);
     if (noDim.length) sink.emit('img.dimensions-missing', { url: p.url, observed: `${noDim.length} image(s) without width/height attributes` });
 
     // Links
@@ -147,10 +165,9 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     const sessionLinks = f.links.filter((l) => l.internal && SESSION_PARAM.test(l.href));
     if (sessionLinks.length) sink.emit('url.session-params', { url: p.url, observed: sessionLinks[0]!.href });
 
-    // Soft 404 heuristic
-    const errorish = /\b(404|not found|page not found|sayfa bulunamadı|nicht gefunden|introuvable|no encontrada)\b/i;
+    // Soft 404 heuristic (wording in ERROR_TEXT)
     // A noindexed error page is already excluded from the index, so the soft-404 label adds nothing.
-    if (!noindex && ((f.title && errorish.test(f.title)) || f.headings.some((h) => h.level === 1 && errorish.test(h.text)))) {
+    if (!noindex && (isErrorText(f.title) || f.headings.some((h) => h.level === 1 && isErrorText(h.text)))) {
       sink.emit('index.soft-404', { url: p.url, observed: f.title ?? '' });
     }
     if (p.data?.likelyClientRendered && !p.rendered) sink.emit('index.client-rendered', { url: p.url, observed: `${p.data.wordCount} words in raw HTML, ${p.data.scriptCount} scripts` });
@@ -199,18 +216,30 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     const rec = resolveRecord(ctx, target);
     if (new URL(target).pathname.startsWith('/cdn-cgi/')) continue;
     if (rec && !rec.blockedByRobots && rec.status >= 400 && rec.status < 500) {
-      sink.emit('links.broken-internal', { url: target, observed: `HTTP ${rec.status}, linked from ${sources.size} page(s): ${[...sources].slice(0, 3).join(', ')}` });
+      // Repository mode: "missing" means no file was found, which a server rewrite could still serve.
+      sink.emit('links.broken-internal', { url: target, observed: `${rec.error ? rec.error : `HTTP ${rec.status}`}, linked from ${sources.size} page(s): ${[...sources].slice(0, 3).join(', ')}` }, rec.error ? { confidence: 'heuristic' } : {});
     }
   }
 
   checkFacetsAndPagination(ctx, sink);
 
-  // Orphans: sitemap URLs that were crawled fine but have no internal inlinks.
-  for (const u of ctx.sitemapUrls) {
+  // Orphans: sitemap URLs that were crawled fine but have no internal inlinks. A crawl stopped at the page
+  // limit has not seen every page that might link to them, so it cannot call a page an orphan.
+  for (const u of crawl.truncated ? [] : ctx.sitemapUrls) {
     const rec = ctx.byUrl.get(u);
     if (!rec || rec.status !== 200 || u === crawl.startUrl) continue;
-    if (!ctx.inlinks.get(u)?.size && !ctx.inlinks.get(rec.finalUrl)?.size) sink.emit('crawl.sitemap-orphan', { url: u });
+    if (!ctx.reachIn.get(u)?.size && !ctx.reachIn.get(rec.finalUrl)?.size) sink.emit('crawl.sitemap-orphan', { url: u });
   }
+}
+
+/**
+ * Error-page wording in titles and H1s. Boundaries are Unicode-aware: JavaScript's \\b treats letters such as
+ * "ı" as non-word characters, so "sayfa bulunamadı" never matched with \\b.
+ */
+const ERROR_TEXT = /(?<![\p{L}\p{N}])(404|not found|page not found|sayfa bulunamadı|bulunamadı|(böyle bir )?sayfa yok|nicht gefunden|introuvable|no encontrada|non trovata|niet gevonden|não encontrada)(?![\p{L}\p{N}])/iu;
+
+export function isErrorText(text: string | null | undefined): boolean {
+  return !!text && ERROR_TEXT.test(text);
 }
 
 function push(m: Map<string, string[]>, k: string, v: string) {
@@ -241,7 +270,10 @@ function checkHreflang(ctx: SiteContext, url: string, f: NonNullable<ReturnType<
   let hasSelf = false;
   let hasDefault = false;
   for (const h of f.hreflang) {
-    if (!isValidHreflang(h.lang)) sink.emit('hreflang.invalid-code', { url, observed: h.lang });
+    if (!isValidHreflang(h.lang)) {
+      const problem = hreflangProblem(h.lang);
+      sink.emit('hreflang.invalid-code', { url, observed: problem.observed }, problem.severity ? { severity: problem.severity } : {});
+    }
     if (h.lang.toLowerCase() === 'x-default') hasDefault = true;
     const target = normalizeUrl(h.href);
     if (target === self) {

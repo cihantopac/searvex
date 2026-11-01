@@ -210,3 +210,50 @@ describe.runIf(available)('render isolation (forbidden target via redirects, Web
     expect(stats.proxy.requests).toBeGreaterThan(0);
   });
 });
+
+/**
+ * Resource exhaustion: scripts that never yield (busy loop) or allocate without bound must not stall the
+ * audit. Each page has a hard deadline, and the renderer keeps working for the next page.
+ */
+describe.runIf(available)('render resource limits (busy loop, memory growth)', () => {
+  let site: TestServer;
+  const results: Record<string, { html: string; error?: string; ms: number }> = {};
+  let stats: Awaited<ReturnType<typeof createRenderer>>['stats'];
+
+  beforeAll(async () => {
+    site = await startServer({
+      '/busy': { body: shell('<title>busy</title>', 'setTimeout(function(){for(;;){}},10)') },
+      '/memory': { body: shell('<title>memory</title>', 'var a=[];setTimeout(function(){for(;;){a.push(new Array(1e6).fill(1))}},10)') },
+      '/after': { body: shell('<title>after</title>', "document.title='after-ok'") },
+    });
+    const renderer = await createRenderer(policy, 3000);
+    try {
+      for (const p of ['/busy', '/memory', '/after']) {
+        const t = Date.now();
+        const r = await renderer.render(site.url + p);
+        results[p] = { ...r, ms: Date.now() - t };
+      }
+      stats = renderer.stats;
+    } finally {
+      await renderer.close();
+    }
+  }, 120000);
+
+  afterAll(() => site.close());
+
+  it('stops a page whose scripts block the main thread at the hard deadline', () => {
+    expect(results['/busy']!.error).toMatch(/exceeded/);
+    expect(results['/busy']!.ms).toBeLessThan(3000 + 5000 + 5000 + 6000);
+    expect(stats.deadlineExceeded).toBeGreaterThanOrEqual(1);
+  });
+
+  it('bounds a page that allocates memory without limit', () => {
+    expect(results['/memory']!.html).not.toContain('memory-ok');
+    expect(results['/memory']!.ms).toBeLessThan(3000 + 5000 + 5000 + 6000);
+  });
+
+  it('renders the next page normally afterwards', () => {
+    expect(results['/after']!.error).toBeUndefined();
+    expect(results['/after']!.html).toContain('after-ok');
+  });
+});

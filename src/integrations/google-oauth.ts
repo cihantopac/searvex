@@ -53,9 +53,9 @@ export function loadClientFile(file: string): OAuthClient {
 
 const store = (): CredentialStore => defaultCredentialStore();
 
-export function readCredentials(): Record<string, StoredCredential> {
-  const s = store();
-  return s instanceof FileCredentialStore ? s.readAll() : {};
+/** The stored credential `name`, from whichever backend is configured. */
+export function getCredential(name: string): StoredCredential | null {
+  return store().get(name);
 }
 
 export function saveCredential(name: string, cred: StoredCredential): string {

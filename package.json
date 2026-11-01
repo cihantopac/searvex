@@ -1,6 +1,6 @@
 {
   "name": "searvex-seo",
-  "version": "0.7.0",
+  "version": "1.0.0",
   "description": "Open-source AI search intelligence & optimization engine: technical SEO, GEO/AEO, sourced rule base, safe code fixes with rollback.",
   "license": "Apache-2.0",
   "type": "module",
@@ -19,6 +19,7 @@
     "README.md",
     "LICENSE",
     "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
     "CHANGELOG.md"
   ],
   "engines": {
@@ -33,7 +34,8 @@
     "rules:validate": "node dist/cli.js rules validate",
     "prepublishOnly": "npm run build && npm test",
     "bundle": "node scripts/bundle.mjs",
-    "benchmark": "node scripts/benchmark.mjs"
+    "benchmark": "node scripts/benchmark.mjs",
+    "notices": "node scripts/third-party-notices.mjs"
   },
   "keywords": [
     "seo",

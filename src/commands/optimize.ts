@@ -5,7 +5,7 @@ import readline from 'node:readline/promises';
 import { RunStore } from '../crawl/store.js';
 import { unifiedDiff } from '../optimize/diff.js';
 import { planFixes, type FixPlan } from '../optimize/fixes.js';
-import { applyFixes, listChanges, rollback, writeManifest, ConflictError } from '../optimize/transaction.js';
+import { applyFixes, interruptedChanges, listChanges, rollback, writeManifest, ConflictError, type Manifest } from '../optimize/transaction.js';
 import { auditRepository } from '../repo/audit.js';
 import { loadKnowledge } from '../rules/engine.js';
 import { UsageError, type GlobalFlags } from '../cli.js';
@@ -68,6 +68,8 @@ export async function commandOptimize(flags: GlobalFlags): Promise<number> {
     console.log('Apply with: searvex optimize <path> --apply [same options]');
     return 0;
   }
+  const interrupted = interruptedChanges(root);
+  if (interrupted.length) throw new UsageError(`An earlier change was interrupted while applying (${interrupted.map((m) => m.changeId).join(', ')}). Restore it first: searvex rollback ${interrupted[0]!.changeId} ${target}`);
   if (gitDirty(root)) console.log('\nNote: the git working tree has uncommitted changes; Searvex keeps its own backups, but committing first is recommended.');
   if (!v['yes']) {
     if (!process.stdin.isTTY) throw new UsageError('Refusing to apply without confirmation in a non-interactive shell; pass --yes after reviewing the dry run.');
@@ -86,7 +88,16 @@ export async function commandOptimize(flags: GlobalFlags): Promise<number> {
   console.log(`\nApplied change ${manifest.changeId} (${manifest.files.length} file(s)). Verifying…`);
 
   // Verify: targeted findings must decrease and no new issue types may appear.
-  const after = auditRepository(root, { siteUrl, kb });
+  let after: ReturnType<typeof auditRepository>;
+  try {
+    after = auditRepository(root, { siteUrl, kb });
+  } catch (e) {
+    manifest.status = 'verification-failed';
+    manifest.verification = { error: (e as Error).message };
+    writeManifest(root, manifest);
+    reportUndo(rollback(root, manifest.changeId), manifest, target);
+    throw e;
+  }
   const count = (r: typeof before.report, id: string) => r.findings.find((f) => f.ruleId === id)?.count ?? 0;
   const targeted = [...new Set(plan.fixes.map((f) => f.ruleId))];
   const results = targeted.map((id) => ({ ruleId: id, before: count(before.report, id), after: count(after.report, id) }));
@@ -98,8 +109,8 @@ export async function commandOptimize(flags: GlobalFlags): Promise<number> {
   if (introduced.length || notImproved.length) {
     manifest.status = 'verification-failed';
     writeManifest(root, manifest);
-    const rb = rollback(root, manifest.changeId, { force: true });
-    console.log(`\nVerification failed (${introduced.length ? 'new issues: ' + introduced.join(', ') : 'no improvement for ' + notImproved.map((r) => r.ruleId).join(', ')}). Rolled back ${rb.restored.length} file(s).`);
+    console.log(`\nVerification failed (${introduced.length ? 'new issues: ' + introduced.join(', ') : 'no improvement for ' + notImproved.map((r) => r.ruleId).join(', ')}).`);
+    reportUndo(rollback(root, manifest.changeId), manifest, target);
     return 1;
   }
   manifest.status = 'verified';
@@ -107,6 +118,15 @@ export async function commandOptimize(flags: GlobalFlags): Promise<number> {
   console.log(`\nVerified. Health score ${before.report.scores.overall} → ${after.report.scores.overall}.`);
   console.log(`Undo with: searvex rollback ${manifest.changeId} ${target}`);
   return 0;
+}
+
+/**
+ * Automatic undo after a failed verification never overwrites edits made while verifying (an editor or
+ * formatter may have touched a file); those files are listed and left for the user to decide.
+ */
+function reportUndo(rb: { restored: string[]; conflicts: string[] }, m: Manifest, target: string): void {
+  if (!rb.conflicts.length) return console.log(`Rolled back ${rb.restored.length} file(s).`);
+  console.log(`Not rolled back: ${rb.conflicts.join(', ')} changed again after the fix was applied. Review them, then run: searvex rollback ${m.changeId} ${target} --yes`);
 }
 
 export async function commandRollback(flags: GlobalFlags): Promise<number> {

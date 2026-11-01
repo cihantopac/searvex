@@ -187,3 +187,30 @@ describe('language detection', async () => {
     expect(detectShortLanguage('What B.O.S.S. does not do')).not.toBe('pt'); // real-world false positive
   });
 });
+
+describe('error-page wording (soft 404)', () => {
+  it('matches Turkish and other languages with Unicode-aware boundaries', async () => {
+    const { isErrorText } = await import('../../src/analyze/technical.js');
+    for (const t of ['Sayfa bulunamadı', 'Böyle bir sayfa yok', 'Sayfa yok · Ürün', '404 — Not found', 'Seite nicht gefunden', 'Página não encontrada']) expect(isErrorText(t), t).toBe(true);
+    for (const t of ['Sayfa yoklama listesi', 'Kayıp eşyalar bulunamadık mı?', 'Founders', '4040 Linz', 'Notfound brand']) expect(isErrorText(t), t).toBe(false);
+  });
+});
+
+describe('hreflang codes outside ISO 639-1 (independent-site round, 2026-11-01)', () => {
+  it('separates correctable codes from languages that have no 2-letter code', async () => {
+    const { hreflangProblem, isValidHreflang } = await import('../../src/analyze/technical.js');
+    expect(isValidHreflang('ast')).toBe(false); // Google: only ISO 639-1 is supported
+    expect(hreflangProblem('ast')).toMatchObject({ severity: 'low', observed: expect.stringMatching(/no 2-letter code/) });
+    expect(hreflangProblem('ceb')).toMatchObject({ severity: 'low' });
+    expect(hreflangProblem('tur')).toEqual({ observed: 'tur — use the ISO 639-1 code "tr"' });
+    expect(hreflangProblem('en-UK')).toEqual({ observed: 'en-UK' });
+  });
+
+  it('keeps the most severe occurrence when a rule is emitted with different severities', async () => {
+    const { FindingSink, loadKnowledge } = await import('../../src/rules/engine.js');
+    const sink = new FindingSink(loadKnowledge());
+    sink.emit('hreflang.invalid-code', { url: 'https://e.com/', observed: 'ast' }, { severity: 'low' });
+    sink.emit('hreflang.invalid-code', { url: 'https://e.com/', observed: 'jp' });
+    expect(sink.findings()[0]).toMatchObject({ severity: 'high', count: 2 });
+  });
+});

@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { auditWebsite, type AuditReport } from './analyze/audit.js';
+import { auditWebsite, scoreLabel, type AuditReport } from './analyze/audit.js';
 import type { Severity } from './core/types.js';
 import { RunStore } from './crawl/store.js';
 import { SEARVEX_VERSION } from './net/fetcher.js';
@@ -16,6 +16,7 @@ import { IMPLEMENTED_RULES } from './rules/implemented.js';
 import { commandRepo } from './commands/repo.js';
 import { commandOptimize, commandRollback } from './commands/optimize.js';
 import { commandMonitor } from './commands/monitor.js';
+import { commandCrux, cruxKey } from './commands/crux.js';
 import { commandResearch } from './commands/research.js';
 import { commandRun } from './commands/run.js';
 import { commandEcosystem } from './commands/ecosystem.js';
@@ -38,10 +39,18 @@ Commands
   connect <url>         Optional search data for a site: shows the three choices (Google / CSV / skip)
                         and records one with --choice google|csv|skip; never starts OAuth by itself
   gsc <auth|status|sites|report|import|logout>
-                        Google Search Console (read-only): OAuth with your own Desktop client (--client),
+                        Google Search Console (read-only): OAuth with your own Desktop client (--client;
+                        opens your browser, --no-browser to only print the URL),
                         property check, query/page analysis with a property-matched --audit join;
                         "gsc import <export.zip>" reads a Performance CSV export without any account access
-  bing report <siteUrl> Bing Webmaster Tools query/page analysis (SEARVEX_BING_API_KEY, read-only)
+  bing <auth|status|sites|report|logout>
+                        Bing Webmaster Tools (read-only API key): "bing auth" stores the key (hidden input)
+                        in the credential store; "bing report <siteUrl>" checks the site is verified, then
+                        analyses queries/pages
+                        (bing is experimental: not yet verified against the live service)
+  crux <auth|status|logout>
+                        Chrome UX Report API key for real-user Core Web Vitals (hidden input, stored in the
+                        credential store)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and
@@ -70,10 +79,12 @@ Common options
   -h, --help            Show help
 
 Environment (all optional, read-only integrations)
-  SEARVEX_CRUX_API_KEY  Chrome UX Report API key → real Core Web Vitals field data
+  SEARVEX_CRUX_API_KEY  Chrome UX Report API key (instead of "searvex crux auth")
   SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
-  SEARVEX_BING_API_KEY  Bing Webmaster Tools API key → "searvex bing report"
+  SEARVEX_BING_API_KEY  Bing Webmaster Tools API key (instead of "searvex bing auth")
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
+  SEARVEX_CREDENTIAL_STORE  file (default, 0600 file in the config dir) or keychain (macOS Keychain,
+                        Secret Service via secret-tool, Windows DPAPI)
 
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
 `;
@@ -129,6 +140,7 @@ function parse(argv: string[]): GlobalFlags {
       force: { type: 'boolean' },
       property: { type: 'string' },
       choice: { type: 'string' },
+      'no-browser': { type: 'boolean' },
     },
   });
   return { values, positionals };
@@ -188,7 +200,7 @@ export function printSummary(report: AuditReport, files: string[], v: GlobalFlag
   if (v['quiet']) return;
   const counts = SEVERITY_ORDER.map((s) => `${s}: ${report.findings.filter((f) => f.severity === s).length}`).join('  ');
   console.log(`\nSearvex audit — ${report.target}`);
-  console.log(`Health score ${report.scores.overall}/100 (Searvex summary, not a search engine metric)`);
+  console.log(`Health score ${scoreLabel(report.scores)} (Searvex summary, not a search engine metric)`);
   console.log(`Pages: ${report.crawl.crawled}${report.crawl.truncated ? ` (limit reached; ${report.crawl.queuedRemaining} queued)` : ''}   Rules: ${report.tool.rulesVersion}`);
   console.log(`Findings by rule — ${counts}`);
   for (const f of report.findings.filter((x) => x.severity !== 'info').slice(0, 12)) {
@@ -217,7 +229,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
       resumeRunId: v['resume'] as string | undefined,
       kb,
       checkExternal: !!v['check-external'],
-      cruxApiKey: process.env['SEARVEX_CRUX_API_KEY'],
+      cruxApiKey: cruxKey()?.key,
       crawl: {
         ...opts,
         render: render?.render,
@@ -232,7 +244,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
     if (render) {
       const st = render.stats;
       report.limitations.push(
-        `JavaScript rendering: Chromium ${st.sandbox ? 'with' : 'WITHOUT'} its OS sandbox${st.sandbox ? '' : ' (not available on this system)'}, all traffic through Searvex's policy proxy; ${st.blockedRequests + st.proxy.blocked} browser request(s) blocked by the network policy${st.proxy.blockedTargets.length ? ` (${st.proxy.blockedTargets.slice(0, 5).join(', ')})` : ''}${st.proxy.budgetExceeded ? `; ${st.proxy.budgetExceeded} connection(s) cut at the per-page transfer limit` : ''}.`,
+        `JavaScript rendering: Chromium ${st.sandbox ? 'with' : 'WITHOUT'} its OS sandbox${st.sandbox ? '' : ' (not available on this system)'}, all traffic through Searvex's policy proxy; ${st.blockedRequests + st.proxy.blocked} browser request(s) blocked by the network policy${st.proxy.blockedTargets.length ? ` (${st.proxy.blockedTargets.slice(0, 5).join(', ')})` : ''}${st.proxy.budgetExceeded ? `; ${st.proxy.budgetExceeded} connection(s) cut at the per-page transfer limit` : ''}${st.deadlineExceeded ? `; ${st.deadlineExceeded} page(s) stopped at the hard time limit (scripts kept the browser busy)` : ''}.`,
       );
     }
     const files = writeReports(store, report, kb, String(v['format'] ?? 'md,html,json').split(','));
@@ -374,6 +386,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         return await commandGsc(flags);
       case 'bing':
         return await commandBing(flags);
+      case 'crux':
+        return await commandCrux(flags);
       case 'connect':
         return await commandConnect(flags);
       case 'audit':

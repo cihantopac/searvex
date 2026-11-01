@@ -23,7 +23,11 @@ export interface Manifest {
   root: string;
   fixes: Array<{ id: string; ruleId: string; title: string }>;
   files: ManifestEntry[];
-  status: 'applied' | 'rolled-back' | 'verified' | 'verification-failed';
+  /**
+   * `applying` is written before the first file changes (a journal): if the process dies mid-way, the manifest
+   * and backups already exist and `rollback` restores whatever was written.
+   */
+  status: 'applying' | 'applied' | 'rolled-back' | 'verified' | 'verification-failed';
   verification?: unknown;
 }
 
@@ -33,11 +37,26 @@ export function changesDir(root: string): string {
   return path.join(root, '.searvex', 'changes');
 }
 
+/** Write via a temporary file and rename; keeps the existing file's permission bits. */
 function atomicWrite(file: string, content: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  const mode = fs.existsSync(file) ? fs.statSync(file).mode & 0o7777 : undefined;
   const tmp = `${file}.searvex-${process.pid}.tmp`;
-  fs.writeFileSync(tmp, content);
-  fs.renameSync(tmp, file);
+  try {
+    fs.writeFileSync(tmp, content, mode === undefined ? undefined : { mode });
+    if (mode !== undefined) fs.chmodSync(tmp, mode);
+    fs.renameSync(tmp, file);
+  } catch (e) {
+    fs.rmSync(tmp, { force: true });
+    throw e;
+  }
+}
+
+const hashOf = (abs: string): string | null => (fs.existsSync(abs) ? sha(fs.readFileSync(abs, 'utf8')) : null);
+
+/** Changes whose apply was interrupted (manifest still `applying`); they must be rolled back first. */
+export function interruptedChanges(root: string): Manifest[] {
+  return listChanges(root).filter((m) => m.status === 'applying');
 }
 
 export class ConflictError extends Error {}
@@ -62,29 +81,36 @@ export function applyFixes(root: string, fixes: Fix[]): Manifest {
   }
   fs.mkdirSync(path.join(dir, 'backup'), { recursive: true });
   ensureSelfIgnored(root);
-  const manifest: Manifest = { changeId, createdAt: new Date().toISOString(), root, fixes: fixes.map((f) => ({ id: f.id, ruleId: f.ruleId, title: f.title })), files: [], status: 'applied' };
+  const manifest: Manifest = { changeId, createdAt: new Date().toISOString(), root, fixes: fixes.map((f) => ({ id: f.id, ruleId: f.ruleId, title: f.title })), files: [], status: 'applying' };
+  // Journal first: every backup and the full manifest exist before the first project file is touched.
   let n = 0;
+  for (const [p, c] of finalByPath) {
+    let backup: string | null = null;
+    if (c.action === 'modify') {
+      backup = `backup/${n++}`;
+      fs.writeFileSync(path.join(dir, backup), c.before ?? '');
+    }
+    manifest.files.push({ path: p, action: c.action, beforeHash: c.before === null ? null : sha(c.before), afterHash: sha(c.after), backup });
+  }
+  writeManifest(root, manifest);
   const written: ManifestEntry[] = [];
   try {
-    for (const [p, c] of finalByPath) {
-      const abs = resolveInside(root, p);
-      let backup: string | null = null;
-      if (c.action === 'modify') {
-        backup = `backup/${n++}`;
-        fs.writeFileSync(path.join(dir, backup), c.before ?? '');
-      }
-      atomicWrite(abs, c.after);
-      const entry = { path: p, action: c.action, beforeHash: c.before === null ? null : sha(c.before), afterHash: sha(c.after), backup };
-      written.push(entry);
-      manifest.files.push(entry);
+    for (const e of manifest.files) {
+      atomicWrite(resolveInside(root, e.path), finalByPath.get(e.path)!.after);
+      written.push(e);
     }
   } catch (e) {
-    // Partial failure: undo what was written.
-    for (const w of written.reverse()) restoreEntry(root, dir, w);
+    // Partial failure: undo what was written. The journal stays if undoing fails too.
+    try {
+      for (const w of written.reverse()) restoreEntry(root, dir, w);
+    } catch (undo) {
+      throw new Error(`Applying ${changeId} failed (${(e as Error).message}) and undoing it failed (${(undo as Error).message}); run "searvex rollback ${changeId}" to restore the files.`);
+    }
     fs.rmSync(dir, { recursive: true, force: true });
     throw e;
   }
-  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  manifest.status = 'applied';
+  writeManifest(root, manifest);
   return manifest;
 }
 
@@ -111,14 +137,17 @@ export function rollback(root: string, changeId: string, opts: { force?: boolean
   if (m.status === 'rolled-back') throw new Error(`Change ${changeId} was already rolled back`);
   const dir = path.join(changesDir(root), changeId);
   const conflicts: string[] = [];
+  const pending: ManifestEntry[] = [];
   for (const e of m.files) {
-    const abs = resolveInside(root, e.path);
-    const current = fs.existsSync(abs) ? sha(fs.readFileSync(abs, 'utf8')) : null;
+    const current = hashOf(resolveInside(root, e.path));
+    // Already in the original state (an interrupted apply never reached it): nothing to restore.
+    if (current === e.beforeHash) continue;
+    pending.push(e);
     if (current !== e.afterHash) conflicts.push(e.path);
   }
   if (conflicts.length && !opts.force) return { restored: [], conflicts };
   const restored: string[] = [];
-  for (const e of [...m.files].reverse()) {
+  for (const e of pending.reverse()) {
     restoreEntry(root, dir, e);
     restored.push(e.path);
   }

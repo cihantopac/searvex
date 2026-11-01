@@ -166,7 +166,8 @@
           "level": "fetched"
         }
       ],
-      "status": "active"
+      "status": "active",
+      "exceptions": "Personal sites: a homepage that describes a Person (or ProfilePage) is not expected to carry Organization markup."
     }
   ]
 }

@@ -89,10 +89,12 @@ export function planFixes(report: AuditReport, scan: RepoScan, opts: PlanOptions
       return null;
     }
   };
-  const stage = (ruleId: string, title: string, rationale: string, file: string, after: string, action: 'modify' | 'create' = 'modify') => {
+  const stage = (ruleId: string, title: string, rationale: string, file: string, after0: string, action: 'modify' | 'create' = 'modify') => {
     const prev = pending.get(file);
     // `before` of the merged change is the original file; each fix records its own step diff.
     const original0 = prev ? prev.before : action === 'create' ? null : original(file);
+    // Inserted lines follow the file's own line endings (Windows checkouts often use CRLF).
+    const after = original0 !== null && usesCrlf(original0) ? after0.replace(/\r?\n/g, '\r\n') : after0;
     const stepBefore = prev ? prev.after : original0;
     if (stepBefore === after) return;
     pending.set(file, { path: file, action: original0 === null ? 'create' : 'modify', before: original0, after });
@@ -317,6 +319,12 @@ function planSitemap(
   }
   if (robots === null) stage('robots.no-sitemap', 'Create robots.txt with Sitemap directive', 'Allows all crawlers and declares the sitemap location.', robotsPath, `User-agent: *\nAllow: /\n\nSitemap: ${sitemapUrl}\n`, 'create');
   else if (!/^\s*sitemap\s*:/im.test(robots)) stage('robots.no-sitemap', 'Add Sitemap directive to robots.txt', 'Declares the sitemap location; existing rules are unchanged.', robotsPath, robots.replace(/\s*$/, '') + `\n\nSitemap: ${sitemapUrl}\n`);
+}
+
+/** True when most line breaks in `text` are CRLF. */
+export function usesCrlf(text: string): boolean {
+  const crlf = (text.match(/\r\n/g) ?? []).length;
+  return crlf > 0 && crlf >= (text.match(/\n/g) ?? []).length - crlf;
 }
 
 export function sitemapXml(urls: string[]): string {

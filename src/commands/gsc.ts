@@ -1,12 +1,13 @@
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import type { AuditReport } from '../analyze/audit.js';
 import { analyzeSearchPerformance, rowsToQueryPage, type SearchPerformanceReport } from '../analyze/search-performance.js';
 import { RunStore } from '../crawl/store.js';
-import { authorize, accessToken, deleteCredential, gscAccessToken, GSC_SCOPE, loadClientFile, OAuthClientFileError, readCredentials, revokeToken, saveCredential } from '../integrations/google-oauth.js';
+import { authorize, accessToken, deleteCredential, gscAccessToken, GSC_SCOPE, loadClientFile, OAuthClientFileError, getCredential, revokeToken, saveCredential } from '../integrations/google-oauth.js';
 import { defaultCredentialStore } from '../integrations/credentials.js';
 import { listSites, querySearchConsole } from '../integrations/gsc.js';
-import { GscImportError, importGscFiles, pageHosts, type GscExport } from '../integrations/gsc-csv.js';
-import { describeProperty, parseProperty, PropertyError, selectAuditForProperty, urlInProperty, type SearchProperty, type SelectedAudit } from '../integrations/property.js';
+import { GscImportError, importGscFiles, type GscExport } from '../integrations/gsc-csv.js';
+import { commonDomain, parseProperty, propertyForExport, PropertyError, selectAuditForProperty, urlInProperty, type SearchProperty, type SelectedAudit } from '../integrations/property.js';
 import { getSitePreference, setSitePreference, siteKey, type SearchDataChoice } from '../integrations/preferences.js';
 import { md } from '../report/markdown.js';
 import { log, num, UsageError, type GlobalFlags } from '../cli.js';
@@ -158,13 +159,35 @@ async function verifyProperty(token: string, raw: string | undefined, workspace:
   throw new UsageError(matches.length ? `Several properties cover ${start}: ${matches.join(', ')}. Pass one explicitly.` : `No accessible property covers ${start}. Available: ${names.join(', ') || '(none)'}`);
 }
 
+/**
+ * Open `url` (always the Google consent URL Searvex built) in the default browser, as Google recommends for
+ * installed apps. Arguments are passed without a shell; failures fall back to the printed URL.
+ */
+export function openBrowser(url: string, platform: NodeJS.Platform = process.platform, run = spawnDetached): boolean {
+  if (!/^https:\/\/[^\s"'<>]+$/.test(url)) return false;
+  // Windows: rundll32 avoids cmd.exe, which would treat "&" in the URL as a command separator.
+  const [cmd, args] = platform === 'darwin' ? ['open', [url]] : platform === 'win32' ? ['rundll32', ['url.dll,FileProtocolHandler', url]] : ['xdg-open', [url]];
+  return run(cmd as string, args as string[]);
+}
+
+function spawnDetached(cmd: string, args: string[]): boolean {
+  try {
+    const child = spawn(cmd, args, { stdio: 'ignore', detached: true, windowsHide: true });
+    child.on('error', () => {});
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function commandGsc(flags: GlobalFlags): Promise<number> {
   const v = flags.values;
   const sub = flags.positionals[1];
   const workspace = path.resolve(String(v['out'] ?? process.cwd()));
   if (sub === 'auth') {
     if (process.env['CI']) throw new UsageError('gsc auth is interactive (browser consent) and is disabled in CI. Use "gsc import <export.zip>" or SEARVEX_GSC_TOKEN there.');
-    const existing = readCredentials()['gsc'];
+    const existing = getCredential('gsc');
     if (existing && !v['force']) {
       try {
         await accessToken(existing);
@@ -184,7 +207,8 @@ export async function commandGsc(flags: GlobalFlags): Promise<number> {
       throw e;
     }
     const cred = await authorize(client, GSC_SCOPE, (url) => {
-      console.log('\nOpen this URL in your browser and approve read-only Search Console access:\n');
+      const opened = !v['no-browser'] && process.stdout.isTTY && openBrowser(url);
+      console.log(opened ? '\nOpened your browser. If it did not open, visit this URL and approve read-only Search Console access:\n' : '\nOpen this URL in your browser and approve read-only Search Console access:\n');
       console.log(url + '\n');
       console.log('Waiting for Google to redirect back to http://127.0.0.1 … (Ctrl+C to cancel; times out after 5 minutes)');
     });
@@ -193,7 +217,7 @@ export async function commandGsc(flags: GlobalFlags): Promise<number> {
     return 0;
   }
   if (sub === 'status') {
-    const cred = readCredentials()['gsc'];
+    const cred = getCredential('gsc');
     const envToken = !!process.env['SEARVEX_GSC_TOKEN'];
     const status: Record<string, unknown> = { credential: cred ? 'stored' : 'none', envToken, store: defaultCredentialStore().describe() };
     if (cred) {
@@ -209,10 +233,11 @@ export async function commandGsc(flags: GlobalFlags): Promise<number> {
     }
     if (v['json']) process.stdout.write(JSON.stringify(status, null, 2) + '\n');
     else for (const [k, x] of Object.entries(status)) console.log(`${k}: ${String(x)}`);
-    return cred || envToken ? 0 : 1;
+    // Status commands exit 0 only when the integration is usable.
+    return envToken || status['valid'] === true ? 0 : 1;
   }
   if (sub === 'logout') {
-    const cred = readCredentials()['gsc'];
+    const cred = getCredential('gsc');
     if (!cred) {
       console.log('No stored Search Console credential.');
       return 0;
@@ -269,7 +294,11 @@ export async function commandGsc(flags: GlobalFlags): Promise<number> {
     const days = num(v['days'], 28, 1, 480);
     const sel = resolveAudit(flags, workspace, property);
     const rows = await querySearchConsole({ token, siteUrl, days, dimensions: ['query', 'page'], maxRows: num(v['max-rows'], 25000, 1, 100000) });
-    const report = analyzeSearchPerformance(rowsToQueryPage(rows), { days, source: `Search Console ${siteUrl}`, audit: sel?.audit, property });
+    // Query × page rows leave out anonymised queries; the daily series gives the property's real totals,
+    // so API and CSV reports of the same property show the same totals.
+    const daily = await querySearchConsole({ token, siteUrl, days, dimensions: ['date'], maxRows: 1000 });
+    const dates = daily.map((r) => ({ key: r.keys[0]!, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
+    const report = analyzeSearchPerformance({ queryPage: rowsToQueryPage(rows), dates }, { days, source: `Search Console ${siteUrl}`, audit: sel?.audit, property });
     attachAudit(report, sel);
     saveReport(flags, workspace, 'gsc', { target: siteUrl, days }, report);
     setSitePreference(property.kind === 'domain' ? property.domain : property.host, { choice: 'google', property: siteUrl });
@@ -280,42 +309,160 @@ export async function commandGsc(flags: GlobalFlags): Promise<number> {
 
 /** Explicit --property, or the single host seen in the pages table (any protocol, whole host). */
 function resolveImportProperty(raw: string | undefined, exp: GscExport): SearchProperty | undefined {
-  const hosts = pageHosts(exp);
-  if (raw) {
-    const p = propertyOrUsage(raw);
-    const pages = exp.tables.pages ?? [];
-    if (pages.length) {
-      const inside = pages.filter((x) => urlInProperty(x.key, p)).length;
-      if (inside / pages.length < 0.5) throw new UsageError(`The export's pages (${hosts.slice(0, 3).map((h) => h.host).join(', ')}) do not belong to the ${describeProperty(p)}. Check that you exported the right property.`);
-    }
-    return p;
+  try {
+    return propertyForExport(raw, exp.tables.pages?.map((p) => p.key));
+  } catch (e) {
+    if (e instanceof PropertyError) throw new UsageError(e.message);
+    throw e;
   }
-  if (!hosts.length) return undefined;
-  const total = hosts.reduce((a, h) => a + h.pages, 0);
-  if (hosts.length > 1 && hosts[0]!.pages / total < 0.9) throw new UsageError(`The export contains pages from several hosts (${hosts.slice(0, 5).map((h) => h.host).join(', ')}): pass --property (e.g. sc-domain:example.com).`);
-  return parseProperty(`https://${hosts[0]!.host}/`, { anyProtocol: true });
 }
 
 /** `searvex bing report <siteUrl>`: same analysis on Bing Webmaster data (API key, read-only). */
+/**
+ * Bing Webmaster API key: SEARVEX_BING_API_KEY, or the key saved with `bing auth` in the credential store
+ * (file or OS keychain). API-key integrations keep the key in the credential's long-lived secret field.
+ */
+function bingKey(): { key: string; source: string } | null {
+  const env = process.env['SEARVEX_BING_API_KEY'];
+  if (env) return { key: env, source: 'SEARVEX_BING_API_KEY' };
+  const stored = getCredential('bing');
+  return stored?.refreshToken ? { key: stored.refreshToken, source: defaultCredentialStore().describe() } : null;
+}
+
+/** Read a secret from the terminal without echoing it, or from piped stdin. */
+export async function readSecret(prompt: string, input: NodeJS.ReadStream = process.stdin, output: NodeJS.WriteStream = process.stderr): Promise<string> {
+  if (!input.isTTY) {
+    const chunks: Buffer[] = [];
+    for await (const c of input) chunks.push(Buffer.from(c as Buffer));
+    return Buffer.concat(chunks).toString('utf8').trim();
+  }
+  output.write(prompt);
+  input.setRawMode(true);
+  input.resume();
+  return new Promise((resolve, reject) => {
+    let value = '';
+    const done = (fn: () => void) => {
+      input.setRawMode(false);
+      input.pause();
+      input.removeListener('data', onData);
+      output.write('\n');
+      fn();
+    };
+    const onData = (buf: Buffer) => {
+      for (const ch of buf.toString('utf8')) {
+        if (ch === '\r' || ch === '\n') return done(() => resolve(value.trim()));
+        if (ch === '\u0003') return done(() => reject(new UsageError('Cancelled.')));
+        if (ch === '\u007f' || ch === '\b') value = value.slice(0, -1);
+        else if (ch >= ' ') value += ch;
+      }
+    };
+    input.on('data', onData);
+  });
+}
+
+/** `searvex bing auth|status|sites|logout|report`: Bing Webmaster Tools (read-only API key). */
 export async function commandBing(flags: GlobalFlags): Promise<number> {
   const v = flags.values;
   const sub = flags.positionals[1];
-  const apiKey = process.env['SEARVEX_BING_API_KEY'];
-  if (sub !== 'report') throw new UsageError('bing subcommands: report <siteUrl> [--days 28] [--audit latest|<runId>] [--max-pages 25]');
-  if (!apiKey) throw new UsageError('Set SEARVEX_BING_API_KEY (Bing Webmaster Tools → Settings → API access)');
+  const { getUserSites, bingQueryPageRows, getDailyTraffic, maskKey, BingApiError } = await import('../integrations/bing.js');
+  const usage = 'bing subcommands: auth | status | sites | report <siteUrl> [--days 28] [--audit latest|<runId>] [--max-pages 25] | logout';
+  if (sub === 'auth') {
+    const existing = getCredential('bing');
+    if (existing && !v['force']) {
+      console.log(`A Bing API key is already stored in ${defaultCredentialStore().describe()}. Use --force to replace it, or "bing logout".`);
+      return 0;
+    }
+    const key = await readSecret('Bing Webmaster API key (Settings → API access; input hidden): ');
+    if (!/^[A-Za-z0-9_-]{16,128}$/.test(key)) throw new UsageError('That does not look like a Bing Webmaster API key (16–128 letters, digits, - or _). Nothing was stored.');
+    let sites;
+    try {
+      sites = await getUserSites(key);
+    } catch (e) {
+      throw new UsageError(`Bing rejected the key; nothing was stored. ${maskKey((e as Error).message, key)}`);
+    }
+    saveCredential('bing', { clientId: 'bing-webmaster-api-key', refreshToken: key, scope: 'bing-webmaster:read', createdAt: new Date().toISOString() });
+    console.log(`Stored the Bing API key in ${defaultCredentialStore().describe()}. Sites on this account: ${sites.length} (${sites.filter((s) => s.verified).length} verified).`);
+    return 0;
+  }
+  if (sub === 'logout') {
+    const removed = deleteCredential('bing');
+    console.log(`${removed ? 'Removed the stored Bing API key.' : 'No stored Bing API key.'} Bing API keys stay valid until you regenerate them in Bing Webmaster Tools → Settings → API access.`);
+    return 0;
+  }
+  const k = bingKey();
+  const noKey = 'No Bing API key: run "searvex bing auth" (Bing Webmaster Tools → Settings → API access), or set SEARVEX_BING_API_KEY.';
+  if (!k && sub === 'status') {
+    if (v['json']) process.stdout.write(JSON.stringify({ key: 'none', valid: false, hint: noKey }, null, 2) + '\n');
+    else console.log(`key: none\n${noKey}`);
+    return 1;
+  }
+  if (!k) throw new UsageError(noKey);
+  if (sub === 'status' || sub === 'sites') {
+    let sites;
+    try {
+      sites = await getUserSites(k.key);
+    } catch (e) {
+      if (sub === 'sites') throw e;
+      const status = { key: k.source, valid: false, error: (e as Error).message };
+      if (v['json']) process.stdout.write(JSON.stringify(status, null, 2) + '\n');
+      else for (const [n, x] of Object.entries(status)) console.log(`${n}: ${String(x)}`);
+      return 1;
+    }
+    if (sub === 'sites') {
+      if (v['json']) process.stdout.write(JSON.stringify(sites, null, 2) + '\n');
+      else for (const s of sites) console.log(`${s.url}  (${s.verified ? 'verified' : 'not verified'})`);
+      return 0;
+    }
+    const status = { key: k.source, valid: true, sites: sites.length, verifiedSites: sites.filter((s) => s.verified).length };
+    if (v['json']) process.stdout.write(JSON.stringify(status, null, 2) + '\n');
+    else for (const [n, x] of Object.entries(status)) console.log(`${n}: ${String(x)}`);
+    return 0;
+  }
+  if (sub !== 'report') throw new UsageError(usage);
+  try {
+    return await bingReport(flags, k.key, { getUserSites, bingQueryPageRows, getDailyTraffic });
+  } catch (e) {
+    if (e instanceof BingApiError) throw new UsageError(e.message);
+    throw e;
+  }
+}
+
+async function bingReport(flags: GlobalFlags, key: string, api: Pick<typeof import('../integrations/bing.js'), 'getUserSites' | 'bingQueryPageRows' | 'getDailyTraffic'>): Promise<number> {
+  const v = flags.values;
+  const { getUserSites, bingQueryPageRows, getDailyTraffic } = api;
+  const k = { key };
   const siteUrl = flags.positionals[2];
   if (!siteUrl || !/^https?:\/\//.test(siteUrl)) throw new UsageError('bing report requires the verified site URL, e.g. https://example.com/');
   const property = propertyOrUsage(siteUrl, { anyProtocol: true });
+  // The site must be a verified site of this account: Bing answers unknown sites with empty data, which would
+  // read as "no traffic" instead of "wrong site".
+  const sites = await getUserSites(k.key);
+  const norm = (u: string) => u.toLowerCase().replace(/\/+$/, '');
+  const site = sites.find((s) => norm(s.url) === norm(siteUrl));
+  if (!site?.verified) {
+    const hostOf = (u: string) => new URL(u).host;
+    // Same registrable domain (www vs apex, subdomains) is the usual mix-up.
+    const similar = sites.filter((s) => s.url && commonDomain([hostOf(s.url), hostOf(siteUrl)])).map((s) => s.url);
+    throw new UsageError(`${siteUrl} is ${site ? 'not verified' : 'not a site'} in this Bing Webmaster account.${similar.length ? ` Did you mean: ${similar.join(', ')}?` : sites.length ? ` Sites: ${sites.map((s) => s.url).join(', ')}` : ' The account has no sites.'}`);
+  }
   const days = num(v['days'], 28, 1, 480);
   const workspace = path.resolve(String(v['out'] ?? process.cwd()));
   const sel = resolveAudit(flags, workspace, property);
-  const { bingQueryPageRows } = await import('../integrations/bing.js');
-  const { rows, pages } = await bingQueryPageRows(siteUrl, apiKey, { days, maxPages: num(v['max-pages'], 25, 1, 200) });
-  const report = analyzeSearchPerformance(rows, { days, source: `Bing Webmaster Tools ${siteUrl}`, audit: sel?.audit, property });
+  const { rows, pages } = await bingQueryPageRows(site.url, k.key, { days, maxPages: num(v['max-pages'], 25, 1, 200) });
+  // Site totals come from the daily traffic series; query × page rows only cover the top pages.
+  const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const daily = await getDailyTraffic(site.url, k.key, since);
+  const dates = daily.map((d) => ({ key: d.date, clicks: d.clicks, impressions: d.impressions, ctr: d.impressions ? d.clicks / d.impressions : 0, position: 0 }));
+  const report = analyzeSearchPerformance({ queryPage: rows, dates }, { days, source: `Bing Webmaster Tools ${site.url}`, audit: sel?.audit, property });
   attachAudit(report, sel);
-  report.totals.basis = `sum of query × page rows for the top ${pages} pages by clicks (not site totals)`;
+  report.totals.basis = dates.length ? `daily site totals (GetRankAndTrafficStats, ${dates[0]!.key} – ${dates.at(-1)!.key})` : `sum of query × page rows for the top ${pages} pages by clicks (not site totals)`;
   report.notes.push(`Query × page rows come from GetPageQueryStats for the top ${pages} pages by clicks; positions are impression-weighted AvgImpressionPosition.`);
-  saveReport(flags, workspace, 'bing', { target: siteUrl, days }, report);
+  if (!rows.length) {
+    const why = report.totals.impressions ? 'Bing reports site impressions but no page or query detail for this period yet' : 'Bing reports no impressions for this site in this period';
+    report.notMeasured.push(`Query and page analysis: ${why}. New sites usually need days to weeks in Bing; check indexing in Bing Webmaster Tools (URL Inspection, Site Explorer).`);
+    log(v, `Note: ${why}.`);
+  }
+  saveReport(flags, workspace, 'bing', { target: site.url, days }, report);
   return 0;
 }
 
@@ -331,7 +478,7 @@ export async function commandConnect(flags: GlobalFlags): Promise<number> {
   const choice = v['choice'] as SearchDataChoice | undefined;
   if (choice && !['google', 'csv', 'skip'].includes(choice)) throw new UsageError('--choice must be google, csv or skip');
   if (choice) setSitePreference(site, { choice, property: v['property'] as string | undefined });
-  const cred = readCredentials()['gsc'];
+  const cred = getCredential('gsc');
   const state = {
     site: siteKey(site),
     preference: getSitePreference(site),

@@ -6,7 +6,7 @@ import type { LookupFunction } from 'node:net';
 import type { FetchResult, RedirectHop } from '../core/types.js';
 import { assertUrlAllowed, BlockedUrlError, classifyAddress, DEFAULT_POLICY, isAddressAllowed, type NetPolicy } from './ssrf.js';
 
-export const SEARVEX_VERSION = '0.7.0';
+export const SEARVEX_VERSION = '1.0.0';
 /** Honest crawler identification. robots.txt rules for "SearvexBot" (or "Searvex") apply. */
 export const DEFAULT_USER_AGENT = `Mozilla/5.0 (compatible; SearvexBot/${SEARVEX_VERSION}; +https://github.com/cihantopac/searvex)`;
 

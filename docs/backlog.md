@@ -28,7 +28,7 @@ Each item lists how it will be verified; nothing is marked done without that ver
 ### P1 — Search data & intelligence
 | # | Item | Status |
 |---|---|---|
-| 6 | GSC OAuth (loopback, read-only scope, refresh-token storage with 0600 permissions) | ✅ mock-server tested (PKCE, state/CSRF, refresh); **live run pending owner credentials** |
+| 6 | GSC OAuth (loopback, read-only scope, refresh-token storage with 0600 permissions) | ✅ verified live 2026-11-01 (OAuth, refresh, sites, report, pagination) |
 | 7 | GSC analysis: top queries/pages, CTR vs position outliers, striking distance (pos 8–20), query→page mapping, multi-page queries (data-verified cannibalisation), pages without impressions | ✅ `gsc report` with `--audit` join; traffic-weighted priorities still open |
 | 8 | Bing Webmaster API (query/page stats) | ✅ `bing report`, mock-server tested; **live run pending an API key** |
 | 9 | GA4 Data API (landing-page sessions / conversions from organic search) | ⬜ |
@@ -39,10 +39,13 @@ Each item lists how it will be verified; nothing is marked done without that ver
 | 14 | Deeper competitor research: per-competitor topic clusters, page-type comparison per intent | ⬜ |
 | 15 | Bing AI Performance import (CSV) when exported by the user | ⬜ |
 | 26 | Property-aware audit joins (GSC/Bing), multi-site regression tests | ✅ v0.7.0 |
-| 27 | Search Console CSV/ZIP import (localised headers, decimal commas, filters/period metadata, limits) | ✅ v0.7.0 — TR wording to confirm with a real export |
+| 27 | Search Console CSV/ZIP import (localised headers, decimal commas, filters/period metadata, limits) | ✅ v0.7.0 — verified with real TR and EN exports (2026-11-01) |
 | 28 | Onboarding: `connect` with Google / CSV / skip, per-site preference, "Not measured" in summaries | ✅ v0.7.0 |
-| 29 | OAuth hardening: revoke on logout, CI guard, Desktop-client check, invalid_grant guidance, credential store interface | ✅ v0.7.0 (mock-tested; live pending) |
-| 30 | OS keychain credential backend (macOS Keychain, Windows Credential Manager, libsecret) | ⬜ v0.8 |
+| 29 | OAuth hardening: revoke on logout, CI guard, Desktop-client check, invalid_grant guidance, credential store interface | ✅ v0.7.0 — live except revoke (mock-tested) |
+| 30 | OS keychain credential backend (macOS Keychain, Windows DPAPI, libsecret) | ✅ v1.0 round — opt-in `SEARVEX_CREDENTIAL_STORE=keychain` |
+| 33 | `monitor --import/--site-url/--baseline` property checks (tech debt #17) | ✅ v1.0 round |
+| 34 | Renderer hard deadline for busy-loop / memory-growth pages | ✅ v1.0 round |
+| 35 | Optimizer journal (interrupted apply), no forced auto-undo, CRLF and file modes | ✅ v1.0 round |
 | 31 | Playwright isolation round (WebSocket/WebRTC, redirect hops, per-site contexts, process limits) | ✅ v0.7.0 — policy proxy, fresh context per page, sandbox when available |
 | 32 | Docs consistency checks (versions, commands, env vars) | ✅ v0.7.0 |
 

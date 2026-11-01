@@ -60,3 +60,22 @@ describe('prioritisation', () => {
     expect(auto.priority!.effort).toBe('low');
   });
 });
+
+describe('root causes', () => {
+  it('links findings caused by a client-side language switch to it, only when the switch was observed', async () => {
+    const { prioritise } = await import('../../src/analyze/priority.js');
+    const f = (ruleId: string, observed = '') => ({ ruleId, title: ruleId, severity: 'high', confidence: 'verified', category: 'technical', engines: [], message: '', sources: [], count: 1, evidence: [{ url: 'https://e.com/', observed }] }) as never;
+    const switched = [f('lang.locale-adaptive', 'client-side switch during rendering (browser locale en-US): lang tr → en'), f('index.render-mismatch'), f('hreflang.target-error'), f('title.multiple')];
+    prioritise(switched, () => ['https://e.com/']);
+    const why = (xs: Array<{ ruleId: string; priority?: { reasons: string[] } }>, id: string) => xs.find((x) => x.ruleId === id)!.priority!.reasons.join(' ');
+    expect(why(switched, 'index.render-mismatch')).toMatch(/consequence of lang\.locale-adaptive/);
+    const score = (id: string) => (switched as Array<{ ruleId: string; priority?: { score: number } }>).find((x) => x.ruleId === id)!.priority!.score;
+    expect(score('lang.locale-adaptive')).toBeGreaterThan(score('index.render-mismatch'));
+    expect(why(switched, 'lang.locale-adaptive')).toMatch(/root cause of 2 other finding/);
+    expect(why(switched, 'hreflang.target-error')).toMatch(/consequence/);
+    expect(why(switched, 'title.multiple')).not.toMatch(/consequence/);
+    const serverOnly = [f('lang.locale-adaptive', 'server responds differently by Accept-Language'), f('index.render-mismatch')];
+    prioritise(serverOnly, () => ['https://e.com/']);
+    expect(why(serverOnly, 'index.render-mismatch')).not.toMatch(/consequence/);
+  });
+});

@@ -1,6 +1,7 @@
+import { cruxKey } from './crux.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import { analyzeCrawl, auditWebsite, type AuditReport } from '../analyze/audit.js';
+import { analyzeCrawl, auditWebsite, scoreLabel, type AuditReport } from '../analyze/audit.js';
 import { crawl } from '../crawl/crawler.js';
 import { RunStore } from '../crawl/store.js';
 import { unifiedDiff } from '../optimize/diff.js';
@@ -13,7 +14,7 @@ import { diffReports, findBaseline, renderDiffMarkdown, type MonitorDiff } from 
 import { computeGaps, profile, renderResearchMarkdown, type ResearchReport } from './research.js';
 import { renderPlan } from './optimize.js';
 import { getSitePreference, type SitePreference } from '../integrations/preferences.js';
-import { readCredentials } from '../integrations/google-oauth.js';
+import { getCredential } from '../integrations/google-oauth.js';
 
 /**
  * `searvex run`: the full workflow in a fixed order, sharing one crawl.
@@ -44,7 +45,7 @@ export function renderRunSummary(s: RunSummary): string {
   L.push('');
   if (s.website) {
     const r = s.website.report;
-    L.push('## 1. Website audit', '', `${md(r.target)} — health score **${r.scores.overall}/100**, ${r.crawl.crawled} pages${r.crawl.truncated ? ' (page limit reached)' : ''}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, '');
+    L.push('## 1. Website audit', '', `${md(r.target)} — health score **${scoreLabel(r.scores)}**, ${r.crawl.crawled} pages${r.crawl.truncated ? ' (page limit reached)' : ''}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, '');
     for (const f of top(r)) L.push(`- [${f.severity}] ${md(f.title)} — ${f.count} × (\`${f.ruleId}\`)`);
     L.push('', `Full report: \`.searvex/runs/${s.website.runId}/report.md\``, '');
     L.push('## 2. GEO / AI search readiness', '');
@@ -66,7 +67,7 @@ export function renderRunSummary(s: RunSummary): string {
   if (s.diff) L.push('## 3. Change since previous run', '', renderDiffMarkdown(s.diff).split('\n').slice(2).join('\n'), '');
   if (s.research) L.push('## 4. Competitor research', '', renderResearchMarkdown(s.research).split('\n').slice(2).join('\n'), '');
   if (s.repository) {
-    L.push('## 5. Repository audit', '', `Framework: ${s.repository.framework} — health score **${s.repository.report.scores.overall}/100**.`, '');
+    L.push('## 5. Repository audit', '', `Framework: ${s.repository.framework} — health score **${scoreLabel(s.repository.report.scores)}**.`, '');
     for (const f of top(s.repository.report)) L.push(`- [${f.severity}] ${md(f.title)} — ${f.count} × (\`${f.ruleId}\`)`);
     L.push('');
   }
@@ -104,10 +105,10 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
   // 1–3: website
   if (url) {
     log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)…`);
-    const { report, store } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v['check-external'], cruxApiKey: process.env['SEARVEX_CRUX_API_KEY'] });
+    const { report, store } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v['check-external'], cruxApiKey: cruxKey()?.key });
     const files = writeReports(store, report, kb, ['json', 'md', 'html']);
     summary.website = { report, runId: store.runId, files };
-    summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!readCredentials()['gsc'] || !!process.env['SEARVEX_GSC_TOKEN'] };
+    summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!getCredential('gsc') || !!process.env['SEARVEX_GSC_TOKEN'] };
     step(1, 'Website audit', 'done', `${report.crawl.crawled} pages, score ${report.scores.overall}/100`);
     step(2, 'GEO / AI search', 'done', `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
     const base = findBaseline(workspace, report.target, store.runId);
@@ -146,7 +147,7 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
     log(v, `5. Auditing repository ${root}…`);
     const ra = auditRepository(root, { siteUrl, kb });
     summary.repository = { report: ra.report, framework: ra.scan.apps.map((a) => a.framework + (a.appRoot === '.' ? '' : '@' + a.appRoot)).join(', ') };
-    step(5, 'Repository audit', 'done', `${summary.repository.framework}, score ${ra.report.scores.overall}/100`);
+    step(5, 'Repository audit', 'done', `${summary.repository.framework}, score ${scoreLabel(ra.report.scores)}`);
     summary.plan = planFixes(ra.report, ra.scan, { siteUrl, lang: v['lang'] as string | undefined });
     step(6, 'Fix plan (dry run)', 'done', `${summary.plan.fixes.length} automatic fix(es), ${summary.plan.tasks.length} task(s); nothing applied`);
   } else {

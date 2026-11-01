@@ -5,9 +5,10 @@ repositories for technical SEO and GEO/AEO (AI search) issues against a **source
 base**, researches competitors, and applies **safe, verified code fixes with one-command rollback**.
 It ships as a standalone CLI and as a Claude Code plugin.
 
-> Status: **v0.7.0 (early)**. The engine, rule base, CLI and plugin are tested (automated tests incl. Playwright rendering, CI on Linux/macOS/Windows,
-> real-site and real-repository validation — see [docs/quality.md](docs/quality.md)). Expect rough
-> edges; read [Limitations](#limitations) before relying on it.
+> Status: **v1.0.0**. Tested with automated tests (incl. Playwright rendering and adversarial isolation tests),
+> CI on Linux, macOS and Windows, clean installs of the packed package, and real-world validation on 13 public
+> sites, 9 repositories and live Search Console / CrUX accounts — see [docs/quality.md](docs/quality.md) and
+> [docs/release-checklist.md](docs/release-checklist.md). Read [Limitations](#limitations) before relying on it.
 
 ## Why Searvex
 
@@ -37,8 +38,8 @@ Competitor research and differentiation notes: [docs/research/competitors-2026-1
   (`research`).
 - Fix a small set of problems in code automatically (9 rule types: e.g. missing `lang`, viewport, robots.txt
   sitemap line, invalid hreflang codes), always as a dry-run diff first, then apply → re-verify → rollback.
-- Read Search Console or Bing data when you connect them yourself, and keep measured data separate from
-  inference.
+- Read Search Console data from a CSV export you download (no account needed), or from the Search Console
+  API (your own OAuth client) and the Bing API (experimental) when you connect them yourself, and keep measured data separate from inference.
 
 **Searvex does not:**
 
@@ -114,7 +115,7 @@ searvex connect https://example.com
 searvex gsc import performance-export.zip --audit latest   # Search Console CSV export, no account access
 searvex gsc auth --client client_secret.json               # your own Google OAuth "Desktop app" client
 searvex gsc report sc-domain:example.com --audit latest
-SEARVEX_BING_API_KEY=… searvex bing report https://example.com/
+searvex bing auth && searvex bing report https://example.com/   # Bing API key, asked once (hidden input)
 
 # Inspect the rule base and re-verify its official sources
 searvex rules check-sources
@@ -129,13 +130,28 @@ Full reference: [docs/cli.md](docs/cli.md).
 
 ### Optional integrations (read-only, opt-in)
 
-| Variable | Enables |
-|---|---|
-| `SEARVEX_CRUX_API_KEY` | Real-user Core Web Vitals (Chrome UX Report API) |
-| `searvex gsc auth` (or `SEARVEX_GSC_TOKEN`) | Search Console query × page analysis, `monitor` performance |
-| `SEARVEX_BING_API_KEY` | Bing Webmaster Tools query × page analysis |
-| `searvex gsc import export.zip` | Search Console Performance CSV/ZIP exports (no account access; no query × page data) |
-| `npm i -D playwright` | `--render`: JavaScript rendering and raw-vs-rendered comparison |
+| Variable | Enables | Status |
+|---|---|---|
+| `npm i -D playwright` | `--render`: JavaScript rendering and raw-vs-rendered comparison | supported |
+| `searvex gsc import export.zip` | Search Console Performance CSV/ZIP exports (no account access; no query × page data) | supported² |
+| `searvex gsc auth` (or `SEARVEX_GSC_TOKEN`) | Search Console query × page analysis, `monitor` performance | supported³ |
+| `searvex bing auth` (or `SEARVEX_BING_API_KEY`) | Bing Webmaster Tools query × page analysis | experimental¹ |
+| `searvex crux auth` (or `SEARVEX_CRUX_API_KEY`) | Real-user Core Web Vitals (Chrome UX Report API) | supported⁴ |
+| `SEARVEX_CREDENTIAL_STORE=keychain` | Keep the Search Console refresh token in the OS keychain instead of a 0600 file | supported |
+
+¹ Experimental: implemented and tested against recorded API behaviour and synthetic exports, but not yet
+verified against the live service or real exports in every UI language. Interfaces may change; please report
+problems. See [docs/release-checklist.md](docs/release-checklist.md).
+
+² Verified with real exports downloaded in the Turkish and English Search Console UI (both give identical
+results); other UI languages are recognised from published UI terms.
+
+³ Verified against the live Search Console API (authorization, refresh, property discovery, pagination,
+reports; totals identical to the CSV export of the same period). Revocation on `gsc logout` is tested against a
+mock server only.
+
+⁴ Verified against the live CrUX API: values identical to the raw API response; origins without enough
+real-user traffic are reported as not measured.
 
 Without them, Searvex reports these metrics as **not measured** — it never estimates them.
 

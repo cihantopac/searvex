@@ -82,4 +82,35 @@ export function prioritise(findings: Array<Finding & { count: number }>, affecte
     const bucket: Priority['bucket'] = score >= 45 ? 'P1' : score >= 15 ? 'P2' : 'P3';
     f.priority = { score, bucket, reach: Math.round(reach * 1000) / 1000, effort, reasons };
   }
+  linkRootCauses(findings);
+}
+
+/**
+ * Findings that are usually consequences of one root cause, so the report can say "fix X first". Only
+ * applied when the root cause was actually observed, and stated as "likely": the check cannot prove it.
+ */
+const CONSEQUENCES: Array<{ cause: string; when: RegExp; effects: string[]; why: string }> = [
+  {
+    cause: 'lang.locale-adaptive',
+    when: /client-side switch during rendering/,
+    effects: ['index.render-mismatch', 'index.soft-404', 'hreflang.target-error', 'index.sitemap-non-canonical', 'crawl.sitemap-orphan', 'duplicate.content', 'duplicate.title', 'lang.mixed-navigation', 'canonical.target-error'],
+    why: 'the page switches language in the browser (en-US), which changes its title, canonical and links for renderers such as Googlebot',
+  },
+];
+
+function linkRootCauses(findings: Array<Finding & { count: number }>): void {
+  for (const c of CONSEQUENCES) {
+    const cause = findings.find((f) => f.ruleId === c.cause && f.evidence.some((e) => c.when.test(e.observed ?? '')));
+    if (!cause) continue;
+    const effects = findings.filter((f) => c.effects.includes(f.ruleId) && f.priority);
+    if (!effects.length || !cause.priority) continue;
+    for (const f of effects) f.priority!.reasons.push(`likely a consequence of ${c.cause} — ${c.why}; fix that first, then re-run`);
+    // Rank the cause above its consequences: fixing it usually resolves them.
+    const top = Math.max(...effects.map((f) => f.priority!.score));
+    if (cause.priority.score <= top) {
+      cause.priority.score = Math.min(100, top + 1);
+      cause.priority.bucket = cause.priority.score >= 45 ? 'P1' : cause.priority.score >= 15 ? 'P2' : 'P3';
+    }
+    cause.priority.reasons.push(`likely root cause of ${effects.length} other finding(s): ${effects.map((f) => f.ruleId).join(', ')}`);
+  }
 }
