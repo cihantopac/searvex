@@ -1,33 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="132" viewBox="0 0 960 132" role="img" aria-label="Searvex workflow: Audit, Understand, Prioritize, Fix, Verify, Monitor">
 <style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}</style>
-<rect x="1.0" y="30" width="138" height="74" rx="12" fill="#ffffff" stroke="#dbe3e1" stroke-width="1.5"/>
+<rect x="1.0" y="30" width="138" height="74" rx="12" fill="#fffdf9" stroke="#e3dbcc" stroke-width="1.5"/>
 <text x="15.0" y="52" font-size="11" font-weight="600" fill="#0e4f55">01</text>
 <text x="15.0" y="74" font-size="16" font-weight="700" fill="#13201f">Audit</text>
-<text x="15.0" y="92" font-size="11.5" fill="#566563">crawl or scan</text>
+<text x="15.0" y="92" font-size="11.5" fill="#56615e">crawl or scan</text>
 <path d="M143.0 67.0 h16" stroke="#0e4f55" stroke-width="2"/><path d="M159.0 63.0 l6 4 l-6 4z" fill="#0e4f55"/>
-<rect x="165.0" y="30" width="138" height="74" rx="12" fill="#ffffff" stroke="#dbe3e1" stroke-width="1.5"/>
+<rect x="165.0" y="30" width="138" height="74" rx="12" fill="#fffdf9" stroke="#e3dbcc" stroke-width="1.5"/>
 <text x="179.0" y="52" font-size="11" font-weight="600" fill="#0e4f55">02</text>
 <text x="179.0" y="74" font-size="16" font-weight="700" fill="#13201f">Understand</text>
-<text x="179.0" y="92" font-size="11.5" fill="#566563">evidence + sources</text>
+<text x="179.0" y="92" font-size="11.5" fill="#56615e">evidence + sources</text>
 <path d="M307.0 67.0 h16" stroke="#0e4f55" stroke-width="2"/><path d="M323.0 63.0 l6 4 l-6 4z" fill="#0e4f55"/>
-<rect x="329.0" y="30" width="138" height="74" rx="12" fill="#ffffff" stroke="#dbe3e1" stroke-width="1.5"/>
+<rect x="329.0" y="30" width="138" height="74" rx="12" fill="#fffdf9" stroke="#e3dbcc" stroke-width="1.5"/>
 <text x="343.0" y="52" font-size="11" font-weight="600" fill="#0e4f55">03</text>
 <text x="343.0" y="74" font-size="16" font-weight="700" fill="#13201f">Prioritize</text>
-<text x="343.0" y="92" font-size="11.5" fill="#566563">root causes first</text>
+<text x="343.0" y="92" font-size="11.5" fill="#56615e">root causes first</text>
 <path d="M471.0 67.0 h16" stroke="#0e4f55" stroke-width="2"/><path d="M487.0 63.0 l6 4 l-6 4z" fill="#0e4f55"/>
-<rect x="493.0" y="30" width="138" height="74" rx="12" fill="#ffffff" stroke="#c9472f" stroke-width="2"/>
+<rect x="493.0" y="30" width="138" height="74" rx="12" fill="#fffdf9" stroke="#b8432d" stroke-width="2"/>
 <text x="507.0" y="52" font-size="11" font-weight="600" fill="#0e4f55">04</text>
 <text x="507.0" y="74" font-size="16" font-weight="700" fill="#13201f">Fix</text>
-<text x="507.0" y="92" font-size="11.5" fill="#566563">auto · agent · manual</text>
+<text x="507.0" y="92" font-size="11.5" fill="#56615e">auto · agent · manual</text>
 <path d="M635.0 67.0 h16" stroke="#0e4f55" stroke-width="2"/><path d="M651.0 63.0 l6 4 l-6 4z" fill="#0e4f55"/>
-<rect x="657.0" y="30" width="138" height="74" rx="12" fill="#ffffff" stroke="#dbe3e1" stroke-width="1.5"/>
+<rect x="657.0" y="30" width="138" height="74" rx="12" fill="#fffdf9" stroke="#e3dbcc" stroke-width="1.5"/>
 <text x="671.0" y="52" font-size="11" font-weight="600" fill="#0e4f55">05</text>
 <text x="671.0" y="74" font-size="16" font-weight="700" fill="#13201f">Verify</text>
-<text x="671.0" y="92" font-size="11.5" fill="#566563">re-audit + rollback</text>
+<text x="671.0" y="92" font-size="11.5" fill="#56615e">re-audit + rollback</text>
 <path d="M799.0 67.0 h16" stroke="#0e4f55" stroke-width="2"/><path d="M815.0 63.0 l6 4 l-6 4z" fill="#0e4f55"/>
-<rect x="821.0" y="30" width="138" height="74" rx="12" fill="#ffffff" stroke="#dbe3e1" stroke-width="1.5"/>
+<rect x="821.0" y="30" width="138" height="74" rx="12" fill="#fffdf9" stroke="#e3dbcc" stroke-width="1.5"/>
 <text x="835.0" y="52" font-size="11" font-weight="600" fill="#0e4f55">06</text>
 <text x="835.0" y="74" font-size="16" font-weight="700" fill="#13201f">Monitor</text>
-<text x="835.0" y="92" font-size="11.5" fill="#566563">changes over time</text>
-<path d="M890.0 106 v14 H70.0 v-12" fill="none" stroke="#dbe3e1" stroke-width="1.5" stroke-dasharray="4 4"/><path d="M66.0 110 l4 -6 l4 6z" fill="#dbe3e1"/>
+<text x="835.0" y="92" font-size="11.5" fill="#56615e">changes over time</text>
+<path d="M890.0 106 v14 H70.0 v-12" fill="none" stroke="#b3a891" stroke-width="1.5" stroke-dasharray="4 4"/><path d="M66.0 110 l4 -6 l4 6z" fill="#b3a891"/>
 </svg>

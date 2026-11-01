@@ -1,6 +1,6 @@
 {
   "name": "searvex-seo",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Understand search, fix what matters: open-source SEO + GEO auditor for websites and repositories with a bilingual (EN/TR) action-center report, root-cause grouping, repair prompts for coding agents and safe code fixes with rollback.",
   "license": "Apache-2.0",
   "type": "module",

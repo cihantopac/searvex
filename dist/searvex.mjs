@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Searvex 1.1.0 — Apache-2.0 — https://github.com/cihantopac/searvex
+// Searvex 1.1.1 — Apache-2.0 — https://github.com/cihantopac/searvex
 import { createRequire as __searvexCreateRequire } from 'node:module';
 const require = __searvexCreateRequire(import.meta.url);
 var __create = Object.create;
@@ -930,7 +930,7 @@ var init_fetcher = __esm({
   "src/net/fetcher.ts"() {
     "use strict";
     init_ssrf();
-    SEARVEX_VERSION = "1.1.0";
+    SEARVEX_VERSION = "1.1.1";
     DEFAULT_USER_AGENT = `Mozilla/5.0 (compatible; SearvexBot/${SEARVEX_VERSION}; +https://github.com/cihantopac/searvex)`;
     DEFAULTS = {
       timeoutMs: 15e3,
@@ -37037,10 +37037,10 @@ if(D.search)tabs.push(['search',T('nav.search')]);if(D.diff)tabs.push(['changes'
 overview(panel('overview'),issues);priorities(panel('priorities'),issues);issuesPanel(panel('issues'));if(hasGeo)geo(panel('geo'));if(D.search)search(panel('search'));if(D.diff)changes(panel('changes'));evidence(panel('evidence'));
 mkTabs(tabs);actionbar()}
 function overview(P,issues){
-var lim=[];if(R.crawl.truncated)lim.push(T('warn.truncated',{n:fmt(R.crawl.queuedRemaining)}));if(R.scores.notApplicable)lim.push(T('warn.notApplicable')+': '+R.scores.notApplicable);
-if(!D.search&&R.mode==='website')lim.push(T('sp.notConnected'));R.findings.filter(function(f){return f.confidence==='unmeasurable'}).forEach(function(f){lim.push(rt(f.ruleId).title+(f.evidence[0]&&f.evidence[0].observed?' — '+f.evidence[0].observed:''))});
-if(R.mode==='website'&&!R.rendered)lim.push(T('warn.noRender'));
-lim=lim.filter(Boolean);
+function TT(k,fb){var s=T(k);return s===k?fb:s}
+var lim=[];if(R.crawl.truncated)lim.push([T('lim.truncated'),T('warn.truncated',{n:fmt(R.crawl.queuedRemaining)})]);if(R.scores.notApplicable)lim.push([T('warn.notApplicable'),T('warn.notApplicable')+': '+R.scores.notApplicable]);
+if(!D.search&&R.mode==='website')lim.push([T('lim.search'),T('sp.notConnected')]);R.findings.filter(function(f){return f.confidence==='unmeasurable'}).forEach(function(f){var t=rt(f.ruleId).title,o=f.evidence[0]&&f.evidence[0].observed;lim.push([TT('lim.'+f.ruleId,t),t+(o?' — '+TT('limd.'+f.ruleId,o):'')])});
+if(R.mode==='website'&&!R.rendered)lim.push([T('lim.render'),T('warn.noRender')]);
 var groups=0;issues.forEach(function(f){groups+=groupsOf(f).length});
 var auto=issues.filter(function(f){return D.rem[f.ruleId]==='auto'}),optOnly=issues.filter(function(f){return D.rem[f.ruleId]!=='auto'&&D.opt[f.ruleId]});
 var ch=null;if(D.diff){var dd=D.diff.scoreBefore===null?null:D.diff.scoreAfter-D.diff.scoreBefore;ch=card(T('kpi.change'),dd===null?'—':(dd>=0?'+':'')+dd,'+'+D.diff.newFindings.length+' / −'+D.diff.resolved.length)}
@@ -37050,13 +37050,13 @@ card(T('kpi.groups'),fmt(groups),T('kpi.types',{n:fmt(issues.length)})),
 card(T(R.mode==='website'?'kpi.affected':'kpi.affectedFiles'),fmt(R.affectedUrls!==undefined?R.affectedUrls:0),(R.mode==='website'?T('kpi.pages'):T('kpi.routes'))+': '+fmt(R.crawl.crawled)),
 card(T('kpi.critical'),fmt(issues.filter(function(f){return f.severity==='critical'||f.severity==='high'}).length),null,null,issues.some(function(f){return f.severity==='critical'})?'alert':''),
 card(T('kpi.auto'),fmt(auto.length),auto.length?null:optOnly.length?T('kpi.autoRepo')+' ('+optOnly.length+')':T('kpi.autoNone')),ch||card(T('kpi.change'),'—',T('kpi.noBaseline'))]));
-if(lim.length)P.appendChild(el('div',{class:'notice',role:'note'},[el('b',{text:T('ov.limits')}),el('ul',{},lim.slice(0,6).map(function(l){return el('li',{text:l})}))]));
+if(lim.length)P.appendChild(el('div',{class:'limits',role:'note'},[el('b',{text:T('ov.limits')}),el('span',{class:'lim',text:lim.map(function(l){return l[0]}).join(' · ')}),el('details',{},[el('summary',{text:T('ov.limitsMore')}),el('ul',{},lim.map(function(l){return el('li',{text:l[1]})}))])]));
+var top=issues.slice().sort(function(a,b){return((b.priority&&b.priority.score)||0)-((a.priority&&a.priority.score)||0)}).slice(0,3);
+P.appendChild(h2(T('pri.title'),T('pri.note')));P.appendChild(top.length?el('div',{class:'prio'},top.map(prioCard)):el('p',{class:'muted',text:T('pri.none')}));
 var pil=el('div',{class:'pillars'});PILLARS.forEach(function(p){var cats=p[1],fs=issues.filter(function(f){return cats.indexOf(f.category)>=0});var sc=cats.map(function(c){return R.scores.byCategory[c]}).filter(function(x){return typeof x==='number'});var v=sc.length?Math.min.apply(null,sc):100;
 if(p[0]==='geo'&&R.mode==='repository'&&!fs.length)return;var cls=v>=90?'good':v>=70?'medium':'critical';
 pil.appendChild(el('button',{type:'button',class:'pillar '+cls,title:cats.map(function(c){return T('cat.'+c)}).join(', ')},[el('span',{class:'label',text:T('pillar.'+p[0])}),el('b',{text:String(v)}),el('span',{class:'sub',text:fs.length?T('pillar.issues',{n:fs.length}):T('pillar.noIssues')})]));pil.lastChild.onclick=function(){FILT.cat=cats.length===1?cats[0]:'';FILT.q='';FILT.pillar=cats;showTab('issues');issuesPanel(document.getElementById('p-issues'))}});
 P.appendChild(h2(T('ov.pillars')));P.appendChild(pil);
-var top=issues.slice().sort(function(a,b){return((b.priority&&b.priority.score)||0)-((a.priority&&a.priority.score)||0)}).slice(0,3);
-P.appendChild(h2(T('pri.title'),T('pri.note')));P.appendChild(top.length?el('div',{class:'prio'},top.map(prioCard)):el('p',{class:'muted',text:T('pri.none')}));
 var c=el('div',{class:'charts'});
 c.appendChild(stacked(T('ov.severity'),SEVS.slice(0,4).map(function(s){return[T('sev.'+s),issues.filter(function(f){return f.severity===s}).length,s]})));
 c.appendChild(stacked(T('ov.remediation'),[['auto','good'],['agent','low'],['manual','medium']].map(function(r){return[T('rem.'+r[0]),issues.filter(function(f){return D.rem[f.ruleId]===r[0]}).length,r[1]]}),T('rem.auto.help')));
@@ -37245,7 +37245,15 @@ var UI = {
     "ov.rootCauses": "Top root causes",
     "ov.rootCausesNote": "Shared templates or files where one change fixes many pages.",
     "ov.pillars": "Condition",
-    "ov.limits": "Limits of this run",
+    "ov.limits": "Not covered in this run:",
+    "ov.limitsMore": "Details",
+    "lim.search": "Search Console data",
+    "lim.render": "JavaScript rendering",
+    "lim.truncated": "Partial crawl",
+    "lim.geo.citations-unmeasured": "AI citations",
+    "lim.perf.cwv-unmeasured": "Core Web Vitals",
+    "limd.geo.citations-unmeasured": "no AI citation data source is configured",
+    "limd.perf.cwv-unmeasured": "no CrUX API key is configured (searvex crux auth, or SEARVEX_CRUX_API_KEY)",
     "ov.measurement": "Evidence quality",
     "pillar.technical": "Technical SEO",
     "pillar.index": "Indexability & crawlability",
@@ -37447,7 +37455,7 @@ var UI = {
     "kpi.types": "{n} sorun t\xFCr\xFC",
     "iss.howFixed": "Her sorun nas\u0131l d\xFCzeltilir:",
     "act.groups": "{n} k\xF6k neden grubu",
-    "kpi.autoRepo": "depo ile kullan\u0131labilir",
+    "kpi.autoRepo": "depoda kullan\u0131labilir",
     "sev.critical": "Kritik",
     "sev.high": "Y\xFCksek",
     "sev.medium": "Orta",
@@ -37459,7 +37467,7 @@ var UI = {
     "rem.auto": "Otomatik d\xFCzeltme",
     "rem.agent": "Ajan destekli",
     "rem.manual": "Manuel / operasyonel",
-    "rem.auto.help": "Deterministik bir Searvex optimizer\u2019\u0131 yamay\u0131 \xFCretir ve do\u011Frular (dry-run \u2192 onay \u2192 uygula \u2192 do\u011Frula \u2192 geri al).",
+    "rem.auto.help": "Searvex\u2019in deterministik d\xFCzelticisi yamay\u0131 \xFCretir ve do\u011Frular (deneme \u2192 onay \u2192 uygula \u2192 do\u011Frula \u2192 geri al).",
     "rem.agent.help": "Kaynak kodu anlamay\u0131, i\xE7erik muhakemesini veya framework\u2019e \xF6zg\xFC de\u011Fi\u015Fiklikleri gerektirir. Uygulamadan \xF6nce inceleyin.",
     "rem.manual.help": "G\xFCvenle otomatikle\u015Ftirilemeyen yay\u0131n, sunucu, Search Console veya i\u015F kararlar\u0131 gerektirir.",
     "rem.optimizerHint": "Depo \xFCzerinde \xE7al\u0131\u015Ft\u0131r\u0131ld\u0131\u011F\u0131nda searvex optimize bunu d\xFCzeltebilir.",
@@ -37484,7 +37492,15 @@ var UI = {
     "ov.rootCauses": "Ba\u015Fl\u0131ca k\xF6k nedenler",
     "ov.rootCausesNote": "Tek de\u011Fi\u015Fikli\u011Fin bir\xE7ok sayfay\u0131 d\xFCzeltti\u011Fi ortak \u015Fablonlar veya dosyalar.",
     "ov.pillars": "Durum",
-    "ov.limits": "Bu analizin s\u0131n\u0131rlar\u0131",
+    "ov.limits": "Bu analizde kapsanmayanlar:",
+    "ov.limitsMore": "Ayr\u0131nt\u0131lar",
+    "lim.search": "Search Console verisi",
+    "lim.render": "JavaScript i\u015Fleme",
+    "lim.truncated": "K\u0131smi tarama",
+    "lim.geo.citations-unmeasured": "Yapay zek\xE2 al\u0131nt\u0131lar\u0131",
+    "lim.perf.cwv-unmeasured": "Core Web Vitals",
+    "limd.geo.citations-unmeasured": "yapay zek\xE2 al\u0131nt\u0131 verisi i\xE7in kaynak yap\u0131land\u0131r\u0131lmad\u0131",
+    "limd.perf.cwv-unmeasured": "CrUX API anahtar\u0131 yap\u0131land\u0131r\u0131lmad\u0131 (searvex crux auth veya SEARVEX_CRUX_API_KEY)",
     "ov.measurement": "Kan\u0131t kalitesi",
     "pillar.technical": "Teknik SEO",
     "pillar.index": "Dizine eklenebilirlik ve taranabilirlik",
@@ -37505,7 +37521,7 @@ var UI = {
     "iss.filterConf": "Kan\u0131t",
     "iss.filterAll": "T\xFCm\xFC",
     "iss.search": "Metin, URL veya dosyaya g\xF6re filtrele",
-    "iss.showInfo": "Bilgi ama\xE7l\u0131lar\u0131 g\xF6ster",
+    "iss.showInfo": "Bilgi notlar\u0131n\u0131 da g\xF6ster",
     "iss.selectVisible": "G\xF6r\xFCnenleri se\xE7",
     "iss.clear": "Se\xE7imi temizle",
     "iss.count": "{n} sorun t\xFCr\xFC \xB7 {g} grup g\xF6steriliyor",
@@ -37522,8 +37538,8 @@ var UI = {
     "ev.section": "B\xF6l\xFCm",
     "ev.terms": "Bask\u0131n terimler",
     "ev.methodText": "Searvex sa\u011Fl\u0131k skoru = 100 \u2212 \u03A3(\xF6nem a\u011F\u0131rl\u0131\u011F\u0131 \xD7 etkilenen sayfa oran\u0131). Sezgisel bulgular %50 a\u011F\u0131rl\u0131kla say\u0131l\u0131r; \xF6l\xE7\xFClemeyen bulgular hari\xE7 tutulur. Searvex bulgular\u0131n\u0131 \xF6zetler; bir arama motoru metri\u011Fi de\u011Fildir.",
-    "iss.group.layout": "Ortak layout",
-    "iss.layout": "\xE7o\u011Fu sayfa t\xFCr\xFCn\xFC etkiliyor \u2014 b\xFCy\xFCk olas\u0131l\u0131kla tek bir ortak layout, head veya SEO bile\u015Feni",
+    "iss.group.layout": "Ortak sayfa d\xFCzeni",
+    "iss.layout": "\xE7o\u011Fu sayfa t\xFCr\xFCn\xFC etkiliyor \u2014 b\xFCy\xFCk olas\u0131l\u0131kla tek bir ortak sayfa d\xFCzeni, <head> veya SEO bile\u015Feni",
     "warn.noRender": "JavaScript \xE7al\u0131\u015Ft\u0131r\u0131lmad\u0131 (--render kullan\u0131n); istemci taraf\u0131nda olu\u015Fturulan i\xE7erik yaln\u0131zca sezgisel olarak tespit edilir.",
     "iss.locations": "{n} konum",
     "iss.pages": "{n} sayfa",
@@ -37550,7 +37566,7 @@ var UI = {
     "iss.review.confirmed": "\u0130ncelemede do\u011Fruland\u0131",
     "iss.review.rejected": "Yanl\u0131\u015F pozitif olarak reddedildi",
     "iss.review.fixed": "D\xFCzeltildi olarak bildirildi",
-    "iss.review.note": "Taray\u0131c\u0131 kan\u0131t\u0131 de\u011Fi\u015Ftirilmedi; inceleme ayr\u0131ca g\xF6sterilir.",
+    "iss.review.note": "Tarama kan\u0131t\u0131 de\u011Fi\u015Ftirilmedi; inceleme ayr\u0131ca g\xF6sterilir.",
     "iss.selectGroup": "Bu gruptaki t\xFCm konumlar\u0131 se\xE7",
     "iss.selectFinding": "Bu sorunu se\xE7",
     "act.selected": "{n} se\xE7ili",
@@ -38404,16 +38420,16 @@ init_fetcher();
 function safeJson(data2) {
   return JSON.stringify(data2).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 }
-var LIGHT = "--bg:#f5f7f6;--panel:#ffffff;--panel2:#eef3f2;--text:#13201f;--muted:#566563;--line:#dbe3e1;--accent:#0e4f55;--accent-ink:#ffffff;--accent-soft:#e1eeee;--coral:#b8432d;--mark:#0e4f55;--caret:#b8432d;--crit:#b42318;--high:#b93815;--med:#946200;--low:#2459b8;--good:#1b7a3e;--info:#667085;--chip:#eef2f1;--shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);color-scheme:light";
-var DARK = "--bg:#0e1615;--panel:#151f1e;--panel2:#1b2827;--text:#e6eeec;--muted:#9fb1ae;--line:#2a3937;--accent:#5ec4c6;--accent-ink:#06201f;--accent-soft:#16393a;--coral:#f08a74;--mark:#f6f1e7;--caret:#bf4933;--crit:#ff7b6e;--high:#ff9b5c;--med:#f2c14e;--low:#86b4ff;--good:#62d08d;--info:#9aa6b6;--chip:#202e2d;--shadow:0 1px 2px rgba(0,0,0,.4);color-scheme:dark";
+var LIGHT = "--bg:#f6f1e7;--panel:#fffdf9;--panel2:#f2ece1;--text:#13201f;--muted:#56615e;--line:#e3dbcc;--accent:#0e4f55;--accent-ink:#ffffff;--accent-soft:#e2ecea;--coral:#b8432d;--mark:#0e4f55;--caret:#b8432d;--crit:#b42318;--high:#b93815;--med:#8a5a00;--low:#2459b8;--good:#18703a;--info:#5f6765;--chip:#efe8da;--shadow:0 1px 2px rgba(19,32,31,.05),0 2px 6px rgba(19,32,31,.05);color-scheme:light";
+var DARK = "--bg:#111b1a;--panel:#172322;--panel2:#1c2a28;--text:#f1ece2;--muted:#a9b6b2;--line:#2a3a38;--accent:#6fc2bd;--accent-ink:#0b2422;--accent-soft:#183a39;--coral:#e98a74;--mark:#f6f1e7;--caret:#c9533b;--crit:#ff7b6e;--high:#ff9b5c;--med:#f2c14e;--low:#8db8ff;--good:#62d08d;--info:#9da9a6;--chip:#22312f;--shadow:0 1px 2px rgba(0,0,0,.35);color-scheme:dark";
 var BASE_CSS = `:root{${LIGHT}}
 :root[data-theme=dark]{${DARK}}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){${DARK}}}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;padding-bottom:84px}
 a{color:var(--accent);text-underline-offset:2px}code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:anywhere}
 .top{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between;max-width:1240px;margin:auto;padding:20px 16px 8px}
-.brand{min-width:0}.logo{display:block;height:22px;width:auto;margin-bottom:8px}.logo .m{fill:var(--mark)}.logo .c{fill:var(--caret)}.kicker{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--accent)}
-h1{font-size:20px;margin:0;overflow-wrap:anywhere;line-height:1.3}.muted{color:var(--muted)}.small{font-size:12.5px}
+.brand{min-width:0}.logo{display:block;height:24px;width:auto;margin-bottom:10px}.logo .m{fill:var(--mark)}.logo .c{fill:var(--caret)}.kicker{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--accent)}
+h1{font-size:21px;margin:2px 0;overflow-wrap:anywhere;line-height:1.3;letter-spacing:-.01em}.muted{color:var(--muted)}.small{font-size:12.5px}
 .controls{display:flex;gap:8px;flex-wrap:wrap}.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
 .seg button{background:none;border:0;color:var(--muted);padding:6px 10px;font:inherit;font-size:12.5px;cursor:pointer;min-height:32px}.seg button+button{border-left:1px solid var(--line)}
 .seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);font-weight:600}
@@ -38422,19 +38438,20 @@ button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visi
 .tabs button{background:none;border:0;padding:10px 12px;color:var(--muted);cursor:pointer;font:inherit;border-bottom:2px solid transparent;white-space:nowrap}
 .tabs button[aria-selected=true]{color:var(--text);border-color:var(--accent);font-weight:600}.tabs .count{margin-left:6px;background:var(--chip);border-radius:999px;padding:0 7px;font-size:11.5px}
 main{max-width:1240px;margin:auto;padding:12px 16px 32px}.panel{display:none}.panel.active{display:block}
-.h2{margin:22px 0 8px}h2{font-size:16px;margin:0}.h2 p{margin:2px 0 0}h3{font-size:13.5px;margin:0 0 8px}h4{font-size:13px;margin:14px 0 6px}
+.h2{margin:28px 0 10px}h2{font-size:16.5px;margin:0;letter-spacing:-.005em}.h2 p{margin:2px 0 0}h3{font-size:13.5px;margin:0 0 8px}h4{font-size:13px;margin:14px 0 6px}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:12px 0}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;gap:12px;align-items:center;box-shadow:var(--shadow)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;gap:12px;align-items:center;box-shadow:var(--shadow)}
 .card .label{display:block;color:var(--muted);font-size:12.5px}.card b{display:block;font-size:24px;line-height:1.2;font-variant-numeric:tabular-nums}.card .sub{display:block;color:var(--muted);font-size:11.5px}
 .kpis{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.card.score{grid-column:span 2}.card.alert b{color:var(--crit)}.gauge .gtrack{fill:none;stroke:var(--chip);stroke-width:8}.gauge .gfill{fill:none;stroke-width:8;stroke-linecap:round}
 .gfill.good{stroke:var(--good)}.gfill.medium{stroke:var(--med)}.gfill.critical{stroke:var(--crit)}.gfill.info{stroke:var(--info)}
+.limits{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:12px 0;font-size:13px}.limits>b{font-weight:600}.limits .lim{color:var(--muted)}.limits details{flex-basis:100%}.limits summary{cursor:pointer;color:var(--accent);font-size:12.5px;width:max-content}.limits ul{margin:6px 0 2px;padding-left:18px;color:var(--muted);font-size:12.5px}
 .notice{background:var(--accent-soft);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;padding:10px 14px;margin:12px 0}.notice ul{margin:4px 0 0;padding-left:18px}
 .pillars{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .pillar{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--info);border-radius:12px;padding:10px 12px;text-align:left;color:var(--text);font:inherit;cursor:pointer}
 .pillar.good{border-top-color:var(--good)}.pillar.medium{border-top-color:var(--med)}.pillar.critical{border-top-color:var(--crit)}
 .pillar .label{display:block;font-size:12.5px;color:var(--muted)}.pillar b{display:block;font-size:22px}.pillar .sub{font-size:11.5px;color:var(--muted)}
 .prio{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}.plist{padding-left:22px}.plist li{margin:8px 0}
-.pcard{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--info);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow)}.pcard h3{font-size:14px;margin:8px 0 4px}.pcard p{margin:4px 0}
+.pcard{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--info);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}.pcard h3{font-size:14px;margin:8px 0 4px}.pcard p{margin:4px 0}
 .pcard[data-sev=critical],.finding[data-sev=critical]{border-left-color:var(--crit)}.pcard[data-sev=high],.finding[data-sev=high]{border-left-color:var(--high)}.pcard[data-sev=medium],.finding[data-sev=medium]{border-left-color:var(--med)}.pcard[data-sev=low],.finding[data-sev=low]{border-left-color:var(--low)}
 .prow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.pscore{font-weight:700;font-size:12px;color:var(--accent)}
 .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;margin:14px 0}
@@ -38476,7 +38493,7 @@ ul{padding-left:18px}
 .dhead,.dfoot{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.dialog p{margin:0}
 .dialog textarea{width:100%;min-height:50vh;flex:1;resize:vertical;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
 footer{max-width:1240px;margin:auto;padding:0 16px 24px;color:var(--muted);font-size:12px}
-@media (max-width:640px){h1{font-size:17px}.card.score{grid-column:auto}.card b{font-size:20px}.bar{grid-template-columns:minmax(70px,42%) 1fr 44px}.top{padding-top:14px}
+@media (max-width:640px){h1{font-size:17px}.gauge{width:64px;height:64px}.card{padding:12px}.kpis{grid-template-columns:1fr 1fr}.card.score{grid-column:1/-1}.kpis>.card:nth-child(even):last-child{grid-column:1/-1}.card b{font-size:20px}.bar{grid-template-columns:minmax(70px,42%) 1fr 44px}.top{padding-top:14px}
 #modal.on{padding:0}.dialog{border-radius:0;height:100%}.dialog textarea{min-height:0}.finding{padding:8px 10px}}
 @media print{.tabs,#actionbar,.controls,.filters,.toolbar{display:none}.panel{display:block}}
 `;

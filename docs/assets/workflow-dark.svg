@@ -1,33 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="132" viewBox="0 0 960 132" role="img" aria-label="Searvex workflow: Audit, Understand, Prioritize, Fix, Verify, Monitor">
 <style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}</style>
-<rect x="1.0" y="30" width="138" height="74" rx="12" fill="#151f1e" stroke="#2a3937" stroke-width="1.5"/>
-<text x="15.0" y="52" font-size="11" font-weight="600" fill="#5ec4c6">01</text>
-<text x="15.0" y="74" font-size="16" font-weight="700" fill="#e6eeec">Audit</text>
-<text x="15.0" y="92" font-size="11.5" fill="#9fb1ae">crawl or scan</text>
-<path d="M143.0 67.0 h16" stroke="#5ec4c6" stroke-width="2"/><path d="M159.0 63.0 l6 4 l-6 4z" fill="#5ec4c6"/>
-<rect x="165.0" y="30" width="138" height="74" rx="12" fill="#151f1e" stroke="#2a3937" stroke-width="1.5"/>
-<text x="179.0" y="52" font-size="11" font-weight="600" fill="#5ec4c6">02</text>
-<text x="179.0" y="74" font-size="16" font-weight="700" fill="#e6eeec">Understand</text>
-<text x="179.0" y="92" font-size="11.5" fill="#9fb1ae">evidence + sources</text>
-<path d="M307.0 67.0 h16" stroke="#5ec4c6" stroke-width="2"/><path d="M323.0 63.0 l6 4 l-6 4z" fill="#5ec4c6"/>
-<rect x="329.0" y="30" width="138" height="74" rx="12" fill="#151f1e" stroke="#2a3937" stroke-width="1.5"/>
-<text x="343.0" y="52" font-size="11" font-weight="600" fill="#5ec4c6">03</text>
-<text x="343.0" y="74" font-size="16" font-weight="700" fill="#e6eeec">Prioritize</text>
-<text x="343.0" y="92" font-size="11.5" fill="#9fb1ae">root causes first</text>
-<path d="M471.0 67.0 h16" stroke="#5ec4c6" stroke-width="2"/><path d="M487.0 63.0 l6 4 l-6 4z" fill="#5ec4c6"/>
-<rect x="493.0" y="30" width="138" height="74" rx="12" fill="#151f1e" stroke="#f08a74" stroke-width="2"/>
-<text x="507.0" y="52" font-size="11" font-weight="600" fill="#5ec4c6">04</text>
-<text x="507.0" y="74" font-size="16" font-weight="700" fill="#e6eeec">Fix</text>
-<text x="507.0" y="92" font-size="11.5" fill="#9fb1ae">auto · agent · manual</text>
-<path d="M635.0 67.0 h16" stroke="#5ec4c6" stroke-width="2"/><path d="M651.0 63.0 l6 4 l-6 4z" fill="#5ec4c6"/>
-<rect x="657.0" y="30" width="138" height="74" rx="12" fill="#151f1e" stroke="#2a3937" stroke-width="1.5"/>
-<text x="671.0" y="52" font-size="11" font-weight="600" fill="#5ec4c6">05</text>
-<text x="671.0" y="74" font-size="16" font-weight="700" fill="#e6eeec">Verify</text>
-<text x="671.0" y="92" font-size="11.5" fill="#9fb1ae">re-audit + rollback</text>
-<path d="M799.0 67.0 h16" stroke="#5ec4c6" stroke-width="2"/><path d="M815.0 63.0 l6 4 l-6 4z" fill="#5ec4c6"/>
-<rect x="821.0" y="30" width="138" height="74" rx="12" fill="#151f1e" stroke="#2a3937" stroke-width="1.5"/>
-<text x="835.0" y="52" font-size="11" font-weight="600" fill="#5ec4c6">06</text>
-<text x="835.0" y="74" font-size="16" font-weight="700" fill="#e6eeec">Monitor</text>
-<text x="835.0" y="92" font-size="11.5" fill="#9fb1ae">changes over time</text>
-<path d="M890.0 106 v14 H70.0 v-12" fill="none" stroke="#2a3937" stroke-width="1.5" stroke-dasharray="4 4"/><path d="M66.0 110 l4 -6 l4 6z" fill="#2a3937"/>
+<rect x="1.0" y="30" width="138" height="74" rx="12" fill="#172322" stroke="#2a3a38" stroke-width="1.5"/>
+<text x="15.0" y="52" font-size="11" font-weight="600" fill="#6fc2bd">01</text>
+<text x="15.0" y="74" font-size="16" font-weight="700" fill="#f1ece2">Audit</text>
+<text x="15.0" y="92" font-size="11.5" fill="#a9b6b2">crawl or scan</text>
+<path d="M143.0 67.0 h16" stroke="#6fc2bd" stroke-width="2"/><path d="M159.0 63.0 l6 4 l-6 4z" fill="#6fc2bd"/>
+<rect x="165.0" y="30" width="138" height="74" rx="12" fill="#172322" stroke="#2a3a38" stroke-width="1.5"/>
+<text x="179.0" y="52" font-size="11" font-weight="600" fill="#6fc2bd">02</text>
+<text x="179.0" y="74" font-size="16" font-weight="700" fill="#f1ece2">Understand</text>
+<text x="179.0" y="92" font-size="11.5" fill="#a9b6b2">evidence + sources</text>
+<path d="M307.0 67.0 h16" stroke="#6fc2bd" stroke-width="2"/><path d="M323.0 63.0 l6 4 l-6 4z" fill="#6fc2bd"/>
+<rect x="329.0" y="30" width="138" height="74" rx="12" fill="#172322" stroke="#2a3a38" stroke-width="1.5"/>
+<text x="343.0" y="52" font-size="11" font-weight="600" fill="#6fc2bd">03</text>
+<text x="343.0" y="74" font-size="16" font-weight="700" fill="#f1ece2">Prioritize</text>
+<text x="343.0" y="92" font-size="11.5" fill="#a9b6b2">root causes first</text>
+<path d="M471.0 67.0 h16" stroke="#6fc2bd" stroke-width="2"/><path d="M487.0 63.0 l6 4 l-6 4z" fill="#6fc2bd"/>
+<rect x="493.0" y="30" width="138" height="74" rx="12" fill="#172322" stroke="#e98a74" stroke-width="2"/>
+<text x="507.0" y="52" font-size="11" font-weight="600" fill="#6fc2bd">04</text>
+<text x="507.0" y="74" font-size="16" font-weight="700" fill="#f1ece2">Fix</text>
+<text x="507.0" y="92" font-size="11.5" fill="#a9b6b2">auto · agent · manual</text>
+<path d="M635.0 67.0 h16" stroke="#6fc2bd" stroke-width="2"/><path d="M651.0 63.0 l6 4 l-6 4z" fill="#6fc2bd"/>
+<rect x="657.0" y="30" width="138" height="74" rx="12" fill="#172322" stroke="#2a3a38" stroke-width="1.5"/>
+<text x="671.0" y="52" font-size="11" font-weight="600" fill="#6fc2bd">05</text>
+<text x="671.0" y="74" font-size="16" font-weight="700" fill="#f1ece2">Verify</text>
+<text x="671.0" y="92" font-size="11.5" fill="#a9b6b2">re-audit + rollback</text>
+<path d="M799.0 67.0 h16" stroke="#6fc2bd" stroke-width="2"/><path d="M815.0 63.0 l6 4 l-6 4z" fill="#6fc2bd"/>
+<rect x="821.0" y="30" width="138" height="74" rx="12" fill="#172322" stroke="#2a3a38" stroke-width="1.5"/>
+<text x="835.0" y="52" font-size="11" font-weight="600" fill="#6fc2bd">06</text>
+<text x="835.0" y="74" font-size="16" font-weight="700" fill="#f1ece2">Monitor</text>
+<text x="835.0" y="92" font-size="11.5" fill="#a9b6b2">changes over time</text>
+<path d="M890.0 106 v14 H70.0 v-12" fill="none" stroke="#2a3a38" stroke-width="1.5" stroke-dasharray="4 4"/><path d="M66.0 110 l4 -6 l4 6z" fill="#2a3a38"/>
 </svg>
