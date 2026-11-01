@@ -120,8 +120,9 @@ issues shared across the family. Shared issues usually come from a common templa
 2. **Issue groups and affected pages** (from the summary line).
 3. **Top 3 priorities**, one line each: what + how many pages/locations + automatic / agent-assisted / manual.
 4. **Automatic fixes** available (count and rule ids), or "none".
-5. **Limits** that matter, in one line: crawl stopped at the page limit, search data not measured, Core Web
-   Vitals not measured, JavaScript not rendered, unsupported integration.
+5. **Limits** that matter, in one line — only those the CLI reports ("Limits:" line, summary.md): crawl stopped
+   at the page limit, search data not measured, Core Web Vitals not measured, JavaScript not rendered,
+   unsupported integration. Do not add limits the CLI did not report (e.g. for repository-only runs).
 6. **Report:** the full `report.html` path as a `file://` link. Offer to open it (`searvex open <runId>`), or
    open it directly when the host can show local files. Mention that issues can be selected there to
    generate a repair prompt.

@@ -19,8 +19,8 @@ words** — no long lists, tables or raw JSON; the evidence lives in the report:
 2. Issue types/groups and affected pages or locations.
 3. The **three** top priorities, one line each, with automatic / agent-assisted / manual.
 4. Automatic fixes available in repository mode (`/searvex:optimize`), or "none".
-5. Limits that matter in one line (crawl limit reached, search data / Core Web Vitals not measured,
-   JavaScript not rendered).
+5. Limits in one line — only those on the CLI's "Limits:" line (crawl limit reached, search data / Core Web
+   Vitals not measured, JavaScript not rendered). No "Limits:" line → say nothing about limits.
 6. The full `file://` path of `report.html` (`searvex open <runId>` opens it). In the report the user can
    switch English/Türkçe, select issues and generate a repair prompt.
 7. One recommended next action.
