@@ -19,6 +19,8 @@ its findings. The analysis engine, its 90 sourced rules and its evidence are unc
 - **Reviews.** `searvex review` stores confirmed / rejected / fixed verdicts next to the audit; the report shows
   them beside the original evidence.
 - **Short answers in Claude Code.** Skills reply in 80–150 words with the report link and one next action.
+- **New identity.** The approved Searvex logo appears in the README and in every HTML report (light and dark),
+  with its own favicon.
 - **12 automatic fix types** (was 9) and a safety fix for monorepo sitemaps.
 
 ## Upgrade

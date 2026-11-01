@@ -1,4 +1,9 @@
-<h1 align="center">Searvex</h1>
+<h1 align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/cihantopac/searvex/main/docs/assets/brand/primary-reversed.svg">
+  <img alt="Searvex" src="https://raw.githubusercontent.com/cihantopac/searvex/main/docs/assets/brand/primary-color.svg" width="320">
+</picture>
+</h1>
 
 <p align="center"><strong>Understand Search. Fix What Matters.</strong></p>
 

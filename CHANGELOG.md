@@ -11,6 +11,8 @@ A product-experience release: the analysis engine and its evidence are unchanged
 selected and fixed is new. Release notes: [docs/release-notes-1.1.0.md](docs/release-notes-1.1.0.md).
 
 ### Added
+- **Brand identity**: the approved Searvex logo (outlined SVG, theme-aware) in every HTML report header, an SVG
+  favicon in the reports, and the logo in the README. Source files in `docs/assets/brand/`.
 - **SEO action center** (`report.html`): Overview (health score, issue groups, affected URLs, condition by area,
   top three priorities, limits of the run), Priorities, Issues, GEO, Search performance (only with connected
   data), Changes (only with a previous run) and Evidence. One shell for website, repository, monitor and

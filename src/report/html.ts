@@ -8,6 +8,7 @@ import type { FixPlan } from '../optimize/fixes.js';
 import { AUDIT_SCRIPT, CLIENT_LIB, DIFF_VIEW, ECOSYSTEM_SCRIPT, MONITOR_SCRIPT, THEME_BOOT } from './client.js';
 import { RULES_TR, UI } from './i18n.js';
 import { buildRepairPrompt } from './prompt.js';
+import { FAVICON_URI, LOGO_SVG } from './brand.js';
 import { findingRef, optimizerAvailable, remediationOf, rootCauseGroups } from './remediation.js';
 import { SEARVEX_VERSION } from '../net/fetcher.js';
 
@@ -21,8 +22,8 @@ export function safeJson(data: unknown): string {
   return JSON.stringify(data).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 }
 
-const LIGHT = '--bg:#f5f7f6;--panel:#ffffff;--panel2:#eef3f2;--text:#13201f;--muted:#566563;--line:#dbe3e1;--accent:#0e4f55;--accent-ink:#ffffff;--accent-soft:#e1eeee;--coral:#b8432d;--crit:#b42318;--high:#b93815;--med:#946200;--low:#2459b8;--good:#1b7a3e;--info:#667085;--chip:#eef2f1;--shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);color-scheme:light';
-const DARK = '--bg:#0e1615;--panel:#151f1e;--panel2:#1b2827;--text:#e6eeec;--muted:#9fb1ae;--line:#2a3937;--accent:#5ec4c6;--accent-ink:#06201f;--accent-soft:#16393a;--coral:#f08a74;--crit:#ff7b6e;--high:#ff9b5c;--med:#f2c14e;--low:#86b4ff;--good:#62d08d;--info:#9aa6b6;--chip:#202e2d;--shadow:0 1px 2px rgba(0,0,0,.4);color-scheme:dark';
+const LIGHT = '--bg:#f5f7f6;--panel:#ffffff;--panel2:#eef3f2;--text:#13201f;--muted:#566563;--line:#dbe3e1;--accent:#0e4f55;--accent-ink:#ffffff;--accent-soft:#e1eeee;--coral:#b8432d;--mark:#0e4f55;--caret:#b8432d;--crit:#b42318;--high:#b93815;--med:#946200;--low:#2459b8;--good:#1b7a3e;--info:#667085;--chip:#eef2f1;--shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);color-scheme:light';
+const DARK = '--bg:#0e1615;--panel:#151f1e;--panel2:#1b2827;--text:#e6eeec;--muted:#9fb1ae;--line:#2a3937;--accent:#5ec4c6;--accent-ink:#06201f;--accent-soft:#16393a;--coral:#f08a74;--mark:#f6f1e7;--caret:#bf4933;--crit:#ff7b6e;--high:#ff9b5c;--med:#f2c14e;--low:#86b4ff;--good:#62d08d;--info:#9aa6b6;--chip:#202e2d;--shadow:0 1px 2px rgba(0,0,0,.4);color-scheme:dark';
 
 const BASE_CSS = `:root{${LIGHT}}
 :root[data-theme=dark]{${DARK}}
@@ -30,7 +31,7 @@ const BASE_CSS = `:root{${LIGHT}}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;padding-bottom:84px}
 a{color:var(--accent);text-underline-offset:2px}code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:anywhere}
 .top{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between;max-width:1240px;margin:auto;padding:20px 16px 8px}
-.brand{min-width:0}.wordmark{display:block;font-weight:700;font-size:15px;letter-spacing:-.01em;color:var(--accent);margin-bottom:6px}.wordmark i{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--coral);margin-left:2px}.kicker{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--accent)}
+.brand{min-width:0}.logo{display:block;height:22px;width:auto;margin-bottom:8px}.logo .m{fill:var(--mark)}.logo .c{fill:var(--caret)}.kicker{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--accent)}
 h1{font-size:20px;margin:0;overflow-wrap:anywhere;line-height:1.3}.muted{color:var(--muted)}.small{font-size:12.5px}
 .controls{display:flex;gap:8px;flex-wrap:wrap}.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
 .seg button{background:none;border:0;color:var(--muted);padding:6px 10px;font:inherit;font-size:12.5px;cursor:pointer;min-height:32px}.seg button+button{border-left:1px solid var(--line)}
@@ -99,8 +100,7 @@ footer{max-width:1240px;margin:auto;padding:0 16px 24px;color:var(--muted);font-
 @media print{.tabs,#actionbar,.controls,.filters,.toolbar{display:none}.panel{display:block}}
 `;
 
-/** Text wordmark only: the product mark is still being designed (branding/), so no icon is invented here. */
-const MARK = '<span class="wordmark" aria-label="Searvex">Searvex<i></i></span>';
+
 
 /** Self-contained page: strict CSP, data embedded as escaped JSON, rendering through CLIENT_LIB. */
 export function htmlPage(title: string, payload: Record<string, unknown>, script: string): string {
@@ -114,13 +114,14 @@ export function htmlPage(title: string, payload: Record<string, unknown>, script
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
 <meta name="robots" content="noindex">
 <meta name="color-scheme" content="light dark">
+<link rel="icon" type="image/svg+xml" href="${FAVICON_URI}">
 <title>${t}</title>
 <script>${THEME_BOOT}</script>
 <style>
 ${BASE_CSS}</style>
 </head>
 <body>
-<header class="top"><div class="brand">${MARK}<div><div class="kicker" id="kicker"></div><h1 id="t"></h1><div class="muted small" id="meta"></div></div></div><div class="controls" id="controls"></div></header>
+<header class="top"><div class="brand">${LOGO_SVG}<div><div class="kicker" id="kicker"></div><h1 id="t"></h1><div class="muted small" id="meta"></div></div></div><div class="controls" id="controls"></div></header>
 <nav class="tabs" role="tablist" id="tabs"></nav>
 <main id="main"></main>
 <footer id="foot"></footer>
