@@ -18,6 +18,7 @@ import type { AppScan, RepoScan } from '../repo/scan.js';
 export const AUTOFIX_RULES = new Set([
   'html.lang-missing', 'mobile.viewport-missing', 'canonical.relative', 'canonical.missing', 'canonical.multiple',
   'sd.missing-context', 'hreflang.invalid-code', 'title.missing', 'robots.no-sitemap',
+  'title.multiple', 'description.multiple', 'hreflang.relative',
 ]);
 
 export interface FileChange {
@@ -188,6 +189,57 @@ export function planFixes(report: AuditReport, scan: RepoScan, opts: PlanOptions
     }
   }
 
+  // ---- duplicate <title> / meta description in static HTML: remove extras only when they are identical ----
+  const DUP = {
+    'title.multiple': { re: /^[ \t]*<title\b[^>]*>[\s\S]*?<\/title>[ \t]*\r?\n?/gim, value: (m: string) => m.replace(/<\/?title\b[^>]*>/gi, ''), what: '<title>' },
+    'description.multiple': { re: /^[ \t]*<meta\b(?=[^>]*\bname=["']?description["'\s>])[^>]*>[ \t]*\r?\n?/gim, value: (m: string) => /content=(["'])([\s\S]*?)\1/i.exec(m)?.[2] ?? '', what: 'meta description' },
+  } as const;
+  for (const ruleId of ['title.multiple', 'description.multiple'] as const) {
+    const f = byRule.get(ruleId);
+    if (!f || !wanted(ruleId)) continue;
+    const { re, value, what } = DUP[ruleId];
+    for (const e of f.evidence) {
+      if (!e.file) continue;
+      const conflict = (observed?: string) => plan.tasks.push({ ruleId, title: `Keep exactly one ${what}`, instruction: `Keep one ${what} per page. Usually a layout and a page-level head component (Inertia <Head>, next/head, react-helmet, an SEO plugin) both emit one: remove the layout copy or let the head manager replace it (Inertia: add the \`inertia\` attribute to the template tag).`, locations: [{ file: e.file, line: e.line, url: e.url, observed: observed ?? e.observed }] });
+      if (!/\.html?$/.test(e.file)) {
+        conflict();
+        continue;
+      }
+      const src = read(e.file);
+      // Only elements inside <head>: an inline SVG <title> in the body is not a document title.
+      const headEnd = src.search(/<\/head\s*>/i);
+      const all = [...src.matchAll(re)].filter((m) => headEnd < 0 || m.index! < headEnd);
+      const norm = (x: string) => x.replace(/\s+/g, ' ').trim();
+      const values = new Set(all.map((m) => norm(value(m[0]))));
+      if (all.length < 2 || values.size !== 1) {
+        conflict(all.length >= 2 ? [...values].map((x) => `"${x.slice(0, 80)}"`).join(' vs ') : undefined);
+        continue;
+      }
+      let after = src;
+      for (const m of all.slice(1).reverse()) after = after.slice(0, m.index!) + after.slice(m.index! + m[0].length);
+      stage(ruleId, `Remove duplicate identical ${what}`, `All ${all.length} copies were identical; keeping the first one.`, e.file, after);
+    }
+  }
+
+  // ---- relative hreflang URLs in static HTML (resolved against the page's own URL) ----
+  const hrel = byRule.get('hreflang.relative');
+  if (hrel && wanted('hreflang.relative')) {
+    for (const e of hrel.evidence) {
+      if (!e.file || !/\.html?$/.test(e.file)) continue;
+      if (!opts.siteUrl) {
+        plan.skipped.push({ ruleId: 'hreflang.relative', reason: `${e.file}: site URL unknown — pass --site-url https://example.com` });
+        continue;
+      }
+      const pageUrl = urlForFile(e.file, scan, opts.siteUrl);
+      if (!pageUrl) continue;
+      const src = read(e.file);
+      const after = src.replace(/<link\b[^>]*\bhreflang=[^>]*>/gi, (tag) =>
+        tag.replace(/(\bhref=)(["'])([^"']*)\2/i, (m, a: string, q: string, href: string) => (/^[a-z][a-z0-9+.-]*:/i.test(href) || !href ? m : a + q + new URL(href, pageUrl).toString() + q)),
+      );
+      if (after !== src) stage('hreflang.relative', 'Make hreflang URLs absolute', `Resolved against ${pageUrl}.`, e.file, after);
+    }
+  }
+
   // ---- hreflang codes ----
   const hl = byRule.get('hreflang.invalid-code');
   if (hl && wanted('hreflang.invalid-code')) {
@@ -214,7 +266,20 @@ export function planFixes(report: AuditReport, scan: RepoScan, opts: PlanOptions
 
   // ---- robots.txt Sitemap directive / sitemap generation ----
   const noSitemap = byRule.get('robots.no-sitemap');
-  if (noSitemap && wanted('robots.no-sitemap')) for (const app of scan.apps) planSitemap(app, opts, plan, stage, read, report);
+  if (noSitemap && wanted('robots.no-sitemap')) {
+    // Only the apps the finding is about, and never one that already ships a sitemap (monorepos mix apps).
+    const owners = new Set(noSitemap.evidence.map((e) => (e.file ? appOf(e.file) : scan.apps.length === 1 ? scan.apps[0] : undefined)));
+    for (const app of scan.apps) {
+      if (!owners.has(app) || app.locations.sitemapFiles.length || app.locations.hasSitemapGenerator) continue;
+      // One --site-url cannot tell which host serves which app (an API on a subdomain, a proxy splitting paths):
+      // a generated sitemap could list the wrong host or collide with another app's sitemap. Judgement task instead.
+      if (scan.apps.length > 1) {
+        plan.tasks.push({ ruleId: 'robots.no-sitemap', title: `Add a sitemap for ${app.appRoot}`, instruction: `This repository has ${scan.apps.length} apps (${scan.apps.map((a) => a.appRoot).join(', ')}). Check which host and paths "${app.appRoot}" serves publicly (proxy/deploy config) and whether those URLs belong in another app's sitemap. If it serves indexable public pages on its own host, run "searvex optimize ${app.appRoot} --site-url <that host>" or add a sitemap generator; routes behind login do not belong in a sitemap.`, locations: [{ file: app.locations.publicDir ?? app.appRoot }] });
+        continue;
+      }
+      planSitemap(app, opts, plan, stage, read, report);
+    }
+  }
 
   // ---- tasks needing judgement ----
   const TASKS: Record<string, string> = {

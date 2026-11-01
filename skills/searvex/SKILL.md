@@ -6,9 +6,13 @@ allowed-tools: Bash(node *) Bash(searvex *) Bash(git status *) Bash(git diff *) 
 
 # Searvex — full workflow
 
-Run the phases below **in order**. Announce each phase with its number ("Phase 3/7: …") so the user can
-follow along. Stop at the ✋ checkpoints and wait for the user. The CLI measures and the agent reasons:
-never invent metrics, rankings, traffic, search volumes or AI citations.
+Run the phases below **in order**, quietly: do not announce every phase. Send a one-line progress note only
+when a step takes long (a crawl) or needs the user. Stop at the ✋ checkpoints and wait for the user. The CLI
+measures and the agent reasons: never invent metrics, rankings, traffic, search volumes or AI citations.
+
+**Keep the conversation short.** Detailed evidence, URLs, rule sources, groups and limitations live in the
+interactive HTML report (`report.html`, English/Turkish). The chat gets a decision-oriented summary in the
+format of "Final response" below — never dozens of findings, large tables, raw JSON or long explanations.
 
 CLI: `node "${CLAUDE_PLUGIN_ROOT}/dist/searvex.mjs" <command>` (`searvex` is also on PATH).
 
@@ -34,16 +38,11 @@ This runs, in order: 1. website audit → 2. GEO → 3. change since the previou
 5. repository audit → 6. fix plan as a **dry run**. Missing inputs are skipped automatically. Read
 `summary.md` (its path is printed). Read the full `report.md` and `repository-report.md` when you need details.
 
-## Phase 4/7 — Report (follow the summary's section order)
-In the user's language, give:
-1. The 3–5 highest-impact issues: what, where (URLs or `file:line`), which engine, the fix, and the rule id.
-2. GEO: which crawlers are blocked and what that means by purpose. AI citations are not measured.
-3. What improved or regressed since the last run, if there is a previous run.
-4. Competitor topic and page-type gaps, labelled as coverage differences rather than demand.
-5. What can be fixed automatically, and what needs judgement.
-Clearly separate *verified*, *heuristic* and *not measured* findings.
-If the user is about to act on high-impact or surprising findings, ask the `search-quality-reviewer` agent
-to check them against their sources first.
+## Phase 4/7 — Report (short; see "Final response")
+Read the CLI summary (and `summary.md` if needed). Answer with the **Final response** format below. Only open
+`report.md` / `repository-report.md` when you need a detail to answer a question or to draft a fix.
+Keep *verified*, *heuristic* and *not measured* apart. If the user is about to act on high-impact or
+surprising findings, ask the `search-quality-reviewer` agent to check them against their sources first.
 
 ## Phase 5/7 — Fixes (only when there is a repository)
 1. Show the automatic fixes and summarise `plan.patch`. ✋ Ask for approval.
@@ -115,6 +114,26 @@ When the user owns several related sites (a company site plus product sites), al
 `node "${CLAUDE_PLUGIN_ROOT}/dist/searvex.mjs" ecosystem <url1> <url2> … [--reuse]` and report the entity graph
 (parent/child declarations on both sides), cross-links, topic overlap between same-language sites and
 issues shared across the family. Shared issues usually come from a common template: suggest fixing them once.
+
+## Final response (80–150 words, in the user's language)
+1. **Site / project** and the **Searvex health score** — say it is Searvex's own metric, not a Google score.
+2. **Issue groups and affected pages** (from the summary line).
+3. **Top 3 priorities**, one line each: what + how many pages/locations + automatic / agent-assisted / manual.
+4. **Automatic fixes** available (count and rule ids), or "none".
+5. **Limits** that matter, in one line: crawl stopped at the page limit, search data not measured, Core Web
+   Vitals not measured, JavaScript not rendered, unsupported integration.
+6. **Report:** the full `report.html` path as a `file://` link. Offer to open it (`searvex open <runId>`), or
+   open it directly when the host can show local files. Mention that issues can be selected there to
+   generate a repair prompt.
+7. **One recommended next action** (e.g. "Approve the 3 automatic fixes" or "Connect Search Console").
+
+Example:
+> **ovokodo.com** — Searvex health score **94/100** (Searvex metric, not a Google score). 9 issue groups
+> on 52 pages. Priorities: 1) two `<title>` tags on 50 pages — one shared layout (agent-assisted);
+> 2) content changes with the visitor's language (manual decision); 3) duplicate meta descriptions on 32
+> pages (agent-assisted). Automatic fixes: none for a website-only audit. Not measured: search data, Core
+> Web Vitals; JavaScript not rendered. Report: file:///…/report.html — select issues there to create a fix
+> prompt. Next: point me at the repository so I can fix the layout once.
 
 ## Running a single step
 Each step can also be run on its own: `/searvex:audit`, `/searvex:geo`, `/searvex:research`,

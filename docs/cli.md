@@ -31,6 +31,8 @@ Exit codes: `0` success · `1` `--fail-on` threshold met, optimize verification 
 | `monitor <url>` | Re-audit and diff with the previous run of the same target (`--baseline <runId>` to choose). Regression = new/worsened critical or high issues. Writes `monitor.md/json/html` (before/after view). Search data: `--import <export.zip|*.csv>` (with `--property P` when the export has no pages table) or the Search Console API via `--site-url P` / `SEARVEX_GSC_SITE`; data whose property does not cover the monitored site is refused (`--site-url`, `--import`) or reported as not measured (`SEARVEX_GSC_SITE`). A `--baseline` of another website is refused. |
 | `rules list [--category c]` · `rules show <id>` · `rules validate [--strict]` | Inspect and validate the knowledge base. |
 | `report <runId\|latest> [--format …]` | Re-render a stored report. |
+| `open [runId\|latest]` | Open a stored HTML report in the default browser (`open` / `xdg-open` / Explorer, no shell). |
+| `review <runId\|latest> <ref\|ruleId> <confirmed\|rejected\|fixed> [--note text]` | Record a review of a finding after an agent or person re-checked it. Stored in `reviews.json` next to the audit and shown separately in the HTML report; scanner evidence is never changed. `ref` is the stable occurrence reference shown in the report and in repair prompts (`ruleId#hash`). |
 | `runs` | List stored runs. |
 
 ## Options
@@ -58,6 +60,8 @@ Exit codes: `0` success · `1` `--fail-on` threshold met, optimize verification 
 | `--competitor <url>` | — | Research: competitor site (repeatable) |
 | `--import <csv>` | — | Monitor: Search Console Performance export |
 | `--reuse` | — | Ecosystem: use stored runs instead of crawling |
+| `--open` | off | Open the HTML report when the command finishes |
+| `--note <text>` | — | Review: short reason, e.g. why a finding is a false positive |
 | `--json` | — | Print JSON to stdout |
 | `-q, --quiet` | — | Less output |
 
@@ -76,7 +80,10 @@ Exit codes: `0` success · `1` `--fail-on` threshold met, optimize verification 
 
 | File | Content |
 |---|---|
-| `report.json` / `.md` / `.html` / `.sarif` | Audit report |
+| `report.json` / `.md` / `.html` / `.sarif` | Audit report; `report.html` is the interactive action center (English/Turkish, light/dark/system theme, issue selection and repair prompts) |
+| `context.json` | Repository linked to the audit and rules with a concrete automatic patch (used by `report`/`review` to re-render the HTML) |
+| `reviews.json` | Reviews recorded with `searvex review` |
+| `repository-report.html` / `.md` / `.json` | `run` only: the repository audit of the same run |
 | `pages.jsonl` | One crawled page record per line |
 | `checkpoint.json` | Queue + seen set for `--resume` |
 | `crawl-summary.json` | Robots, sitemaps, stats |

@@ -1,6 +1,6 @@
 # Limitations & unsupported scenarios
 
-Searvex reports what it can observe and labels everything else. Known limits (v1.0.0):
+Searvex reports what it can observe and labels everything else. Known limits (v1.1.0):
 
 ## Data Searvex does not have
 
@@ -64,7 +64,14 @@ Searvex reports what it can observe and labels everything else. Known limits (v1
   Vite/CRA SPAs, static HTML (and committed build output), monorepos (npm/yarn/pnpm workspaces).
 - Partial: SvelteKit, Remix, Gatsby, Eleventy, Hugo, Jekyll (detected; generic checks only).
 - Not supported: WordPress block themes (no `header.php`), Angular, Django/Rails templates, CMS databases.
-- Automatic fixes exist for 9 rule types; everything requiring judgement is an agent task.
+- Automatic fixes exist for 12 rule types; everything requiring judgement is an agent task. In repositories with
+  several apps, sitemaps are a task (one `--site-url` cannot tell which host serves which app); run `optimize` on
+  the app folder with its own `--site-url` instead.
+- The HTML report cannot change code: repair prompts are handed to a coding agent, and website-only audits get a
+  remediation brief. Root-cause groups are inferred from URL templates and files; a "shared layout" group is a
+  strong hint, not proof, that one component causes the issue.
+- Turkish texts cover the interface and Searvex's own rule titles and fixes; per-finding messages, engine
+  limitations and source titles stay in English.
 
 ## Scale
 

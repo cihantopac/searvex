@@ -5,6 +5,53 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-01
+
+A product-experience release: the analysis engine and its evidence are unchanged; how results are presented,
+selected and fixed is new. Release notes: [docs/release-notes-1.1.0.md](docs/release-notes-1.1.0.md).
+
+### Added
+- **SEO action center** (`report.html`): Overview (health score, issue groups, affected URLs, condition by area,
+  top three priorities, limits of the run), Priorities, Issues, GEO, Search performance (only with connected
+  data), Changes (only with a previous run) and Evidence. One shell for website, repository, monitor and
+  ecosystem reports.
+- **English / Türkçe** interface with browser-language detection, and Turkish titles and fixes for all 90
+  rules. Evidence, URLs, code, file paths and rule ids are never translated.
+- **Light / Dark / System** theme next to the language switch; both are remembered in `localStorage` (safe
+  fallback when storage is blocked) and applied before first paint.
+- **Root-cause groups**: findings are split by URL template, source file or — when a rule hits most page types —
+  one shared layout, with page counts covering every affected URL. Every occurrence keeps a stable reference
+  (`ruleId#hash`).
+- **Remediation labels**: automatic (only when a dry-run plan produced a concrete patch), agent-assisted or
+  manual/operational.
+- **Issue selection and repair prompts**: select occurrences, groups or all visible issues, then generate an
+  editable prompt (Copy / Download Markdown, English or Turkish) for a coding agent. It contains the run id,
+  references, root-cause groups, evidence, fixes, verification steps and `optimize --only …` commands for the
+  automatic part. Secrets are redacted; crawled text is fenced as untrusted data. Website-only audits get a
+  remediation brief instead.
+- `searvex review <runId|latest> <ref|ruleId> <confirmed|rejected|fixed> [--note]`: records agent/human
+  verdicts in `reviews.json`, shown next to (never instead of) the scanner evidence.
+- `searvex open [runId|latest]` and `--open`: open the HTML report.
+- Automatic fixes for three more rules (12 in total): identical duplicate `<title>` and meta description in
+  static HTML (conflicting duplicates become a task), relative hreflang URLs in static HTML (with `--site-url`).
+- `run` writes `repository-report.html`; a website report produced with a repository knows that repository
+  (prompts target it; real patches count as automatic). `gsc report --audit` refreshes the audit's HTML with
+  the verified search data.
+- `scripts/screenshots.mjs` captures README screenshots from a real report.
+
+### Changed
+- Terminal summary: score, issue types and affected pages, three priorities, automatic fixes, limits and the
+  `file://` link of the report — instead of twelve finding lines.
+- Claude Code skills answer in 80–150 words with the report link and one next action; no phase-by-phase
+  narration, long tables or raw JSON in the chat.
+- README rewritten as a visual product page with real report screenshots.
+
+### Fixed
+- Optimizer, monorepos: `robots.no-sitemap` generated a second sitemap for an app that already had one, and
+  used the single `--site-url` for an app served on another host (found on a real monorepo copy, where the
+  patch passed verification but would have published login routes under the wrong host). It now plans only
+  for the app the finding is about and turns ambiguous multi-app cases into a reviewed task.
+
 ## [1.0.0] - 2026-11-01
 
 First stable release. Every capability advertised as supported has been verified end to end; Bing Webmaster

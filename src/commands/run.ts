@@ -15,6 +15,10 @@ import { computeGaps, profile, renderResearchMarkdown, type ResearchReport } fro
 import { renderPlan } from './optimize.js';
 import { getSitePreference, type SitePreference } from '../integrations/preferences.js';
 import { getCredential } from '../integrations/google-oauth.js';
+import { renderHtml } from '../report/html.js';
+import { writeContext } from '../report/extras.js';
+import { summaryText } from '../cli.js';
+import { openFile } from './review.js';
 
 /**
  * `searvex run`: the full workflow in a fixed order, sharing one crawl.
@@ -34,6 +38,8 @@ export interface RunSummary {
   /** Optional search performance data: never fetched by `run`; reported as not measured with how to add it. */
   searchData?: { measured: false; preference: SitePreference | null; googleAuthorized: boolean };
   steps: Array<{ step: number; name: string; status: 'done' | 'skipped'; note: string }>;
+  /** Interactive HTML of the repository audit (written into the run directory). */
+  repositoryHtml?: string;
 }
 
 const top = (r: AuditReport, n = 5) => r.findings.filter((f) => f.severity !== 'info').slice(0, n);
@@ -47,7 +53,7 @@ export function renderRunSummary(s: RunSummary): string {
     const r = s.website.report;
     L.push('## 1. Website audit', '', `${md(r.target)} — health score **${scoreLabel(r.scores)}**, ${r.crawl.crawled} pages${r.crawl.truncated ? ' (page limit reached)' : ''}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, '');
     for (const f of top(r)) L.push(`- [${f.severity}] ${md(f.title)} — ${f.count} × (\`${f.ruleId}\`)`);
-    L.push('', `Full report: \`.searvex/runs/${s.website.runId}/report.md\``, '');
+    L.push('', `Interactive report: \`.searvex/runs/${s.website.runId}/report.html\` (details: \`report.md\`)`, '');
     L.push('## 2. GEO / AI search readiness', '');
     const blocked = r.geo.bots.filter((b) => !b.allowed);
     L.push(`- Blocked crawlers: ${blocked.length ? blocked.map((b) => `${b.token} (${b.purpose})`).join(', ') : 'none'}`);
@@ -150,6 +156,12 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
     step(5, 'Repository audit', 'done', `${summary.repository.framework}, score ${scoreLabel(ra.report.scores)}`);
     summary.plan = planFixes(ra.report, ra.scan, { siteUrl, lang: v['lang'] as string | undefined });
     step(6, 'Fix plan (dry run)', 'done', `${summary.plan.fixes.length} automatic fix(es), ${summary.plan.tasks.length} task(s); nothing applied`);
+    // The website action center now knows the repository: repair prompts target it and real patches count as automatic.
+    if (summary.website) {
+      const ws = new RunStore(workspace, summary.website.runId);
+      writeContext(ws, { repository: { path: root, framework: summary.repository.framework, siteUrl, lang: v['lang'] as string | undefined }, autoRules: [...new Set(summary.plan.fixes.map((f) => f.ruleId))] });
+      writeReports(ws, summary.website.report, kb, ['html']);
+    }
   } else {
     step(5, 'Repository audit', 'skipped', 'no repository path given');
     step(6, 'Fix plan (dry run)', 'skipped', 'no repository path given');
@@ -167,10 +179,26 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
     plan: summary.plan && { ...summary.plan, files: summary.plan.files.map((f) => ({ path: f.path, action: f.action })), fixes: summary.plan.fixes.map((f) => ({ ...f, changes: f.changes.map((c) => ({ path: c.path, action: c.action })) })) },
   });
   if (summary.plan) store.writeText('plan.patch', summary.plan.files.map((c) => unifiedDiff(c.path, c.before, c.after)).join('\n') + '\n');
-  if (summary.repository) store.writeText('repository-report.md', renderMarkdown(summary.repository.report));
+  if (summary.repository) {
+    const rr = summary.repository.report;
+    rr.runId = store.runId;
+    store.writeText('repository-report.md', renderMarkdown(rr));
+    store.writeJson('repository-report.json', rr);
+    summary.repositoryHtml = store.writeText('repository-report.html', renderHtml(rr, kb, { repository: { path: rr.target, framework: summary.repository.framework, siteUrl: (v['site-url'] as string | undefined) ?? (url ? new URL(url).origin : undefined), lang: v['lang'] as string | undefined }, plan: summary.plan }));
+  }
   const out = store.writeText('summary.md', renderRunSummary(summary));
   if (v['json']) process.stdout.write(JSON.stringify(store.readJson('summary.json'), null, 2) + '\n');
-  else if (!v['quiet']) console.log('\n' + renderRunSummary(summary) + `\nSaved: ${out}`);
+  else if (!v['quiet']) {
+    const auto = summary.plan ? [...new Set(summary.plan.fixes.map((f) => f.ruleId))] : [];
+    if (summary.website) console.log(summaryText(summary.website.report, summary.website.files, auto));
+    if (summary.repository) console.log(summaryText(summary.repository.report, [summary.repositoryHtml!], auto));
+    if (summary.plan?.fixes.length) console.log(`\nFix plan (dry run, nothing changed): ${summary.plan.fixes.length} automatic fix(es) in ${store.file('plan.patch')}`);
+    console.log(`Workflow summary: ${out}`);
+  }
+  if (v['open']) {
+    const html = summary.website?.files.find((f) => f.endsWith('.html')) ?? summary.repositoryHtml;
+    if (html) openFile(html);
+  }
 
   const codes = [summary.website && failOnExit(summary.website.report, v['fail-on']), summary.repository && failOnExit(summary.repository.report, v['fail-on'])];
   return codes.some((c) => c === 1) ? 1 : 0;

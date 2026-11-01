@@ -1,5 +1,5 @@
 {
-  "version": "2026.10.30",
+  "version": "2026.11.01",
   "updated": "2026-10-30",
   "rules": [
     {
@@ -124,7 +124,8 @@
           "level": "fetched"
         }
       ],
-      "status": "active"
+      "status": "active",
+      "autofix": true
     },
     {
       "id": "hreflang.no-x-default",

@@ -10,7 +10,8 @@ import { GscImportError, importGscFiles, type GscExport } from '../integrations/
 import { commonDomain, parseProperty, propertyForExport, PropertyError, selectAuditForProperty, urlInProperty, type SearchProperty, type SelectedAudit } from '../integrations/property.js';
 import { getSitePreference, setSitePreference, siteKey, type SearchDataChoice } from '../integrations/preferences.js';
 import { md } from '../report/markdown.js';
-import { log, num, UsageError, type GlobalFlags } from '../cli.js';
+import { log, num, UsageError, writeReports, type GlobalFlags } from '../cli.js';
+import { loadKnowledge } from '../rules/engine.js';
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const dash = (x: number | null | undefined) => (x === null || x === undefined ? '—' : String(x));
@@ -112,8 +113,15 @@ function saveReport(flags: GlobalFlags, workspace: string, kind: string, meta: R
   store.writeJson('meta.json', { kind, ...meta, audit: report.audit?.runId, startedAt: new Date().toISOString() });
   store.writeJson('search-performance.json', report);
   const out = store.writeText('search-performance.md', renderSearchPerformanceMarkdown(report));
+  // Show the verified search data in the joined audit's action center too.
+  let auditHtml: string | undefined;
+  if (report.audit) {
+    const as = new RunStore(workspace, report.audit.runId);
+    const audit = as.readJson<AuditReport>('report.json');
+    if (audit) auditHtml = writeReports(as, audit, loadKnowledge(), ['html'])[0];
+  }
   if (v['json']) process.stdout.write(JSON.stringify(report, null, 2) + '\n');
-  else if (!v['quiet']) console.log(renderSearchPerformanceMarkdown(report) + `\nSaved: ${out}`);
+  else if (!v['quiet']) console.log(renderSearchPerformanceMarkdown(report) + `\nSaved: ${out}${auditHtml ? `\nAudit report updated with this data: ${auditHtml}` : ''}`);
 }
 
 /** Newest website audit in the workspace (for property auto-selection). */
