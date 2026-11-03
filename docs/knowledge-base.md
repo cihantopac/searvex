@@ -32,6 +32,11 @@ code only decides *when* a rule applies.
 - `sources[].level`: `fetched` (page read directly), `excerpt` (page not fetchable; confirmed from search
   excerpts), `url-resolved` (URL live; statement from maintainer knowledge — pending direct re-read).
 - `autofix` must match `AUTOFIX_RULES` in `src/optimize/fixes.ts` (test-enforced).
+- `environment` (optional): `server` when a finding usually describes the web server a build is tested on (no
+  HTTPS, no compression), `launch` when it is usually a deliberate pre-launch state (noindex, disallow-all, a
+  sitemap on a public host that is not live yet). With `--pre-launch` such findings get `context:
+  "environment" | "launch-checklist"` and are excluded from the score, `--fail-on`, priorities and monitor
+  regressions.
 
 ## Validation (`searvex rules validate`)
 

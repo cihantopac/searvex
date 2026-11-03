@@ -35,7 +35,8 @@
           "level": "fetched"
         }
       ],
-      "status": "active"
+      "status": "active",
+      "environment": "launch"
     },
     {
       "id": "index.noindex",
@@ -63,7 +64,8 @@
           "level": "fetched"
         }
       ],
-      "status": "active"
+      "status": "active",
+      "environment": "launch"
     },
     {
       "id": "index.noindex-blocked",

@@ -2,11 +2,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { auditWebsite, scoreLabel, type AuditReport } from './analyze/audit.js';
+import { auditWebsite, countsTowardScore, scoreLabel, type AuditReport } from './analyze/audit.js';
 import type { Severity } from './core/types.js';
 import { RunStore } from './crawl/store.js';
 import { SEARVEX_VERSION } from './net/fetcher.js';
-import { DEFAULT_POLICY } from './net/ssrf.js';
+import { classifyAddress, DEFAULT_POLICY } from './net/ssrf.js';
 import { renderHtml } from './report/html.js';
 import { loadExtras } from './report/extras.js';
 import { remediationOf } from './report/remediation.js';
@@ -76,6 +76,9 @@ Common options
   --out <dir>           Workspace for .searvex/ (default: current directory)
   --fail-on <severity>  Exit 1 if findings at/above severity exist (critical|high|medium|low)
   --allow-private       Allow localhost/private network targets (local dev servers only)
+  --pre-launch          Audit a local/staging build as it will be once live: test-server findings
+                        (no HTTPS, no compression) and deliberate pre-launch states (noindex, a public
+                        sitemap host that is not live yet) are listed separately, not scored
   --site-url <url>      Public URL of the site. URL mode: audit a local/staging build as that site
                         (its canonical, hreflang, sitemap and link URLs map to the crawled origin).
                         Repository mode: base URL for canonical/sitemap fixes. monitor: also accepts
@@ -132,6 +135,7 @@ function parse(argv: string[]): GlobalFlags {
       out: { type: 'string' },
       'fail-on': { type: 'string' },
       'allow-private': { type: 'boolean' },
+      'pre-launch': { type: 'boolean' },
       json: { type: 'boolean' },
       quiet: { type: 'boolean', short: 'q' },
       help: { type: 'boolean', short: 'h' },
@@ -216,6 +220,24 @@ export function crawlOptionsFrom(v: GlobalFlags['values']) {
   };
 }
 
+/** Local or private-network host (by name or address; no DNS lookup). */
+export function isPrivateTarget(url: string): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  } catch {
+    return false;
+  }
+  if (host === 'localhost' || /\.(localhost|local|test|internal|lan|home\.arpa)$/.test(host)) return true;
+  const c = classifyAddress(host);
+  return c === 'loopback' || c === 'private' || c === 'link-local';
+}
+
+/** On a local or private target without --pre-launch, suggest it (it is never enabled silently). */
+export function suggestPreLaunch(v: GlobalFlags['values'], target: string): void {
+  if (!v['pre-launch'] && isPrivateTarget(target)) log(v, 'Tip: this looks like a local or staging build. Add --pre-launch to list test-server findings (HTTPS, compression) and deliberate pre-launch states (noindex) separately instead of scoring them.');
+}
+
 /** audit/geo: --site-url must be an absolute http(s) URL. */
 export function assertSiteUrl(v: GlobalFlags['values']): void {
   const s = v['site-url'];
@@ -242,7 +264,7 @@ export function failOnExit(report: AuditReport, failOn: unknown): number {
   if (!failOn) return EXIT.ok;
   const idx = SEVERITY_ORDER.indexOf(String(failOn) as Severity);
   if (idx < 0 || failOn === 'info') throw new UsageError('--fail-on must be critical|high|medium|low');
-  return report.findings.some((f) => SEVERITY_ORDER.indexOf(f.severity) <= idx && f.confidence !== 'unmeasurable') ? EXIT.failOn : EXIT.ok;
+  return report.findings.some((f) => SEVERITY_ORDER.indexOf(f.severity) <= idx && countsTowardScore(f)) ? EXIT.failOn : EXIT.ok;
 }
 
 /**
@@ -261,7 +283,7 @@ export function printSummary(report: AuditReport, files: string[], v: GlobalFlag
 }
 
 export function summaryText(report: AuditReport, files: string[], autoRules: string[] = []): string {
-  const issues = report.findings.filter((f) => f.severity !== 'info' && f.confidence !== 'unmeasurable');
+  const issues = report.findings.filter((f) => f.severity !== 'info' && countsTowardScore(f));
   const top = issues.slice().sort((a, b) => (b.priority?.score ?? 0) - (a.priority?.score ?? 0)).slice(0, 3);
   const plan = { fixes: autoRules.map((ruleId) => ({ ruleId })) } as never;
   const auto = issues.filter((f) => remediationOf(f.ruleId, plan) === 'auto');
@@ -278,6 +300,10 @@ export function summaryText(report: AuditReport, files: string[], autoRules: str
     L.push('Top priorities:');
     top.forEach((f, i) => L.push(`  ${i + 1}. [${f.severity}] ${f.title} — ${f.count} ${f.count === 1 ? unit.replace(/s$/, '') : unit}${f.confidence === 'heuristic' ? ' (heuristic)' : ''}${remediationOf(f.ruleId, plan) === 'auto' ? ' · automatic fix' : ''}`));
   } else L.push('No significant issues found.');
+  const launch = report.findings.filter((f) => f.context === 'launch-checklist');
+  const env = report.findings.filter((f) => f.context === 'environment');
+  if (launch.length) L.push(`Launch checklist (change before going live, not scored): ${launch.map((f) => `${f.title} (${f.count})`).join('; ')}`);
+  if (env.length) L.push(`Environment-dependent (check on the production server, not scored): ${env.map((f) => f.title).join('; ')}`);
   if (auto.length) L.push(`Automatic fixes: ${auto.length} (${auto.map((f) => f.ruleId).join(', ')}) — preview with "searvex optimize ${report.mode === 'repository' ? report.target : '<repo>'}"`);
   const limits: string[] = [];
   if (report.crawl.truncated) limits.push(`crawl stopped at the page limit (${report.crawl.queuedRemaining} queued)`);
@@ -317,6 +343,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
   const render = v['render'] ? await (await import('./crawl/render.js')).createRenderer(opts.policy) : undefined;
   try {
     log(v, `Crawling ${target} (max ${opts.maxPages} pages, robots.txt respected)…`);
+    suggestPreLaunch(v, target);
     let last = 0;
     const { report, store } = await auditWebsite(target, {
       workspace,
@@ -324,6 +351,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
       kb,
       checkExternal: !!v['check-external'],
       cruxApiKey: cruxKey()?.key,
+      preLaunch: !!v['pre-launch'],
       crawl: {
         ...opts,
         render: render?.render,
@@ -357,7 +385,8 @@ async function commandGeo(flags: GlobalFlags): Promise<number> {
   assertSiteUrl(v);
   const kb = loadKnowledge();
   const opts = crawlOptionsFrom({ ...v, 'max-pages': v['max-pages'] ?? '50' });
-  const { report, store } = await auditWebsite(target, { workspace: path.resolve(String(v['out'] ?? process.cwd())), kb, crawl: opts });
+  suggestPreLaunch(v, target);
+  const { report, store } = await auditWebsite(target, { workspace: path.resolve(String(v['out'] ?? process.cwd())), kb, crawl: opts, preLaunch: !!v['pre-launch'] });
   assertTargetAllowed(report);
   const files = writeReports(store, report, kb, String(v['format'] ?? 'md,html,json').split(','));
   const unreachable = report.crawl.status === 'unreachable';

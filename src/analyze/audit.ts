@@ -6,6 +6,7 @@ import { DEFAULT_POLICY } from '../net/ssrf.js';
 import { extractPage } from '../extract/html.js';
 import { FindingSink, loadKnowledge, type KnowledgeBase } from '../rules/engine.js';
 import { buildContext } from './context.js';
+import { applyPreLaunch, asLaunched, emitLaunchNoindex } from './pre-launch.js';
 import { runContentChecks, type ContentReport } from './content.js';
 import { runGeoChecks, type GeoReport, type LlmsTxtStatus } from './geo.js';
 import { buildInventory, type SiteInventory } from './inventory.js';
@@ -44,10 +45,18 @@ export interface AuditReport {
   rendered?: boolean;
 }
 
+/**
+ * Whether a finding counts toward the score, --fail-on, affected counts and regressions: unmeasurable
+ * findings and pre-launch context findings (environment, launch checklist) never do.
+ */
+export function countsTowardScore(f: Pick<Finding, 'confidence' | 'context'>): boolean {
+  return f.confidence !== 'unmeasurable' && !f.context;
+}
+
 /** Distinct affected URLs/files across all non-informational findings. */
 export function countAffected(findings: Array<Finding & { count: number }>, affected: (ruleId: string) => string[]): number {
   const all = new Set<string>();
-  for (const f of findings) if (f.severity !== 'info' && f.confidence !== 'unmeasurable') for (const u of affected(f.ruleId)) if (!/\/robots\.txt$/.test(u)) all.add(u);
+  for (const f of findings) if (f.severity !== 'info' && countsTowardScore(f)) for (const u of affected(f.ruleId)) if (!/\/robots\.txt$/.test(u)) all.add(u);
   return all.size;
 }
 
@@ -58,11 +67,13 @@ export interface Scores {
   method: string;
   /** Set when there was nothing to audit (e.g. a repository without any website); `overall` is then meaningless. */
   notApplicable?: string;
+  /** `pre-launch`: environment and launch-checklist findings were excluded (--pre-launch). */
+  profile?: 'pre-launch';
 }
 
 /** "87/100", or "n/a" when nothing could be audited. */
 export function scoreLabel(s: Scores): string {
-  return s.notApplicable ? 'n/a (nothing to audit)' : `${s.overall}/100`;
+  return s.notApplicable ? 'n/a (nothing to audit)' : `${s.overall}/100${s.profile === 'pre-launch' ? ' (pre-launch profile)' : ''}`;
 }
 
 const WEIGHT: Record<Severity, number> = { critical: 25, high: 10, medium: 4, low: 1.5, info: 0 };
@@ -70,12 +81,13 @@ const WEIGHT: Record<Severity, number> = { critical: 25, high: 10, medium: 4, lo
 /**
  * Score = 100 − Σ(weight × affected-share), where affected-share = affected pages / indexable pages
  * (capped at 1). Site-level findings count as share 1. Heuristic findings count half.
- * Unmeasurable findings never change the score.
+ * Unmeasurable findings, and environment/launch-checklist findings of the pre-launch profile, never change
+ * the score.
  */
 export function computeScores(findings: Array<Finding & { count: number }>, pageCount: number): Scores {
   const penalty = (fs: Array<Finding & { count: number }>) =>
     fs.reduce((sum, f) => {
-      if (f.confidence === 'unmeasurable') return sum;
+      if (!countsTowardScore(f)) return sum;
       const share = pageCount > 0 ? Math.min(1, f.count / pageCount) : 1;
       return sum + WEIGHT[f.severity] * Math.max(share, f.severity === 'critical' ? 1 : share) * (f.confidence === 'heuristic' ? 0.5 : 1);
     }, 0);
@@ -153,19 +165,23 @@ export interface AuditOptions {
   probes?: boolean;
   checkExternal?: boolean;
   cruxApiKey?: string;
+  /** Pre-launch profile (--pre-launch): see `applyPreLaunch`. */
+  preLaunch?: boolean;
 }
 
 export async function auditWebsite(url: string, options: AuditOptions = {}): Promise<{ report: AuditReport; store: RunStore }> {
   const kb = options.kb ?? loadKnowledge();
   const store = new RunStore(options.workspace ?? process.cwd(), options.resumeRunId ?? RunStore.newRunId('audit'));
   const result = await crawl(url, options.crawl, store);
-  const report = await analyzeCrawl(result, kb, { ...options.crawl, probes: options.probes ?? true, checkExternal: options.checkExternal, cruxApiKey: options.cruxApiKey });
+  const report = await analyzeCrawl(result, kb, { ...options.crawl, probes: options.probes ?? true, checkExternal: options.checkExternal, cruxApiKey: options.cruxApiKey, preLaunch: options.preLaunch });
   store.writeJson('report.json', report);
   return { report, store };
 }
 
-export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts: Partial<CrawlOptions> & { probes?: boolean; checkExternal?: boolean; cruxApiKey?: string } = {}): Promise<AuditReport> {
+export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts: Partial<CrawlOptions> & { probes?: boolean; checkExternal?: boolean; cruxApiKey?: string; preLaunch?: boolean } = {}): Promise<AuditReport> {
   const sink = new FindingSink(kb);
+  const launch = opts.preLaunch ? asLaunched(result) : undefined;
+  if (launch) result = launch.result;
   const ctx = buildContext(result);
   const netOpts = { policy: opts.policy ?? DEFAULT_POLICY, timeoutMs: opts.timeoutMs ?? 15000, userAgent: opts.userAgent ?? DEFAULT_USER_AGENT };
   const unreachable = result.unreachable;
@@ -201,6 +217,7 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
     llms = await probeLlmsTxt(result.origin, netOpts);
   }
   runTechnicalChecks(ctx, sink);
+  if (launch) emitLaunchNoindex(ctx, launch.noindex, sink);
   const geo = runGeoChecks(ctx, sink, llms);
   const content = runContentChecks(ctx, sink);
   let externalLinks: ExternalLinkResult | undefined;
@@ -218,11 +235,13 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
   const inventory = buildInventory(ctx);
   const findings = sink.findings();
   prioritise(findings, (id) => sink.affected(id), ctx);
+  if (opts.preLaunch) applyPreLaunch(findings, kb);
   const limitations = [
     'Website mode sees only publicly reachable pages; it has no access to real traffic, rankings, Search Console or analytics data unless an integration is configured.',
     'Response times are single-location lab samples, not Core Web Vitals field data.',
   ];
   if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
+  if (launch) limitations.push(`Pre-launch profile (--pre-launch): the site is audited as it will be once live. ${launch.noindex.size ? `${launch.noindex.size} noindex page(s) were evaluated as indexable; their noindex is in the launch checklist. ` : ''}Findings that depend on the test server (environment) or on a deliberate pre-launch state (launch checklist) are listed separately and excluded from the score and --fail-on.`);
   if (result.siteUrl) limitations.push(`Audited ${result.origin} as ${result.siteUrl} (--site-url): canonical, hreflang, sitemap and link URLs on ${result.siteUrl} were checked against the crawled pages at ${result.origin}; the public site itself was not fetched.`);
   if (!opts.checkExternal) limitations.push('Outbound links were not checked (use --check-external).');
   if (!result.pages.some((p) => p.rendered)) limitations.push('JavaScript was not executed (run with --render to compare rendered DOM); client-rendered content is only detected heuristically.');
@@ -237,7 +256,7 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
     findings,
     geo,
     content,
-    scores: computeScores(findings, Math.max(1, ctx.indexable.length)),
+    scores: { ...computeScores(findings, Math.max(1, ctx.indexable.length)), ...(opts.preLaunch ? { profile: 'pre-launch' as const } : {}) },
     measurement: {
       verified: findings.filter((f) => f.confidence === 'verified').length,
       heuristic: findings.filter((f) => f.confidence === 'heuristic').length,

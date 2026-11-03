@@ -114,6 +114,7 @@
         }
       ],
       "status": "active",
+      "environment": "launch",
       "exceptions": "Intentional for staging/private sites. Do not apply to sites that must stay out of search."
     },
     {
@@ -214,6 +215,7 @@
         }
       ],
       "status": "active",
+      "environment": "launch",
       "exceptions": "With --site-url, a declared sitemap on the public origin is read from the crawled build instead; on a pre-launch site the public host may not exist yet."
     },
     {

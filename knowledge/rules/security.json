@@ -22,7 +22,8 @@
           "level": "fetched"
         }
       ],
-      "status": "active"
+      "status": "active",
+      "environment": "server"
     },
     {
       "id": "https.mixed-content",

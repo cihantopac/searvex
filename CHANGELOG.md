@@ -20,6 +20,13 @@ All notable changes to this project are documented here. The format follows
   TLS or non-200). Each failing declared sitemap is reported, also when another one works; with `--site-url` the
   evidence names where it was fetched.
 
+- `--pre-launch` profile for local and staging builds. Noindex pages are evaluated as they will be once live, and
+  their noindex is listed in a **Launch checklist**. Findings of rules tagged `environment: server | launch` (HTTPS
+  and compression on the test server; noindex, disallow-all, an unreachable public sitemap) get
+  `context: "environment" | "launch-checklist"` and are excluded from the score, `--fail-on`, priorities, SARIF
+  error levels and monitor regressions. The Markdown and HTML reports have a Launch checklist section and an
+  Environment-dependent note (EN/TR). On a local or private target the CLI suggests the flag.
+
 ### Changed
 - `robots.no-sitemap` now only means no `Sitemap:` directive and no `/sitemap.xml`. A declared but failing sitemap
   was reported as `robots.no-sitemap` before; `monitor` shows that change once as one resolved and one new finding.

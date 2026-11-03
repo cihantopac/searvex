@@ -43,7 +43,7 @@ function boot(){document.documentElement.setAttribute('lang',LANG);controls();re
 export const AUDIT_SCRIPT = String.raw`var R=D.report,SEL={},SHOWINFO=false,FILT={sev:'',cat:'',rem:'',conf:'',q:''};
 var SEVS=['critical','high','medium','low','info'];
 function rt(id){var r=D.rules[id]||{};var tr=LANG==='tr'&&r.tr;return{title:tr?r.tr.title:(r.title||id),fix:tr?r.tr.fix:r.fix,verify:r.verify,sources:r.sources||[]}}
-function isIssue(f){return f.severity!=='info'&&f.confidence!=='unmeasurable'}
+function isIssue(f){return f.severity!=='info'&&f.confidence!=='unmeasurable'&&!f.context}
 function groupsOf(f){return D.groups[f.ruleId]||[]}
 function selCount(f){return groupsOf(f).filter(function(g){return SEL[g.id]}).length}
 function reviewOf(ruleId,ref){var L=D.reviews||[];for(var i=L.length-1;i>=0;i--){if(ref?L[i].ref===ref:(L[i].ruleId===ruleId&&!L[i].ref))return L[i]}return null}
@@ -67,7 +67,7 @@ var groups=0;issues.forEach(function(f){groups+=groupsOf(f).length});
 var auto=issues.filter(function(f){return D.rem[f.ruleId]==='auto'}),optOnly=issues.filter(function(f){return D.rem[f.ruleId]!=='auto'&&D.opt[f.ruleId]});
 var ch=null;if(D.diff){var dd=D.diff.scoreBefore===null?null:D.diff.scoreAfter-D.diff.scoreBefore;ch=card(T('kpi.change'),dd===null?'—':(dd>=0?'+':'')+dd,'+'+D.diff.newFindings.length+' / −'+D.diff.resolved.length)}
 var score=R.scores.notApplicable?'n/a':R.scores.overall;
-P.appendChild(el('div',{class:'cards kpis'},[card(T('kpi.score'),score+(R.scores.notApplicable?'':'/100'),T('kpi.scoreNote'),gauge(R.scores.notApplicable?null:R.scores.overall),'score'),
+P.appendChild(el('div',{class:'cards kpis'},[card(T('kpi.score'),score+(R.scores.notApplicable?'':'/100'),T('kpi.scoreNote')+(R.scores.profile==='pre-launch'?' · '+T('kpi.preLaunch'):''),gauge(R.scores.notApplicable?null:R.scores.overall),'score'),
 card(T('kpi.groups'),fmt(groups),T('kpi.types',{n:fmt(issues.length)})),
 card(T(R.mode==='website'?'kpi.affected':'kpi.affectedFiles'),fmt(R.affectedUrls!==undefined?R.affectedUrls:0),(R.mode==='website'?T('kpi.pages'):T('kpi.routes'))+': '+fmt(R.crawl.crawled)),
 card(T('kpi.critical'),fmt(issues.filter(function(f){return f.severity==='critical'||f.severity==='high'}).length),null,null,issues.some(function(f){return f.severity==='critical'})?'alert':''),
@@ -75,6 +75,10 @@ card(T('kpi.auto'),fmt(auto.length),auto.length?null:optOnly.length?T('kpi.autoR
 if(lim.length)P.appendChild(el('div',{class:'limits',role:'note'},[el('b',{text:T('ov.limits')}),el('span',{class:'lim',text:lim.map(function(l){return l[0]}).join(' · ')}),el('details',{},[el('summary',{text:T('ov.limitsMore')}),el('ul',{},lim.map(function(l){return el('li',{text:l[1]})}))])]));
 var top=issues.slice().sort(function(a,b){return((b.priority&&b.priority.score)||0)-((a.priority&&a.priority.score)||0)}).slice(0,3);
 P.appendChild(h2(T('pri.title'),T('pri.note')));P.appendChild(top.length?el('div',{class:'prio'},top.map(prioCard)):el('p',{class:'muted',text:T('pri.none')}));
+var LC=R.findings.filter(function(f){return f.context==='launch-checklist'}),EV=R.findings.filter(function(f){return f.context==='environment'});
+function ctxItem(f){var r=rt(f.ruleId);return el('li',{},[el('b',{text:r.title}),' · '+fmt(f.count)+' · ',el('code',{text:f.ruleId}),r.fix?el('div',{class:'muted',text:r.fix}):null])}
+if(LC.length||EV.length||R.scores.profile==='pre-launch'){P.appendChild(h2(T('pl.title'),T('pl.note')));P.appendChild(LC.length?el('ul',{class:'checklist'},LC.map(ctxItem)):el('p',{class:'muted',text:T('pl.none')}));
+if(EV.length)P.appendChild(el('div',{class:'limits',role:'note'},[el('b',{text:T('pl.env')}),el('span',{class:'lim',text:EV.map(function(f){return rt(f.ruleId).title}).join(' · ')}),el('details',{},[el('summary',{text:T('pl.envNote')}),el('ul',{},EV.map(ctxItem))])]))}
 var pil=el('div',{class:'pillars'});PILLARS.forEach(function(p){var cats=p[1],fs=issues.filter(function(f){return cats.indexOf(f.category)>=0});var sc=cats.map(function(c){return R.scores.byCategory[c]}).filter(function(x){return typeof x==='number'});var v=sc.length?Math.min.apply(null,sc):100;
 if(p[0]==='geo'&&R.mode==='repository'&&!fs.length)return;var cls=v>=90?'good':v>=70?'medium':'critical';
 pil.appendChild(el('button',{type:'button',class:'pillar '+cls,title:cats.map(function(c){return T('cat.'+c)}).join(', ')},[el('span',{class:'label',text:T('pillar.'+p[0])}),el('b',{text:String(v)}),el('span',{class:'sub',text:fs.length?T('pillar.issues',{n:fs.length}):T('pillar.noIssues')})]));pil.lastChild.onclick=function(){FILT.cat=cats.length===1?cats[0]:'';FILT.q='';FILT.pillar=cats;showTab('issues');issuesPanel(document.getElementById('p-issues'))}});
