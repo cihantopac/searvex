@@ -9,7 +9,7 @@ import { querySearchConsole, type GscRow } from '../integrations/gsc.js';
 import { gscAccessToken } from '../integrations/google-oauth.js';
 import { GscImportError, importGscFiles, parseGscTable, type GscExport } from '../integrations/gsc-csv.js';
 import { assertAuditInProperty, matchAuditToProperty, parseProperty, propertyForExport, PropertyError, type SearchProperty } from '../integrations/property.js';
-import { assertTargetAllowed, crawlOptionsFrom, EXIT, log, UsageError, writeReports, type GlobalFlags } from '../cli.js';
+import { assertTargetAllowed, crawlOptionsFrom, EXIT, log, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
 
 export interface FindingDelta {
   ruleId: string;
@@ -17,6 +17,8 @@ export interface FindingDelta {
   severity: string;
   before: number;
   after: number;
+  /** Pre-launch context (environment / launch checklist) on either side: never a regression. */
+  context?: 'environment' | 'launch-checklist';
 }
 
 export interface MonitorDiff {
@@ -40,7 +42,8 @@ export function diffReports(before: AuditReport | null, after: AuditReport, base
   const a = map(after);
   const d = (id: string): FindingDelta => {
     const f = a.get(id) ?? b.get(id)!;
-    return { ruleId: id, title: f.title, severity: f.severity, before: b.get(id)?.count ?? 0, after: a.get(id)?.count ?? 0 };
+    const context = a.get(id)?.context ?? b.get(id)?.context;
+    return { ruleId: id, title: f.title, severity: f.severity, before: b.get(id)?.count ?? 0, after: a.get(id)?.count ?? 0, ...(context ? { context } : {}) };
   };
   const ids = new Set([...a.keys(), ...b.keys()]);
   const all = [...ids].map(d).filter((x) => x.severity !== 'info');
@@ -48,7 +51,7 @@ export function diffReports(before: AuditReport | null, after: AuditReport, base
   const resolved = all.filter((x) => x.before > 0 && x.after === 0);
   const worsened = all.filter((x) => x.before > 0 && x.after > x.before);
   const improved = all.filter((x) => x.after > 0 && x.after < x.before);
-  const serious = (x: FindingDelta) => x.severity === 'critical' || x.severity === 'high';
+  const serious = (x: FindingDelta) => !x.context && (x.severity === 'critical' || x.severity === 'high');
   return {
     target: after.target,
     baselineRun,
@@ -71,7 +74,7 @@ export function renderDiffMarkdown(d: MonitorDiff, gsc?: { rows: GscRow[]; sourc
   else L.push(`Baseline \`${d.baselineRun}\` → current \`${d.currentRun}\``, '', `Health score: ${d.scoreBefore} → **${d.scoreAfter}** · pages: ${d.pagesBefore} → ${d.pagesAfter}`, '');
   const sec = (title: string, xs: FindingDelta[]) => {
     if (!xs.length) return;
-    L.push(`## ${title}`, '', ...xs.map((x) => `- [${x.severity}] ${md(x.title)} (\`${x.ruleId}\`): ${x.before} → ${x.after}`), '');
+    L.push(`## ${title}`, '', ...xs.map((x) => `- [${x.severity}] ${md(x.title)} (\`${x.ruleId}\`): ${x.before} → ${x.after}${x.context ? ` · ${x.context === 'environment' ? 'environment-dependent' : 'launch checklist'}, not a regression` : ''}`), '');
   };
   sec('New issues', d.newFindings);
   sec('Worsened', d.worsened);
@@ -150,7 +153,8 @@ export async function commandMonitor(flags: GlobalFlags): Promise<number> {
   const apiProperty = site ? propertyOrUsage(() => parseProperty(site)) : undefined;
 
   log(v, `Re-auditing ${target}…`);
-  const { report, store } = await auditWebsite(target, { workspace, kb, crawl: crawlOptionsFrom(v) });
+  suggestPreLaunch(v, target);
+  const { report, store } = await auditWebsite(target, { workspace, kb, crawl: crawlOptionsFrom(v), preLaunch: !!v['pre-launch'] });
   assertTargetAllowed(report);
   writeReports(store, report, kb, ['json', 'md', 'html']);
   if (report.crawl.status === 'unreachable') {

@@ -34,14 +34,15 @@ export function renderSarif(r: AuditReport, kb: KnowledgeBase): object {
         results: r.findings.flatMap((f) =>
           f.evidence.map((e) => ({
             ruleId: f.ruleId,
-            level: LEVEL[f.severity],
+            // Pre-launch context findings must not fail code-scanning gates.
+            level: f.context ? 'note' : LEVEL[f.severity],
             message: { text: `${f.title}${e.observed ? ': ' + e.observed : ''}` },
             locations: [
               e.file
                 ? { physicalLocation: { artifactLocation: { uri: e.file }, region: e.line ? { startLine: e.line } : undefined } }
                 : { physicalLocation: { artifactLocation: { uri: e.url ?? r.target } } },
             ],
-            properties: { confidence: f.confidence },
+            properties: { confidence: f.confidence, ...(f.context ? { context: f.context } : {}) },
           })),
         ),
       },

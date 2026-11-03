@@ -30,6 +30,12 @@ export interface Rule {
   /** Rule ids whose recommendation contradicts this one for an overlapping engine. */
   conflictsWith?: string[];
   autofix?: boolean;
+  /**
+   * Findings that describe the test environment (`server`: the local/staging web server, e.g. no HTTPS or
+   * compression) or a deliberate pre-launch state (`launch`: e.g. noindex until going live). With
+   * --pre-launch they are excluded from the score and listed separately.
+   */
+  environment?: 'server' | 'launch';
 }
 
 export interface RuleFile {
@@ -133,6 +139,7 @@ export function validateKnowledge(kb: KnowledgeBase, opts: { implemented?: Set<s
     if (!SEVERITIES.includes(r.severity)) err(`invalid severity ${r.severity}`);
     if (!CONFIDENCES.includes(r.confidence)) err(`invalid confidence ${r.confidence}`);
     if (!CATEGORIES.includes(r.category)) err(`invalid category ${r.category}`);
+    if (r.environment !== undefined && r.environment !== 'server' && r.environment !== 'launch') err(`invalid environment ${String(r.environment)} (server|launch)`);
     if (!r.engines?.length || r.engines.some((e) => !ENGINES.includes(e))) err('engines must be a non-empty subset of google|bing|yandex|all|ai');
     if (!r.description || !r.fix || !r.verify) err('description, fix and verify are required');
     if (r.status === 'active' && !r.sources?.length) err('active rules need at least one source');

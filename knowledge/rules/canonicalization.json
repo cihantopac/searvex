@@ -155,7 +155,8 @@
           "level": "fetched"
         }
       ],
-      "status": "active"
+      "status": "active",
+      "environment": "launch"
     },
     {
       "id": "canonical.cross-domain",
@@ -300,7 +301,8 @@
           "level": "fetched"
         }
       ],
-      "status": "active"
+      "status": "active",
+      "environment": "server"
     },
     {
       "id": "canonical.www-duplicate",

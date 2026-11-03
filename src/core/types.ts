@@ -70,6 +70,12 @@ export interface Finding {
   priority?: Priority;
   /** URL-pattern templates the affected pages belong to ("fix once" signal). */
   templates?: Array<{ pattern: string; pages: number }>;
+  /**
+   * Pre-launch profile only: `environment` = depends on the test server, `launch-checklist` = a deliberate
+   * pre-launch state to change before going live. Either way the finding does not count toward the score,
+   * --fail-on or monitor regressions.
+   */
+  context?: 'environment' | 'launch-checklist';
 }
 
 export interface Priority {

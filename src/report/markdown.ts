@@ -36,7 +36,23 @@ export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = 
     L.push('');
   }
 
-  const issues = r.findings.filter((f) => f.severity !== 'info');
+  const issues = r.findings.filter((f) => f.severity !== 'info' && !f.context);
+  const launch = r.findings.filter((f) => f.context === 'launch-checklist');
+  const env = r.findings.filter((f) => f.context === 'environment');
+  if (launch.length || env.length || r.scores.profile === 'pre-launch') {
+    L.push('## Launch checklist', '', '_Pre-launch profile: deliberate pre-launch states that must change before going live. Not scored._', '');
+    if (!launch.length) L.push('_Nothing to change before launch._', '');
+    for (const f of launch) {
+      L.push(`- [ ] **${md(f.title)}** \`${f.ruleId}\` — ${f.count} × · ${f.severity}${f.fix ? ` · Fix: ${md(f.fix)}` : ''}`);
+      for (const e of f.evidence.slice(0, 3)) L.push(`  - ${e.url ? md(e.url) : ''}${e.observed ? ` — ${md(e.observed)}` : ''}`);
+    }
+    if (launch.length) L.push('');
+    if (env.length) {
+      L.push('### Environment-dependent', '', '_These depend on the server the build was tested on (for example a local static server). Check them on the production server; they are not scored._', '');
+      for (const f of env) L.push(`- **${md(f.title)}** \`${f.ruleId}\` — ${f.severity}${f.evidence[0]?.observed ? ` — ${md(f.evidence[0].observed)}` : ''}`);
+      L.push('');
+    }
+  }
   L.push('## Issues by severity', '');
   if (!issues.length) L.push('_No issues found by the active rules._', '');
   for (const f of issues) {

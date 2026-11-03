@@ -35323,6 +35323,7 @@ function validateKnowledge(kb, opts = {}) {
     if (!SEVERITIES.includes(r.severity)) err(`invalid severity ${r.severity}`);
     if (!CONFIDENCES.includes(r.confidence)) err(`invalid confidence ${r.confidence}`);
     if (!CATEGORIES.includes(r.category)) err(`invalid category ${r.category}`);
+    if (r.environment !== void 0 && r.environment !== "server" && r.environment !== "launch") err(`invalid environment ${String(r.environment)} (server|launch)`);
     if (!r.engines?.length || r.engines.some((e) => !ENGINES.includes(e))) err("engines must be a non-empty subset of google|bing|yandex|all|ai");
     if (!r.description || !r.fix || !r.verify) err("description, fix and verify are required");
     if (r.status === "active" && !r.sources?.length) err("active rules need at least one source");
@@ -35464,6 +35465,53 @@ function buildContext(crawl2) {
 function resolveRecord(ctx, url) {
   const n = normalizeUrl(url);
   return n ? ctx.byUrl.get(n) : void 0;
+}
+
+// src/analyze/pre-launch.ts
+var NOINDEX = /* @__PURE__ */ new Set(["noindex", "none"]);
+function strip(d) {
+  return d.flatMap((x) => x === "none" ? ["nofollow"] : NOINDEX.has(x) ? [] : [x]);
+}
+function stripData(d) {
+  if (!d) return d;
+  return { ...d, metaRobots: strip(d.metaRobots), botRobots: Object.fromEntries(Object.entries(d.botRobots).map(([k, v]) => [k, strip(v)])) };
+}
+function asLaunched(result) {
+  const noindex = /* @__PURE__ */ new Map();
+  const pages = result.pages.map((p) => {
+    if (!isNoindex(p)) return p;
+    noindex.set(p.url, [...new Set(robotsDirectives(p, ["googlebot", "bingbot"]))]);
+    return {
+      ...p,
+      xRobots: strip(p.xRobots),
+      xRobotsByBot: Object.fromEntries(Object.entries(p.xRobotsByBot).map(([k, v]) => [k, strip(v)])),
+      data: stripData(p.data),
+      rendered: stripData(p.rendered)
+    };
+  });
+  return { result: { ...result, pages }, noindex };
+}
+function emitLaunchNoindex(ctx, noindex, sink) {
+  for (const p of ctx.pages) {
+    const directives = noindex.get(p.url);
+    if (!directives || !factsOf(p) || p.status !== 200 || p.redirects.length) continue;
+    sink.emit("index.noindex", { url: p.url, observed: directives.join(", ") });
+    if (p.inSitemap) sink.emit("index.noindex-in-sitemap", { url: p.url });
+  }
+  for (const p of ctx.htmlPages) {
+    const canonical = factsOf(p)?.canonical;
+    if (!canonical || isSelfCanonical(p)) continue;
+    const target = resolveRecord(ctx, canonical);
+    if (target && !target.blockedByRobots && target.status === 200 && !target.redirects.length && noindex.has(target.url)) sink.emit("canonical.target-noindex", { url: p.url, observed: canonical });
+  }
+}
+function applyPreLaunch(findings, kb) {
+  for (const f of findings) {
+    const env = kb.rules.get(f.ruleId)?.environment;
+    if (!env) continue;
+    f.context = env === "server" ? "environment" : "launch-checklist";
+    delete f.priority;
+  }
 }
 
 // src/analyze/content.ts
@@ -36918,20 +36966,23 @@ function failingMetrics(m) {
 }
 
 // src/analyze/audit.ts
+function countsTowardScore(f) {
+  return f.confidence !== "unmeasurable" && !f.context;
+}
 function countAffected(findings, affected) {
   const all2 = /* @__PURE__ */ new Set();
-  for (const f of findings) if (f.severity !== "info" && f.confidence !== "unmeasurable") {
+  for (const f of findings) if (f.severity !== "info" && countsTowardScore(f)) {
     for (const u of affected(f.ruleId)) if (!/\/robots\.txt$/.test(u)) all2.add(u);
   }
   return all2.size;
 }
 function scoreLabel(s) {
-  return s.notApplicable ? "n/a (nothing to audit)" : `${s.overall}/100`;
+  return s.notApplicable ? "n/a (nothing to audit)" : `${s.overall}/100${s.profile === "pre-launch" ? " (pre-launch profile)" : ""}`;
 }
 var WEIGHT = { critical: 25, high: 10, medium: 4, low: 1.5, info: 0 };
 function computeScores(findings, pageCount) {
   const penalty = (fs17) => fs17.reduce((sum, f) => {
-    if (f.confidence === "unmeasurable") return sum;
+    if (!countsTowardScore(f)) return sum;
     const share = pageCount > 0 ? Math.min(1, f.count / pageCount) : 1;
     return sum + WEIGHT[f.severity] * Math.max(share, f.severity === "critical" ? 1 : share) * (f.confidence === "heuristic" ? 0.5 : 1);
   }, 0);
@@ -36994,12 +37045,14 @@ async function auditWebsite(url, options = {}) {
   const kb = options.kb ?? loadKnowledge();
   const store2 = new RunStore(options.workspace ?? process.cwd(), options.resumeRunId ?? RunStore.newRunId("audit"));
   const result = await crawl(url, options.crawl, store2);
-  const report = await analyzeCrawl(result, kb, { ...options.crawl, probes: options.probes ?? true, checkExternal: options.checkExternal, cruxApiKey: options.cruxApiKey });
+  const report = await analyzeCrawl(result, kb, { ...options.crawl, probes: options.probes ?? true, checkExternal: options.checkExternal, cruxApiKey: options.cruxApiKey, preLaunch: options.preLaunch });
   store2.writeJson("report.json", report);
   return { report, store: store2 };
 }
 async function analyzeCrawl(result, kb, opts = {}) {
   const sink = new FindingSink(kb);
+  const launch2 = opts.preLaunch ? asLaunched(result) : void 0;
+  if (launch2) result = launch2.result;
   const ctx = buildContext(result);
   const netOpts = { policy: opts.policy ?? DEFAULT_POLICY, timeoutMs: opts.timeoutMs ?? 15e3, userAgent: opts.userAgent ?? DEFAULT_USER_AGENT };
   const unreachable = result.unreachable;
@@ -37032,6 +37085,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
     llms = await probeLlmsTxt(result.origin, netOpts);
   }
   runTechnicalChecks(ctx, sink);
+  if (launch2) emitLaunchNoindex(ctx, launch2.noindex, sink);
   const geo = runGeoChecks(ctx, sink, llms);
   const content = runContentChecks(ctx, sink);
   let externalLinks;
@@ -37049,11 +37103,13 @@ async function analyzeCrawl(result, kb, opts = {}) {
   const inventory = buildInventory(ctx);
   const findings = sink.findings();
   prioritise(findings, (id) => sink.affected(id), ctx);
+  if (opts.preLaunch) applyPreLaunch(findings, kb);
   const limitations = [
     "Website mode sees only publicly reachable pages; it has no access to real traffic, rankings, Search Console or analytics data unless an integration is configured.",
     "Response times are single-location lab samples, not Core Web Vitals field data."
   ];
   if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
+  if (launch2) limitations.push(`Pre-launch profile (--pre-launch): the site is audited as it will be once live. ${launch2.noindex.size ? `${launch2.noindex.size} noindex page(s) were evaluated as indexable; their noindex is in the launch checklist. ` : ""}Findings that depend on the test server (environment) or on a deliberate pre-launch state (launch checklist) are listed separately and excluded from the score and --fail-on.`);
   if (result.siteUrl) limitations.push(`Audited ${result.origin} as ${result.siteUrl} (--site-url): canonical, hreflang, sitemap and link URLs on ${result.siteUrl} were checked against the crawled pages at ${result.origin}; the public site itself was not fetched.`);
   if (!opts.checkExternal) limitations.push("Outbound links were not checked (use --check-external).");
   if (!result.pages.some((p) => p.rendered)) limitations.push("JavaScript was not executed (run with --render to compare rendered DOM); client-rendered content is only detected heuristically.");
@@ -37068,7 +37124,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
     findings,
     geo,
     content,
-    scores: computeScores(findings, Math.max(1, ctx.indexable.length)),
+    scores: { ...computeScores(findings, Math.max(1, ctx.indexable.length)), ...opts.preLaunch ? { profile: "pre-launch" } : {} },
     measurement: {
       verified: findings.filter((f) => f.confidence === "verified").length,
       heuristic: findings.filter((f) => f.confidence === "heuristic").length,
@@ -37121,7 +37177,7 @@ function boot(){document.documentElement.setAttribute('lang',LANG);controls();re
 var AUDIT_SCRIPT = String.raw`var R=D.report,SEL={},SHOWINFO=false,FILT={sev:'',cat:'',rem:'',conf:'',q:''};
 var SEVS=['critical','high','medium','low','info'];
 function rt(id){var r=D.rules[id]||{};var tr=LANG==='tr'&&r.tr;return{title:tr?r.tr.title:(r.title||id),fix:tr?r.tr.fix:r.fix,verify:r.verify,sources:r.sources||[]}}
-function isIssue(f){return f.severity!=='info'&&f.confidence!=='unmeasurable'}
+function isIssue(f){return f.severity!=='info'&&f.confidence!=='unmeasurable'&&!f.context}
 function groupsOf(f){return D.groups[f.ruleId]||[]}
 function selCount(f){return groupsOf(f).filter(function(g){return SEL[g.id]}).length}
 function reviewOf(ruleId,ref){var L=D.reviews||[];for(var i=L.length-1;i>=0;i--){if(ref?L[i].ref===ref:(L[i].ruleId===ruleId&&!L[i].ref))return L[i]}return null}
@@ -37145,7 +37201,7 @@ var groups=0;issues.forEach(function(f){groups+=groupsOf(f).length});
 var auto=issues.filter(function(f){return D.rem[f.ruleId]==='auto'}),optOnly=issues.filter(function(f){return D.rem[f.ruleId]!=='auto'&&D.opt[f.ruleId]});
 var ch=null;if(D.diff){var dd=D.diff.scoreBefore===null?null:D.diff.scoreAfter-D.diff.scoreBefore;ch=card(T('kpi.change'),dd===null?'—':(dd>=0?'+':'')+dd,'+'+D.diff.newFindings.length+' / −'+D.diff.resolved.length)}
 var score=R.scores.notApplicable?'n/a':R.scores.overall;
-P.appendChild(el('div',{class:'cards kpis'},[card(T('kpi.score'),score+(R.scores.notApplicable?'':'/100'),T('kpi.scoreNote'),gauge(R.scores.notApplicable?null:R.scores.overall),'score'),
+P.appendChild(el('div',{class:'cards kpis'},[card(T('kpi.score'),score+(R.scores.notApplicable?'':'/100'),T('kpi.scoreNote')+(R.scores.profile==='pre-launch'?' · '+T('kpi.preLaunch'):''),gauge(R.scores.notApplicable?null:R.scores.overall),'score'),
 card(T('kpi.groups'),fmt(groups),T('kpi.types',{n:fmt(issues.length)})),
 card(T(R.mode==='website'?'kpi.affected':'kpi.affectedFiles'),fmt(R.affectedUrls!==undefined?R.affectedUrls:0),(R.mode==='website'?T('kpi.pages'):T('kpi.routes'))+': '+fmt(R.crawl.crawled)),
 card(T('kpi.critical'),fmt(issues.filter(function(f){return f.severity==='critical'||f.severity==='high'}).length),null,null,issues.some(function(f){return f.severity==='critical'})?'alert':''),
@@ -37153,6 +37209,10 @@ card(T('kpi.auto'),fmt(auto.length),auto.length?null:optOnly.length?T('kpi.autoR
 if(lim.length)P.appendChild(el('div',{class:'limits',role:'note'},[el('b',{text:T('ov.limits')}),el('span',{class:'lim',text:lim.map(function(l){return l[0]}).join(' · ')}),el('details',{},[el('summary',{text:T('ov.limitsMore')}),el('ul',{},lim.map(function(l){return el('li',{text:l[1]})}))])]));
 var top=issues.slice().sort(function(a,b){return((b.priority&&b.priority.score)||0)-((a.priority&&a.priority.score)||0)}).slice(0,3);
 P.appendChild(h2(T('pri.title'),T('pri.note')));P.appendChild(top.length?el('div',{class:'prio'},top.map(prioCard)):el('p',{class:'muted',text:T('pri.none')}));
+var LC=R.findings.filter(function(f){return f.context==='launch-checklist'}),EV=R.findings.filter(function(f){return f.context==='environment'});
+function ctxItem(f){var r=rt(f.ruleId);return el('li',{},[el('b',{text:r.title}),' · '+fmt(f.count)+' · ',el('code',{text:f.ruleId}),r.fix?el('div',{class:'muted',text:r.fix}):null])}
+if(LC.length||EV.length||R.scores.profile==='pre-launch'){P.appendChild(h2(T('pl.title'),T('pl.note')));P.appendChild(LC.length?el('ul',{class:'checklist'},LC.map(ctxItem)):el('p',{class:'muted',text:T('pl.none')}));
+if(EV.length)P.appendChild(el('div',{class:'limits',role:'note'},[el('b',{text:T('pl.env')}),el('span',{class:'lim',text:EV.map(function(f){return rt(f.ruleId).title}).join(' · ')}),el('details',{},[el('summary',{text:T('pl.envNote')}),el('ul',{},EV.map(ctxItem))])]))}
 var pil=el('div',{class:'pillars'});PILLARS.forEach(function(p){var cats=p[1],fs=issues.filter(function(f){return cats.indexOf(f.category)>=0});var sc=cats.map(function(c){return R.scores.byCategory[c]}).filter(function(x){return typeof x==='number'});var v=sc.length?Math.min.apply(null,sc):100;
 if(p[0]==='geo'&&R.mode==='repository'&&!fs.length)return;var cls=v>=90?'good':v>=70?'medium':'critical';
 pil.appendChild(el('button',{type:'button',class:'pillar '+cls,title:cats.map(function(c){return T('cat.'+c)}).join(', ')},[el('span',{class:'label',text:T('pillar.'+p[0])}),el('b',{text:String(v)}),el('span',{class:'sub',text:fs.length?T('pillar.issues',{n:fs.length}):T('pillar.noIssues')})]));pil.lastChild.onclick=function(){FILT.cat=cats.length===1?cats[0]:'';FILT.q='';FILT.pillar=cats;showTab('issues');issuesPanel(document.getElementById('p-issues'))}});
@@ -37512,6 +37572,12 @@ var UI = {
     "warn.truncated": "Crawl stopped at the page limit ({n} URLs still queued): results cover part of the site.",
     "warn.notApplicable": "Nothing to audit",
     "hdr.auditedAs": "Audited {local} as {site}",
+    "kpi.preLaunch": "pre-launch profile",
+    "pl.title": "Launch checklist",
+    "pl.note": "Pre-launch profile: deliberate pre-launch states to change before going live. Not scored.",
+    "pl.none": "Nothing to change before launch.",
+    "pl.env": "Environment-dependent",
+    "pl.envNote": "These depend on the server the build was tested on. Check them on the production server; they are not scored.",
     "mon.title": "Change monitor",
     "eco.sites": "Sites",
     "eco.links": "Cross-links (row links to column)",
@@ -37760,6 +37826,12 @@ var UI = {
     "warn.truncated": "Tarama sayfa s\u0131n\u0131r\u0131nda durdu ({n} URL h\xE2l\xE2 kuyrukta): sonu\xE7lar sitenin bir b\xF6l\xFCm\xFCn\xFC kaps\u0131yor.",
     "warn.notApplicable": "Analiz edilecek bir \u015Fey yok",
     "hdr.auditedAs": "{local}, {site} olarak denetlendi",
+    "kpi.preLaunch": "lansman \xF6ncesi profil",
+    "pl.title": "Lansman kontrol listesi",
+    "pl.note": "Lansman \xF6ncesi profil: canl\u0131ya \xE7\u0131kmadan \xF6nce de\u011Fi\u015Ftirilmesi gereken, bilerek b\u0131rak\u0131lm\u0131\u015F durumlar. Puana dahil de\u011Fil.",
+    "pl.none": "Lansmandan \xF6nce de\u011Fi\u015Ftirilecek bir \u015Fey yok.",
+    "pl.env": "Ortama ba\u011Fl\u0131",
+    "pl.envNote": "Bunlar derlemenin test edildi\u011Fi sunucuya ba\u011Fl\u0131. Canl\u0131 sunucuda kontrol edin; puana dahil de\u011Fil.",
     "mon.title": "De\u011Fi\u015Fiklik izleme",
     "eco.sites": "Siteler",
     "eco.links": "\xC7apraz ba\u011Flant\u0131lar (sat\u0131r \u2192 s\xFCtun)",
@@ -38730,7 +38802,23 @@ function renderMarkdown(r, opts = {}) {
     ranked.slice(0, 10).forEach((f, i) => L.push(`| ${i + 1} | ${f.priority.bucket} (${f.priority.score}) | ${md(f.title)} \`${f.ruleId}\` | ${Math.round(f.priority.reach * 100)}% | ${f.priority.effort} | ${f.priority.reasons.slice(1).map(md).join("; ") || "\u2014"} |`));
     L.push("");
   }
-  const issues = r.findings.filter((f) => f.severity !== "info");
+  const issues = r.findings.filter((f) => f.severity !== "info" && !f.context);
+  const launch2 = r.findings.filter((f) => f.context === "launch-checklist");
+  const env = r.findings.filter((f) => f.context === "environment");
+  if (launch2.length || env.length || r.scores.profile === "pre-launch") {
+    L.push("## Launch checklist", "", "_Pre-launch profile: deliberate pre-launch states that must change before going live. Not scored._", "");
+    if (!launch2.length) L.push("_Nothing to change before launch._", "");
+    for (const f of launch2) {
+      L.push(`- [ ] **${md(f.title)}** \`${f.ruleId}\` \u2014 ${f.count} \xD7 \xB7 ${f.severity}${f.fix ? ` \xB7 Fix: ${md(f.fix)}` : ""}`);
+      for (const e of f.evidence.slice(0, 3)) L.push(`  - ${e.url ? md(e.url) : ""}${e.observed ? ` \u2014 ${md(e.observed)}` : ""}`);
+    }
+    if (launch2.length) L.push("");
+    if (env.length) {
+      L.push("### Environment-dependent", "", "_These depend on the server the build was tested on (for example a local static server). Check them on the production server; they are not scored._", "");
+      for (const f of env) L.push(`- **${md(f.title)}** \`${f.ruleId}\` \u2014 ${f.severity}${f.evidence[0]?.observed ? ` \u2014 ${md(f.evidence[0].observed)}` : ""}`);
+      L.push("");
+    }
+  }
   L.push("## Issues by severity", "");
   if (!issues.length) L.push("_No issues found by the active rules._", "");
   for (const f of issues) {
@@ -39607,7 +39695,8 @@ function diffReports(before2, after2, baselineRun) {
   const a = map2(after2);
   const d = (id) => {
     const f = a.get(id) ?? b.get(id);
-    return { ruleId: id, title: f.title, severity: f.severity, before: b.get(id)?.count ?? 0, after: a.get(id)?.count ?? 0 };
+    const context = a.get(id)?.context ?? b.get(id)?.context;
+    return { ruleId: id, title: f.title, severity: f.severity, before: b.get(id)?.count ?? 0, after: a.get(id)?.count ?? 0, ...context ? { context } : {} };
   };
   const ids = /* @__PURE__ */ new Set([...a.keys(), ...b.keys()]);
   const all2 = [...ids].map(d).filter((x) => x.severity !== "info");
@@ -39615,7 +39704,7 @@ function diffReports(before2, after2, baselineRun) {
   const resolved = all2.filter((x) => x.before > 0 && x.after === 0);
   const worsened = all2.filter((x) => x.before > 0 && x.after > x.before);
   const improved = all2.filter((x) => x.after > 0 && x.after < x.before);
-  const serious = (x) => x.severity === "critical" || x.severity === "high";
+  const serious = (x) => !x.context && (x.severity === "critical" || x.severity === "high");
   return {
     target: after2.target,
     baselineRun,
@@ -39637,7 +39726,7 @@ function renderDiffMarkdown(d, gsc) {
   else L.push(`Baseline \`${d.baselineRun}\` \u2192 current \`${d.currentRun}\``, "", `Health score: ${d.scoreBefore} \u2192 **${d.scoreAfter}** \xB7 pages: ${d.pagesBefore} \u2192 ${d.pagesAfter}`, "");
   const sec = (title, xs) => {
     if (!xs.length) return;
-    L.push(`## ${title}`, "", ...xs.map((x) => `- [${x.severity}] ${md(x.title)} (\`${x.ruleId}\`): ${x.before} \u2192 ${x.after}`), "");
+    L.push(`## ${title}`, "", ...xs.map((x) => `- [${x.severity}] ${md(x.title)} (\`${x.ruleId}\`): ${x.before} \u2192 ${x.after}${x.context ? ` \xB7 ${x.context === "environment" ? "environment-dependent" : "launch checklist"}, not a regression` : ""}`), "");
   };
   sec("New issues", d.newFindings);
   sec("Worsened", d.worsened);
@@ -39705,7 +39794,8 @@ async function commandMonitor(flags) {
   const site = imports.length ? void 0 : explicitSite ?? process.env["SEARVEX_GSC_SITE"];
   const apiProperty = site ? propertyOrUsage(() => parseProperty(site)) : void 0;
   log(v, `Re-auditing ${target}\u2026`);
-  const { report, store: store2 } = await auditWebsite(target, { workspace, kb, crawl: crawlOptionsFrom(v) });
+  suggestPreLaunch(v, target);
+  const { report, store: store2 } = await auditWebsite(target, { workspace, kb, crawl: crawlOptionsFrom(v), preLaunch: !!v["pre-launch"] });
   assertTargetAllowed(report);
   writeReports(store2, report, kb, ["json", "md", "html"]);
   if (report.crawl.status === "unreachable") {
@@ -39886,12 +39976,13 @@ Sources: ${rule.sources.map((s) => s.url).join(" ")}` },
         results: r.findings.flatMap(
           (f) => f.evidence.map((e) => ({
             ruleId: f.ruleId,
-            level: LEVEL[f.severity],
+            // Pre-launch context findings must not fail code-scanning gates.
+            level: f.context ? "note" : LEVEL[f.severity],
             message: { text: `${f.title}${e.observed ? ": " + e.observed : ""}` },
             locations: [
               e.file ? { physicalLocation: { artifactLocation: { uri: e.file }, region: e.line ? { startLine: e.line } : void 0 } } : { physicalLocation: { artifactLocation: { uri: e.url ?? r.target } } }
             ],
-            properties: { confidence: f.confidence }
+            properties: { confidence: f.confidence, ...f.context ? { context: f.context } : {} }
           }))
         )
       }
@@ -42205,7 +42296,8 @@ async function commandRun(flags) {
   };
   if (url) {
     log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)\u2026`);
-    const { report, store: store3 } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v["check-external"], cruxApiKey: cruxKey()?.key });
+    suggestPreLaunch(v, url);
+    const { report, store: store3 } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v["check-external"], cruxApiKey: cruxKey()?.key, preLaunch: !!v["pre-launch"] });
     assertTargetAllowed(report);
     const files = writeReports(store3, report, kb, ["json", "md", "html"]);
     summary.website = { report, runId: store3.runId, files };
@@ -42217,7 +42309,7 @@ async function commandRun(flags) {
       step(3, "Change since previous run", "skipped", why);
       step(4, "Competitor research", "skipped", why);
     } else {
-      step(1, "Website audit", "done", `${report.crawl.crawled} pages, score ${report.scores.overall}/100`);
+      step(1, "Website audit", "done", `${report.crawl.crawled} pages, score ${scoreLabel(report.scores)}`);
       step(2, "GEO / AI search", "done", `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
       const base = findBaseline(workspace, report.target, store3.runId);
       if (base) {
@@ -42585,6 +42677,9 @@ Common options
   --out <dir>           Workspace for .searvex/ (default: current directory)
   --fail-on <severity>  Exit 1 if findings at/above severity exist (critical|high|medium|low)
   --allow-private       Allow localhost/private network targets (local dev servers only)
+  --pre-launch          Audit a local/staging build as it will be once live: test-server findings
+                        (no HTTPS, no compression) and deliberate pre-launch states (noindex, a public
+                        sitemap host that is not live yet) are listed separately, not scored
   --site-url <url>      Public URL of the site. URL mode: audit a local/staging build as that site
                         (its canonical, hreflang, sitemap and link URLs map to the crawled origin).
                         Repository mode: base URL for canonical/sitemap fixes. monitor: also accepts
@@ -42634,6 +42729,7 @@ function parse8(argv) {
       out: { type: "string" },
       "fail-on": { type: "string" },
       "allow-private": { type: "boolean" },
+      "pre-launch": { type: "boolean" },
       json: { type: "boolean" },
       quiet: { type: "boolean", short: "q" },
       help: { type: "boolean", short: "h" },
@@ -42706,6 +42802,20 @@ function crawlOptionsFrom(v) {
     siteUrl: typeof v["site-url"] === "string" && /^https?:\/\//i.test(v["site-url"]) ? v["site-url"] : void 0
   };
 }
+function isPrivateTarget(url) {
+  let host;
+  try {
+    host = new URL(url).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  } catch {
+    return false;
+  }
+  if (host === "localhost" || /\.(localhost|local|test|internal|lan|home\.arpa)$/.test(host)) return true;
+  const c = classifyAddress(host);
+  return c === "loopback" || c === "private" || c === "link-local";
+}
+function suggestPreLaunch(v, target) {
+  if (!v["pre-launch"] && isPrivateTarget(target)) log(v, "Tip: this looks like a local or staging build. Add --pre-launch to list test-server findings (HTTPS, compression) and deliberate pre-launch states (noindex) separately instead of scoring them.");
+}
 function assertSiteUrl(v) {
   const s = v["site-url"];
   if (s !== void 0 && (typeof s !== "string" || !/^https?:\/\/[^/]/i.test(s))) throw new UsageError("--site-url must be an absolute http(s) URL (the public URL of the audited site)");
@@ -42728,7 +42838,7 @@ function failOnExit(report, failOn) {
   if (!failOn) return EXIT.ok;
   const idx = SEVERITY_ORDER.indexOf(String(failOn));
   if (idx < 0 || failOn === "info") throw new UsageError("--fail-on must be critical|high|medium|low");
-  return report.findings.some((f) => SEVERITY_ORDER.indexOf(f.severity) <= idx && f.confidence !== "unmeasurable") ? EXIT.failOn : EXIT.ok;
+  return report.findings.some((f) => SEVERITY_ORDER.indexOf(f.severity) <= idx && countsTowardScore(f)) ? EXIT.failOn : EXIT.ok;
 }
 function printSummary(report, files, v, autoRules = []) {
   if (v["json"]) {
@@ -42741,7 +42851,7 @@ function printSummary(report, files, v, autoRules = []) {
   console.log(summaryText(report, files, autoRules));
 }
 function summaryText(report, files, autoRules = []) {
-  const issues = report.findings.filter((f) => f.severity !== "info" && f.confidence !== "unmeasurable");
+  const issues = report.findings.filter((f) => f.severity !== "info" && countsTowardScore(f));
   const top2 = issues.slice().sort((a, b) => (b.priority?.score ?? 0) - (a.priority?.score ?? 0)).slice(0, 3);
   const plan = { fixes: autoRules.map((ruleId) => ({ ruleId })) };
   const auto = issues.filter((f) => remediationOf(f.ruleId, plan) === "auto");
@@ -42759,6 +42869,10 @@ Searvex \u2014 ${report.target}`];
     L.push("Top priorities:");
     top2.forEach((f, i) => L.push(`  ${i + 1}. [${f.severity}] ${f.title} \u2014 ${f.count} ${f.count === 1 ? unit.replace(/s$/, "") : unit}${f.confidence === "heuristic" ? " (heuristic)" : ""}${remediationOf(f.ruleId, plan) === "auto" ? " \xB7 automatic fix" : ""}`));
   } else L.push("No significant issues found.");
+  const launch2 = report.findings.filter((f) => f.context === "launch-checklist");
+  const env = report.findings.filter((f) => f.context === "environment");
+  if (launch2.length) L.push(`Launch checklist (change before going live, not scored): ${launch2.map((f) => `${f.title} (${f.count})`).join("; ")}`);
+  if (env.length) L.push(`Environment-dependent (check on the production server, not scored): ${env.map((f) => f.title).join("; ")}`);
   if (auto.length) L.push(`Automatic fixes: ${auto.length} (${auto.map((f) => f.ruleId).join(", ")}) \u2014 preview with "searvex optimize ${report.mode === "repository" ? report.target : "<repo>"}"`);
   const limits = [];
   if (report.crawl.truncated) limits.push(`crawl stopped at the page limit (${report.crawl.queuedRemaining} queued)`);
@@ -42797,6 +42911,7 @@ async function commandAudit(flags) {
   const render3 = v["render"] ? await (await Promise.resolve().then(() => (init_render(), render_exports))).createRenderer(opts.policy) : void 0;
   try {
     log(v, `Crawling ${target} (max ${opts.maxPages} pages, robots.txt respected)\u2026`);
+    suggestPreLaunch(v, target);
     let last2 = 0;
     const { report, store: store2 } = await auditWebsite(target, {
       workspace,
@@ -42804,6 +42919,7 @@ async function commandAudit(flags) {
       kb,
       checkExternal: !!v["check-external"],
       cruxApiKey: cruxKey()?.key,
+      preLaunch: !!v["pre-launch"],
       crawl: {
         ...opts,
         render: render3?.render,
@@ -42836,7 +42952,8 @@ async function commandGeo(flags) {
   assertSiteUrl(v);
   const kb = loadKnowledge();
   const opts = crawlOptionsFrom({ ...v, "max-pages": v["max-pages"] ?? "50" });
-  const { report, store: store2 } = await auditWebsite(target, { workspace: path22.resolve(String(v["out"] ?? process.cwd())), kb, crawl: opts });
+  suggestPreLaunch(v, target);
+  const { report, store: store2 } = await auditWebsite(target, { workspace: path22.resolve(String(v["out"] ?? process.cwd())), kb, crawl: opts, preLaunch: !!v["pre-launch"] });
   assertTargetAllowed(report);
   const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
   const unreachable = report.crawl.status === "unreachable";
@@ -43032,10 +43149,12 @@ export {
   auditExit,
   crawlOptionsFrom,
   failOnExit,
+  isPrivateTarget,
   log,
   main,
   num,
   printSummary,
+  suggestPreLaunch,
   summaryText,
   writeReports
 };

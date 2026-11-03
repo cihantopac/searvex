@@ -9,7 +9,7 @@ import { planFixes, type FixPlan } from '../optimize/fixes.js';
 import { auditRepository } from '../repo/audit.js';
 import { loadKnowledge } from '../rules/engine.js';
 import { md, renderMarkdown } from '../report/markdown.js';
-import { assertTargetAllowed, crawlOptionsFrom, EXIT, failOnExit, log, num, UsageError, writeReports, type GlobalFlags } from '../cli.js';
+import { assertTargetAllowed, crawlOptionsFrom, EXIT, failOnExit, log, num, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
 import { diffReports, findBaseline, renderDiffMarkdown, type MonitorDiff } from './monitor.js';
 import { computeGaps, profile, renderResearchMarkdown, type ResearchReport } from './research.js';
 import { renderPlan } from './optimize.js';
@@ -114,7 +114,8 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
   // 1–3: website
   if (url) {
     log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)…`);
-    const { report, store } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v['check-external'], cruxApiKey: cruxKey()?.key });
+    suggestPreLaunch(v, url);
+    const { report, store } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v['check-external'], cruxApiKey: cruxKey()?.key, preLaunch: !!v['pre-launch'] });
     assertTargetAllowed(report);
     const files = writeReports(store, report, kb, ['json', 'md', 'html']);
     summary.website = { report, runId: store.runId, files };
@@ -126,7 +127,7 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
       step(3, 'Change since previous run', 'skipped', why);
       step(4, 'Competitor research', 'skipped', why);
     } else {
-      step(1, 'Website audit', 'done', `${report.crawl.crawled} pages, score ${report.scores.overall}/100`);
+      step(1, 'Website audit', 'done', `${report.crawl.crawled} pages, score ${scoreLabel(report.scores)}`);
       step(2, 'GEO / AI search', 'done', `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
       const base = findBaseline(workspace, report.target, store.runId);
       if (base) {
