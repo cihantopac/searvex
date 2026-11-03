@@ -289,7 +289,7 @@ export function planFixes(report: AuditReport, scan: RepoScan, opts: PlanOptions
     'img.alt-missing': 'Describe what each informative image shows; use alt="" for decorative images.',
     'links.uncrawlable': 'Use <a href="/path"> for navigation (framework Link components render real hrefs).',
     'h1.missing': 'Add a visible main heading that matches the page purpose.',
-    'geo.organization-missing': 'Add Organization JSON-LD (name, url, logo, sameAs) on the homepage using only verifiable facts.',
+    'geo.organization-missing': 'Add Organization JSON-LD (name, url, logo, sameAs) on the homepage for a company or brand, or ProfilePage with a Person mainEntity for a personal site, using only verifiable facts.',
     'index.client-rendered': 'Render primary content on the server (SSR/SSG/prerender) so crawlers that do not execute JavaScript can read it.',
     'sd.missing-required': 'Add the required properties listed in the evidence, using values visible on the page.',
     'content.low-text': 'Review whether the page serves its purpose; expand with useful, original content, consolidate, or noindex placeholders.',

@@ -60,6 +60,17 @@ export function countAffected(findings: Array<Finding & { count: number }>, affe
   return all.size;
 }
 
+/**
+ * Indexable pages as the rules decide indexability (inventory), e.g. "2 indexable" or "0 indexable: all
+ * noindex".
+ */
+export function indexableSummary(r: Pick<AuditReport, 'inventory' | 'findings'>): string {
+  const total = r.inventory.pages.length;
+  const indexable = r.inventory.pages.filter((p) => p.indexable).length;
+  const noindex = r.findings.find((f) => f.ruleId === 'index.noindex')?.count ?? 0;
+  return `${indexable} indexable${indexable === 0 && total > 0 && noindex >= total ? ': all noindex' : ''}`;
+}
+
 export interface Scores {
   /** 0–100. Searvex health score: a summary of Searvex findings, NOT a search engine metric. */
   overall: number;

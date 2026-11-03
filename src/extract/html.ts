@@ -14,12 +14,67 @@ export interface LinkInfo {
   uncrawlable: boolean;
 }
 
-function sizedByLayout(style: string | undefined, nimg: string | undefined, cls: string | undefined): boolean {
+/** A CSS length that does not depend on the image itself (no auto, no percentage of an unsized parent). */
+const FIXED_LENGTH = /^-?\d*\.?\d+(px|rem|em|ch|vw|vh|vmin|vmax|cm|mm|in|pt)$/;
+
+interface BoxDecl {
+  width?: boolean;
+  height?: boolean;
+  aspect?: boolean;
+}
+
+/** Which of width / height / aspect-ratio a declaration block fixes. */
+function boxDecl(decls: string): BoxDecl {
+  const out: BoxDecl = {};
+  for (const d of decls.split(';')) {
+    const i = d.indexOf(':');
+    if (i < 0) continue;
+    const prop = d.slice(0, i).trim().toLowerCase();
+    const value = d.slice(i + 1).replace(/!important/i, '').trim().toLowerCase();
+    if (prop === 'width' && FIXED_LENGTH.test(value)) out.width = true;
+    else if (prop === 'height' && FIXED_LENGTH.test(value)) out.height = true;
+    else if (prop === 'aspect-ratio' && value && value !== 'auto') out.aspect = true;
+  }
+  return out;
+}
+
+const boxSized = (b: BoxDecl) => (!!b.width && !!b.height) || !!b.aspect;
+
+/**
+ * Class and id selectors that size an image in the page's own `<style>` elements. Only simple selectors
+ * (`.a`, `#a`, `img.a`, `img#a`) are understood; external stylesheets are not fetched.
+ */
+export function cssSizedSelectors(css: string): { classes: Set<string>; ids: Set<string> } {
+  const acc = new Map<string, BoxDecl>();
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const m of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const decl = boxDecl(m[2]!);
+    if (!decl.width && !decl.height && !decl.aspect) continue;
+    for (const raw of m[1]!.split(',')) {
+      const sel = /^(?:img)?([.#][\w-]+)$/i.exec(raw.trim());
+      if (!sel) continue;
+      const prev = acc.get(sel[1]!) ?? {};
+      acc.set(sel[1]!, { width: prev.width || decl.width, height: prev.height || decl.height, aspect: prev.aspect || decl.aspect });
+    }
+  }
+  const classes = new Set<string>();
+  const ids = new Set<string>();
+  for (const [sel, b] of acc) if (boxSized(b)) (sel[0] === '.' ? classes : ids).add(sel.slice(1));
+  return { classes, ids };
+}
+
+function sizedByLayout(style: string | undefined, nimg: string | undefined, cls: string | undefined, id: string | undefined, css: { classes: Set<string>; ids: Set<string> }): boolean {
   if (nimg === 'fill') return true;
   // Utility classes that set aspect-ratio (Tailwind aspect-video, aspect-square, aspect-[16/9]) with a width.
   if (/(^|\s)aspect-(video|square|\[\d+(\.\d+)?\/\d+(\.\d+)?\]|\d+\/\d+)(\s|$)/.test(cls ?? '')) return true;
+  // Fixed-size utility classes (Tailwind size-10, or w-10 with h-10 / w-[40px] with h-[40px]).
+  const tw = (p: string) => new RegExp(`(^|\\s)${p}-(\\d+(\\.\\d+)?|\\[\\d*\\.?\\d+(px|rem|em)\\])(\\s|$)`).test(cls ?? '');
+  if (tw('size') || (tw('w') && tw('h'))) return true;
+  const classes = (cls ?? '').split(/\s+/).filter(Boolean);
+  if (classes.some((c) => css.classes.has(c)) || (id && css.ids.has(id))) return true;
   const s = (style ?? '').toLowerCase().replace(/\s+/g, '');
-  return /aspect-ratio:/.test(s) || (/position:absolute/.test(s) && /(^|;)width:100%/.test(s) && /(^|;)height:100%/.test(s));
+  if (boxSized(boxDecl(style ?? ''))) return true;
+  return /position:absolute/.test(s) && /(^|;)width:100%/.test(s) && /(^|;)height:100%/.test(s);
 }
 
 export interface ImageInfo {
@@ -29,8 +84,9 @@ export interface ImageInfo {
   height?: string;
   loading?: string;
   /**
-   * Sized by its container or an aspect-ratio (inline style or utility class), so missing width/height cannot
-   * shift the layout (Next.js `<Image fill>` renders `position:absolute` at 100% of a sized parent).
+   * Sized by its container, an aspect-ratio or fixed CSS width and height (inline style, a simple class/id rule
+   * in the page's own <style>, or a fixed-size utility class), so missing width/height attributes cannot shift
+   * the layout (Next.js `<Image fill>` renders `position:absolute` at 100% of a sized parent).
    */
   sizedByLayout?: boolean;
 }
@@ -222,6 +278,7 @@ export function extractPage(html: string, pageUrl: string): PageData {
     links.push({ href, url, text, rel, internal, uncrawlable });
   });
 
+  const css = cssSizedSelectors($('style').map((_, el) => $(el).text()).get().join('\n'));
   const images: ImageInfo[] = $('img')
     .map((_, el) => ({
       src: $(el).attr('src') ?? $(el).attr('data-src') ?? '',
@@ -229,7 +286,7 @@ export function extractPage(html: string, pageUrl: string): PageData {
       width: $(el).attr('width'),
       height: $(el).attr('height'),
       loading: $(el).attr('loading'),
-      sizedByLayout: sizedByLayout($(el).attr('style'), $(el).attr('data-nimg'), $(el).attr('class')),
+      sizedByLayout: sizedByLayout($(el).attr('style'), $(el).attr('data-nimg'), $(el).attr('class'), $(el).attr('id'), css),
     }))
     .get();
 

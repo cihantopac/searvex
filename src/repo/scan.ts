@@ -123,7 +123,21 @@ function metadataOf(src: string, file: string): NextMetadata {
     description: exported && hasKey(src, 'description'),
     canonical: /alternates\s*:\s*\{[^}]*canonical/s.test(src),
     noindex: /robots\s*:\s*\{[^}]*index\s*:\s*false/s.test(src) || /robots\s*:\s*['"][^'"]*noindex/.test(src),
+    robots: exported && hasKey(src, 'robots'),
   };
+}
+
+/**
+ * Effective noindex of a route: the nearest of page → layouts (innermost first) that sets `robots` decides,
+ * like the Next.js metadata merge. `null` when that robots value is computed at runtime.
+ */
+function inheritedNoindex(chain: NextMetadata[]): boolean | null {
+  for (const m of chain) {
+    if (!m.exported || m.robots === false) continue;
+    if (m.robots === null) return null;
+    return m.noindex;
+  }
+  return false;
 }
 
 /** Tri-state OR: true if any is true, null if none is true but one is unknown, else false. */
@@ -156,7 +170,7 @@ function scanNextApp(appRoot: string, files: WalkedFile[], read: (f: string) => 
     const hasTitle = anyOf(pageTitle, ...chain.map((l) => (l.exported ? l.title : false)));
     const hasDesc = anyOf(pageDesc, ...chain.map((l) => (l.exported ? l.description : false)));
     const canonical = anyOf(meta.canonical, ...chain.map((l) => l.canonical));
-    const noindex = meta.noindex === true;
+    const noindex = inheritedNoindex([meta, ...chain]) === true;
     const route = nextRoute(p.rel, baseRe);
     scan.routes.push({ route, file: p.rel, framework: 'nextjs-app', dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: hasDesc, noindex });
     // `null` = computed at runtime (spread, variable, call): not reported either way.
@@ -164,7 +178,7 @@ function scanNextApp(appRoot: string, files: WalkedFile[], read: (f: string) => 
     else if (pageTitle === false && hasTitle === true && !noindex) (titleOwners['inherited'] ??= []).push(`${route} (${p.rel})`);
     if (hasDesc === false && !noindex) sink.emit('description.missing', { file: p.rel, line: meta.line, observed: `route ${route}: no metadata.description` });
     if (canonical === false && !noindex) sink.emit('canonical.missing', { file: p.rel, line: meta.line, observed: `route ${route}: no metadata.alternates.canonical` });
-    if (noindex) sink.emit('index.noindex', { file: p.rel, observed: `route ${route}: robots index:false` });
+    if (noindex) sink.emit('index.noindex', { file: p.rel, observed: `route ${route}: robots index:false${meta.robots ? '' : ' (inherited from a layout)'}` });
   }
   const inherited = titleOwners['inherited'] ?? [];
   if (inherited.length > 1) sink.emit('duplicate.title', { file: rootLayoutPath ?? undefined, observed: `${inherited.length} routes inherit the same layout title (unless title.template is combined with page titles): ${inherited.slice(0, 5).join(', ')}` });
@@ -193,7 +207,7 @@ function scanNextPages(appRoot: string, files: WalkedFile[], read: (f: string) =
     const head = pagesHead(src, p.rel);
     const hasTitle = head.title;
     const hasDesc = head.description;
-    scan.routes.push({ route, file: p.rel, framework: 'nextjs-pages', dynamic: /\[.+\]/.test(route), hasTitle: hasTitle || globalTitle, hasDescription: hasDesc || globalDesc, noindex: head.noindex });
+    scan.routes.push({ route, file: p.rel, framework: 'nextjs-pages', dynamic: /\[.+\]/.test(route), hasTitle: hasTitle || globalTitle, hasDescription: hasDesc || globalDesc, noindex: head.noindex || appHead.noindex });
     if (!hasTitle && !globalTitle) sink.emit('title.missing', { file: p.rel, observed: `route ${route}: no <title> in next/head` });
     if (!hasTitle && globalTitle) sink.emit('duplicate.title', { file: p.rel, observed: `route ${route} only gets the global title from ${appFile?.rel}` });
     if (!hasDesc && !globalDesc) sink.emit('description.missing', { file: p.rel, observed: `route ${route}` });

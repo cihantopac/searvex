@@ -17,7 +17,7 @@ function sourceTree(dir: string): string {
 
 describe('knowledge base', () => {
   it('validates with zero errors', () => {
-    const issues = validateKnowledge(kb, { implemented: IMPLEMENTED_RULES, today: new Date('2026-10-30') });
+    const issues = validateKnowledge(kb, { implemented: IMPLEMENTED_RULES, today: new Date('2026-11-03') });
     expect(issues.filter((i) => i.level === 'error')).toEqual([]);
   });
 
@@ -59,7 +59,7 @@ describe('knowledge base', () => {
         ['a.two', { ...kb.rules.get('title.missing')!, id: 'a.two' }],
       ]),
     };
-    const issues = validateKnowledge(bad, { today: new Date('2026-10-30') });
+    const issues = validateKnowledge(bad, { today: new Date('2026-11-03') });
     expect(issues.some((i) => i.message.includes('official-domain allowlist'))).toBe(true);
     expect(issues.some((i) => i.message.includes('conflicts with active rule'))).toBe(true);
   });

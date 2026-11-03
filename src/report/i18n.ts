@@ -207,5 +207,5 @@ export const RULES_TR: Record<string, { title: string; fix: string }> = {
   'sd.missing-required': { title: 'Zengin sonuçlar için gerekli özellikleri eksik yapılandırılmış veri', fix: 'Gerekli özellikleri, görünür sayfa içeriğiyle eşleşen değerlerle ekleyin.' },
   'sd.retired-type': { title: 'Kullanımdan kaldırılmış zengin sonuç türü için işaretleme', fix: 'İşlem gerekmez. İşaretlemeyi yalnızca başka tüketiciler kullanıyorsa tutun.' },
   'sd.none': { title: 'Yapılandırılmış veri yok', fix: 'Sayfayı tanımlayan türler için (Organization, Product, Article, BreadcrumbList, …) yalnızca görünür bilgilerle JSON-LD ekleyin.' },
-  'geo.organization-missing': { title: 'Ana sayfada Organization yapılandırılmış verisi yok', fix: 'Ana sayfaya Organization JSON-LD’si (name, url, logo, sameAs) ekleyin.' },
+  'geo.organization-missing': { title: 'Ana sayfada Organization veya Person yapılandırılmış verisi yok', fix: 'Şirket veya marka için ana sayfaya Organization JSON-LD’si (name, url, logo, sameAs) ekleyin; kişisel bir site için mainEntity’si Person olan ProfilePage (name, url, sameAs) ekleyin.' },
 };

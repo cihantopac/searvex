@@ -69,7 +69,7 @@ describe('cannibalisation candidates', () => {
 describe('image dimensions', () => {
   it('accept aspect-ratio utility classes, and still flag an image with only a height', () => {
     const f = report.findings.find((x) => x.ruleId === 'img.dimensions-missing');
-    expect(f?.evidence.map((e) => [new URL(e.url!).pathname, e.observed])).toEqual([['/about', '1 image(s) without width/height attributes']]);
+    expect(f?.evidence.map((e) => [new URL(e.url!).pathname, e.observed])).toEqual([['/about', '1 image(s) without width/height attributes or a fixed size in inline CSS (external stylesheets are not checked)']]);
   });
 });
 
