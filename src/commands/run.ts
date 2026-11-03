@@ -139,7 +139,7 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
         const compReports: AuditReport[] = [];
         for (const c of competitors) {
           log(v, `4. Crawling competitor ${c} (max ${perSite} pages)…`);
-          compReports.push(await analyzeCrawl(await crawl(c, { ...opts, maxPages: perSite }), kb, { ...opts, probes: false }));
+          compReports.push(await analyzeCrawl(await crawl(c, { ...opts, siteUrl: undefined, maxPages: perSite }), kb, { ...opts, probes: false }));
         }
         const allTerms = new Set(report.content.pageTerms.flatMap((p) => p.terms).concat(report.content.topTerms.map((t) => t.term)));
         summary.research = {

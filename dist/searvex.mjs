@@ -16230,6 +16230,28 @@ function pathDepth(url) {
 function looksLikeAsset(url) {
   return /\.(png|jpe?g|gif|webp|avif|svg|ico|css|js|mjs|map|woff2?|ttf|otf|eot|mp4|webm|mp3|wav|pdf|zip|gz|tar|rar|7z|exe|dmg|apk|json|xml|txt|csv)(\?|$)/i.test(url);
 }
+function originMap(siteUrl, crawledUrl) {
+  if (!siteUrl) return void 0;
+  try {
+    const from = new URL(siteUrl);
+    const to = new URL(crawledUrl).origin;
+    if (from.protocol !== "http:" && from.protocol !== "https:" || from.origin === to) return void 0;
+    return { from: from.origin, to };
+  } catch {
+    return void 0;
+  }
+}
+function mapOrigin(url, map2) {
+  if (!map2 || !url) return url;
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return url;
+  }
+  if (u.origin !== map2.from) return url;
+  return map2.to + u.pathname + u.search + u.hash;
+}
 
 // node_modules/cheerio/dist/esm/options.js
 var defaultOpts = {
@@ -34790,7 +34812,8 @@ function parseSitemapXml(xml2, source) {
 async function collectSitemaps(seeds, opts = {}) {
   const maxSitemaps = opts.maxSitemaps ?? 50;
   const maxUrls = opts.maxUrls ?? 1e5;
-  const queue = [...new Set(seeds)];
+  const map2 = opts.mapUrl ?? ((u) => u);
+  const queue = [...new Set(seeds.map(map2))];
   const seen = /* @__PURE__ */ new Set();
   const result = { sitemaps: [], urls: [], issues: [] };
   while (queue.length && seen.size < maxSitemaps && result.urls.length < maxUrls) {
@@ -34811,8 +34834,8 @@ async function collectSitemaps(seeds, opts = {}) {
     if (res.truncated) result.issues.push({ sitemap: sm, message: "Sitemap exceeds 50 MB uncompressed limit (truncated)" });
     const parsed = parseSitemapXml(body, sm);
     result.issues.push(...parsed.issues);
-    for (const c of parsed.children) if (!seen.has(c)) queue.push(c);
-    result.urls.push(...parsed.urls.slice(0, maxUrls - result.urls.length));
+    for (const c of parsed.children.map(map2)) if (!seen.has(c)) queue.push(c);
+    result.urls.push(...parsed.urls.slice(0, maxUrls - result.urls.length).map((u) => ({ ...u, loc: map2(u.loc) })));
   }
   return result;
 }
@@ -34906,6 +34929,21 @@ function pickHeaders(h) {
   for (const k of KEPT_HEADERS) if (h[k]) out[k] = h[k].slice(0, 1e3);
   return out;
 }
+function mapPageData(d, map2) {
+  if (!map2) return d;
+  const to = new URL(map2.to).hostname.replace(/^www\./, "");
+  const m = (u) => mapOrigin(u, map2);
+  return {
+    ...d,
+    canonical: d.canonical && m(d.canonical),
+    hreflang: d.hreflang.map((h) => ({ ...h, href: m(h.href) })),
+    links: d.links.map((l) => {
+      if (!l.url) return l;
+      const url = m(l.url);
+      return url === l.url ? l : { ...l, url, internal: new URL(url).hostname.replace(/^www\./, "") === to };
+    })
+  };
+}
 function inScope(url, rootHost, opts) {
   let u;
   try {
@@ -34929,6 +34967,7 @@ async function crawl(startUrl, partial = {}, store2) {
   const origin = new URL(start).origin;
   const rootHost = new URL(start).hostname.replace(/^www\./, "");
   const fetchOpts = { policy: opts.policy, timeoutMs: opts.timeoutMs, userAgent: opts.userAgent };
+  const map2 = originMap(opts.siteUrl, start);
   const robots = await fetchRobots(origin, fetchOpts);
   if (robots.state === "unreachable" && robots.error) {
     const probe = await safeFetch(start, { ...fetchOpts, maxBytes: 64 * 1024 });
@@ -34955,7 +34994,7 @@ async function crawl(startUrl, partial = {}, store2) {
   const delay = robots.crawlDelay(opts.robotsAgent);
   if (delay && delay > 0) limiter.setDelay(new URL(origin).host, Math.min(delay, 30) * 1e3);
   const sitemapSeeds = robots.sitemaps.length ? robots.sitemaps : [new URL("/sitemap.xml", origin).toString()];
-  const sitemap = opts.useSitemaps ? await collectSitemaps(sitemapSeeds, { ...fetchOpts, limiter }) : { sitemaps: [], urls: [], issues: [] };
+  const sitemap = opts.useSitemaps ? await collectSitemaps(sitemapSeeds, { ...fetchOpts, limiter, mapUrl: (u) => mapOrigin(u, map2) }) : { sitemaps: [], urls: [], issues: [] };
   const sitemapSet = new Set(sitemap.urls.map((u) => normalizeUrl(u.loc)).filter((x) => !!x));
   const existing = store2?.readLines("pages.jsonl") ?? [];
   const checkpoint = store2?.readJson("checkpoint.json");
@@ -35029,11 +35068,11 @@ async function crawl(startUrl, partial = {}, store2) {
     };
     const isHtml2 = /html/i.test(res.contentType) || !res.contentType && /^\s*</.test(res.body);
     if (!res.error && isHtml2 && res.body) {
-      rec.data = extractPage(res.body, res.finalUrl);
+      rec.data = mapPageData(extractPage(res.body, res.finalUrl), map2);
       if (opts.render) {
         const r = await opts.render(res.finalUrl);
         if (r.error) rec.renderError = r.error;
-        else rec.rendered = extractPage(r.html, res.finalUrl);
+        else rec.rendered = mapPageData(extractPage(r.html, res.finalUrl), map2);
       }
       const linkSource = rec.rendered ?? rec.data;
       const follow = !rec.data.metaRobots.includes("nofollow") && !rec.data.metaRobots.includes("none");
@@ -35098,7 +35137,8 @@ async function crawl(startUrl, partial = {}, store2) {
       durationMs: Date.now() - t0,
       avgResponseMs: fetched.length ? Math.round(fetched.reduce((a, p) => a + p.timingMs, 0) / fetched.length) : 0
     },
-    truncated: queue.length > 0
+    truncated: queue.length > 0,
+    ...map2 ? { siteUrl: map2.from } : {}
   };
   store2?.writeJson("crawl-summary.json", {
     ...result,
@@ -36932,6 +36972,7 @@ function crawlSummary(result) {
     ...result.stats,
     status: result.unreachable ? "unreachable" : "complete",
     ...result.unreachable ? { error: result.unreachable.error } : {},
+    ...result.siteUrl ? { siteUrl: result.siteUrl } : {},
     truncated: result.truncated,
     startUrl: result.startUrl,
     robots: { url: result.robots.url, state: result.robots.state, status: result.robots.status, sitemaps: result.robots.sitemaps },
@@ -37004,6 +37045,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
     "Response times are single-location lab samples, not Core Web Vitals field data."
   ];
   if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
+  if (result.siteUrl) limitations.push(`Audited ${result.origin} as ${result.siteUrl} (--site-url): canonical, hreflang, sitemap and link URLs on ${result.siteUrl} were checked against the crawled pages at ${result.origin}; the public site itself was not fetched.`);
   if (!opts.checkExternal) limitations.push("Outbound links were not checked (use --check-external).");
   if (!result.pages.some((p) => p.rendered)) limitations.push("JavaScript was not executed (run with --render to compare rendered DOM); client-rendered content is only detected heuristically.");
   return {
@@ -37079,7 +37121,7 @@ var PILLARS=[['index',['crawlability','indexability','canonicalization']],['tech
 function render(){var M=document.getElementById('main');M.textContent='';
 document.getElementById('kicker').textContent=T(R.mode==='repository'?'title.repo':'title.audit');
 document.getElementById('t').textContent=R.target;
-document.getElementById('meta').textContent=R.generatedAt.slice(0,16).replace('T',' ')+' UTC · Searvex '+R.tool.version+' · rules '+R.tool.rulesVersion+' · '+R.runId;
+document.getElementById('meta').textContent=(R.crawl&&R.crawl.siteUrl?T('hdr.auditedAs',{local:R.crawl.startUrl.replace(/^(https?:\/\/[^\/]+).*$/,'$1'),site:R.crawl.siteUrl})+' · ':'')+R.generatedAt.slice(0,16).replace('T',' ')+' UTC · Searvex '+R.tool.version+' · rules '+R.tool.rulesVersion+' · '+R.runId;
 var issues=R.findings.filter(isIssue),tabs=[['overview',T('nav.overview')],['priorities',T('nav.priorities')],['issues',T('nav.issues'),issues.length]];
 var hasGeo=R.mode==='website'&&R.geo&&R.geo.bots&&R.geo.bots.length;if(hasGeo)tabs.push(['geo',T('nav.geo')]);
 if(D.search)tabs.push(['search',T('nav.search')]);if(D.diff)tabs.push(['changes',T('nav.changes')]);tabs.push(['evidence',T('nav.evidence')]);
@@ -37460,6 +37502,7 @@ var UI = {
     "open": "Open",
     "warn.truncated": "Crawl stopped at the page limit ({n} URLs still queued): results cover part of the site.",
     "warn.notApplicable": "Nothing to audit",
+    "hdr.auditedAs": "Audited {local} as {site}",
     "mon.title": "Change monitor",
     "eco.sites": "Sites",
     "eco.links": "Cross-links (row links to column)",
@@ -37707,6 +37750,7 @@ var UI = {
     "open": "A\xE7",
     "warn.truncated": "Tarama sayfa s\u0131n\u0131r\u0131nda durdu ({n} URL h\xE2l\xE2 kuyrukta): sonu\xE7lar sitenin bir b\xF6l\xFCm\xFCn\xFC kaps\u0131yor.",
     "warn.notApplicable": "Analiz edilecek bir \u015Fey yok",
+    "hdr.auditedAs": "{local}, {site} olarak denetlendi",
     "mon.title": "De\u011Fi\u015Fiklik izleme",
     "eco.sites": "Siteler",
     "eco.links": "\xC7apraz ba\u011Flant\u0131lar (sat\u0131r \u2192 s\xFCtun)",
@@ -38657,6 +38701,7 @@ function renderMarkdown(r, opts = {}) {
   const max = opts.maxEvidence ?? 5;
   const L = [];
   L.push(`# Searvex audit \u2014 ${md(r.target)}`, "");
+  if (r.crawl.siteUrl) L.push(`Audited \`${md(new URL(r.crawl.startUrl).origin)}\` as \`${md(r.crawl.siteUrl)}\` (--site-url)`, "");
   L.push(`Generated ${r.generatedAt} \xB7 Searvex ${r.tool.version} \xB7 rules ${r.tool.rulesVersion} \xB7 run \`${r.runId}\``, "");
   if (r.crawl.status === "unreachable") L.push(`> **Target unreachable:** ${md(r.crawl.error ?? "network error")}. No page was fetched, so this report contains no findings about the site.`, "");
   L.push("## Summary", "");
@@ -39645,7 +39690,8 @@ async function commandMonitor(flags) {
     if (!importProperty)
       throw new UsageError(`The export (${exp.files.join(", ")}) has no pages table, so Searvex cannot tell which website it belongs to. Include the pages table (export the ZIP) or pass --property (e.g. sc-domain:example.com) to state the property it was exported from.`);
   }
-  const explicitSite = v["site-url"];
+  const mapsOrigin = !!originMap(v["site-url"], target);
+  const explicitSite = mapsOrigin ? void 0 : v["site-url"];
   const site = imports.length ? void 0 : explicitSite ?? process.env["SEARVEX_GSC_SITE"];
   const apiProperty = site ? propertyOrUsage(() => parseProperty(site)) : void 0;
   log(v, `Re-auditing ${target}\u2026`);
@@ -42046,7 +42092,7 @@ async function commandResearch(flags) {
   const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
   const store2 = new RunStore(workspace, RunStore.newRunId("research"));
   const perSite = num(v["max-pages"], 150, 1, 1e5);
-  const base = { ...crawlOptionsFrom(v), maxPages: perSite };
+  const base = { ...crawlOptionsFrom(v), siteUrl: void 0, maxPages: perSite };
   const analyse = async (url) => {
     log(v, `Crawling ${url} (max ${perSite} pages)\u2026`);
     const result = await crawl(url, base);
@@ -42172,7 +42218,7 @@ async function commandRun(flags) {
         const compReports = [];
         for (const c of competitors) {
           log(v, `4. Crawling competitor ${c} (max ${perSite} pages)\u2026`);
-          compReports.push(await analyzeCrawl(await crawl(c, { ...opts, maxPages: perSite }), kb, { ...opts, probes: false }));
+          compReports.push(await analyzeCrawl(await crawl(c, { ...opts, siteUrl: void 0, maxPages: perSite }), kb, { ...opts, probes: false }));
         }
         const allTerms = new Set(report.content.pageTerms.flatMap((p) => p.terms).concat(report.content.topTerms.map((t) => t.term)));
         summary.research = {
@@ -42442,7 +42488,7 @@ async function commandEcosystem(flags) {
   for (const u of urls) if (!/^https?:\/\//i.test(u)) throw new UsageError(`Invalid URL: ${u}`);
   const kb = loadKnowledge();
   const workspace = path21.resolve(String(v["out"] ?? process.cwd()));
-  const opts = { ...crawlOptionsFrom(v), maxPages: num(v["max-pages"], 60, 1, 1e5) };
+  const opts = { ...crawlOptionsFrom(v), siteUrl: void 0, maxPages: num(v["max-pages"], 60, 1, 1e5) };
   const snaps = new Array(urls.length);
   let next2 = 0;
   const worker = async () => {
@@ -42528,7 +42574,10 @@ Common options
   --out <dir>           Workspace for .searvex/ (default: current directory)
   --fail-on <severity>  Exit 1 if findings at/above severity exist (critical|high|medium|low)
   --allow-private       Allow localhost/private network targets (local dev servers only)
-  --site-url <url>      Public URL of a repository's site (canonical/sitemap fixes)
+  --site-url <url>      Public URL of the site. URL mode: audit a local/staging build as that site
+                        (its canonical, hreflang, sitemap and link URLs map to the crawled origin).
+                        Repository mode: base URL for canonical/sitemap fixes. monitor: also accepts
+                        a Search Console property (sc-domain:\u2026)
   --lang <tag>          Document language for fixes when the framework has no locale idiom
   --apply / --yes       optimize: write changes (after confirmation) / skip the prompt
   --only <ruleId>       optimize: restrict fixes to a rule (repeatable)
@@ -42641,8 +42690,14 @@ function crawlOptionsFrom(v) {
     useSitemaps: !v["no-sitemap"],
     include: v["include"]?.map((r) => new RegExp(r)),
     exclude: v["exclude"]?.map((r) => new RegExp(r)),
-    policy: { ...DEFAULT_POLICY, allowPrivate: !!v["allow-private"] }
+    policy: { ...DEFAULT_POLICY, allowPrivate: !!v["allow-private"] },
+    // monitor also accepts a Search Console property (sc-domain:…) here; only URLs map origins.
+    siteUrl: typeof v["site-url"] === "string" && /^https?:\/\//i.test(v["site-url"]) ? v["site-url"] : void 0
   };
+}
+function assertSiteUrl(v) {
+  const s = v["site-url"];
+  if (s !== void 0 && (typeof s !== "string" || !/^https?:\/\/[^/]/i.test(s))) throw new UsageError("--site-url must be an absolute http(s) URL (the public URL of the audited site)");
 }
 function log(v, ...args) {
   if (!v["quiet"] && !v["json"]) console.error(...args);
@@ -42687,6 +42742,7 @@ Searvex \u2014 ${report.target}`];
     L.push("Check the URL, DNS, the network or the server, then run the audit again.");
     return withReportFiles(L, files);
   }
+  if (report.crawl.siteUrl) L.push(`Audited ${new URL(report.crawl.startUrl).origin} as ${report.crawl.siteUrl} (--site-url)`);
   L.push(`Health score ${scoreLabel(report.scores)} (Searvex metric, not a search engine score) \xB7 ${report.crawl.crawled} ${report.mode === "website" ? "pages crawled" : "routes/pages"} \xB7 ${issues.length} issue types, ${report.affectedUrls ?? 0} affected ${unit}`);
   if (top2.length) {
     L.push("Top priorities:");
@@ -42723,6 +42779,7 @@ async function commandAudit(flags) {
     if (fs16.existsSync(target)) return commandRepo(flags);
     throw new UsageError(`Not a URL and not an existing path: ${target}`);
   }
+  assertSiteUrl(v);
   const kb = loadKnowledge();
   const workspace = path22.resolve(String(v["out"] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
@@ -42765,6 +42822,7 @@ async function commandGeo(flags) {
   const { values: v } = flags;
   const target = flags.positionals[1];
   if (!target || !/^https?:\/\//i.test(target)) throw new UsageError("geo requires a URL");
+  assertSiteUrl(v);
   const kb = loadKnowledge();
   const opts = crawlOptionsFrom({ ...v, "max-pages": v["max-pages"] ?? "50" });
   const { report, store: store2 } = await auditWebsite(target, { workspace: path22.resolve(String(v["out"] ?? process.cwd())), kb, crawl: opts });
@@ -42958,6 +43016,7 @@ export {
   EXIT,
   SEVERITY_ORDER,
   UsageError,
+  assertSiteUrl,
   assertTargetAllowed,
   auditExit,
   crawlOptionsFrom,

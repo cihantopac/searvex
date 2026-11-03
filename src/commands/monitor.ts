@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { auditWebsite, type AuditReport } from '../analyze/audit.js';
+import { originMap } from '../core/url.js';
 import { RunStore } from '../crawl/store.js';
 import { loadKnowledge } from '../rules/engine.js';
 import { md } from '../report/markdown.js';
@@ -141,7 +142,10 @@ export async function commandMonitor(flags: GlobalFlags): Promise<number> {
     if (!importProperty)
       throw new UsageError(`The export (${exp.files.join(', ')}) has no pages table, so Searvex cannot tell which website it belongs to. Include the pages table (export the ZIP) or pass --property (e.g. sc-domain:example.com) to state the property it was exported from.`);
   }
-  const explicitSite = v['site-url'] as string | undefined;
+  // A --site-url URL on another origin than the target maps a local/staging build to its public site; it is
+  // then not a Search Console property for this audit (the crawled URLs are not the public ones).
+  const mapsOrigin = !!originMap(v['site-url'] as string | undefined, target);
+  const explicitSite = mapsOrigin ? undefined : (v['site-url'] as string | undefined);
   const site = imports.length ? undefined : (explicitSite ?? process.env['SEARVEX_GSC_SITE']);
   const apiProperty = site ? propertyOrUsage(() => parseProperty(site)) : undefined;
 

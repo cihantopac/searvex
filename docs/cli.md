@@ -61,7 +61,7 @@ searvex <command> [target] [options]
 | `--out <dir>` | cwd (repo root for repo audits) | Workspace that receives `.searvex/` |
 | `--fail-on <severity>` | — | `critical\|high\|medium\|low`; exit 1 when matching findings exist (unmeasurable ignored) |
 | `--allow-private` | off | Allow localhost/private network targets (local dev servers) |
-| `--site-url <url>` | — | Public URL for repository analysis and fixes (canonical, sitemap) |
+| `--site-url <url>` | — | Public URL of the site. **URL mode** (`audit`, `geo`, `monitor`, `run`): audit a local or staging build as that site — canonical, hreflang, sitemap (`Sitemap:` directives, `<loc>`, sitemap indexes) and link URLs on the public origin are mapped to the crawled origin, so a canonical to the public URL of the same page counts as self and the declared sitemap is read from the build. Only the exact origin is mapped (`http://` or `www.` variants of it are not). The report header says "Audited `<crawled origin>` as `<site URL>`". Not applied to `research`, `ecosystem` or competitor crawls. **Repository mode:** base URL for fixes (canonical, sitemap). **monitor:** a value on the target's own origin, or `sc-domain:…`, is the Search Console property; a URL on another origin is an origin mapping only. |
 | `--lang <tag>` | — | Document language for `html lang` fixes when the framework has no locale idiom |
 | `--only <ruleId>` | — | Restrict optimize to specific rules (repeatable) |
 | `--apply`, `--yes` | — | Optimize: write changes / skip confirmation |

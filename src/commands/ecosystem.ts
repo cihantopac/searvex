@@ -256,7 +256,8 @@ export async function commandEcosystem(flags: GlobalFlags): Promise<number> {
   for (const u of urls) if (!/^https?:\/\//i.test(u)) throw new UsageError(`Invalid URL: ${u}`);
   const kb = loadKnowledge();
   const workspace = path.resolve(String(v['out'] ?? process.cwd()));
-  const opts = { ...crawlOptionsFrom(v), maxPages: num(v['max-pages'], 60, 1, 100000) };
+  // Several sites: a single --site-url origin mapping would apply to all of them.
+  const opts = { ...crawlOptionsFrom(v), siteUrl: undefined, maxPages: num(v['max-pages'], 60, 1, 100000) };
   // Sites are different hosts, so they can be crawled in parallel without weakening per-host politeness.
   const snaps: SiteSnapshot[] = new Array(urls.length);
   let next = 0;

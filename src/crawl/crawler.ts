@@ -1,5 +1,5 @@
 import type { FetchResult, RedirectHop } from '../core/types.js';
-import { looksLikeAsset, normalizeUrl, pathDepth } from '../core/url.js';
+import { looksLikeAsset, mapOrigin, normalizeUrl, originMap, pathDepth, type OriginMap } from '../core/url.js';
 import { extractPage, parseXRobotsTag, type PageData } from '../extract/html.js';
 import { DEFAULT_USER_AGENT, HostRateLimiter, safeFetch } from '../net/fetcher.js';
 import { DEFAULT_POLICY, type NetPolicy } from '../net/ssrf.js';
@@ -26,6 +26,11 @@ export interface CrawlOptions {
   onProgress?: (p: { crawled: number; queued: number; url: string; status: number }) => void;
   /** Persist progress every N pages. */
   checkpointEvery: number;
+  /**
+   * Public URL of the site when it is crawled at another origin (local or staging build). URLs the pages
+   * declare on that origin are mapped to the crawled origin (see `mapOrigin`).
+   */
+  siteUrl?: string;
 }
 
 export const DEFAULT_CRAWL: CrawlOptions = {
@@ -82,6 +87,8 @@ export interface CrawlResult {
    * and nothing was crawled: the run says nothing about the site.
    */
   unreachable?: { error: string; blocked: boolean };
+  /** Public origin mapped to `origin` (from --site-url); absent when no mapping applied. */
+  siteUrl?: string;
 }
 
 interface QueueItem {
@@ -101,6 +108,23 @@ function pickHeaders(h: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const k of KEPT_HEADERS) if (h[k]) out[k] = h[k]!.slice(0, 1000);
   return out;
+}
+
+/** Rewrite the public URLs a page declares (canonical, hreflang, links) to the crawled origin. */
+export function mapPageData(d: PageData, map: OriginMap | undefined): PageData {
+  if (!map) return d;
+  const to = new URL(map.to).hostname.replace(/^www\./, '');
+  const m = (u: string) => mapOrigin(u, map);
+  return {
+    ...d,
+    canonical: d.canonical && m(d.canonical),
+    hreflang: d.hreflang.map((h) => ({ ...h, href: m(h.href) })),
+    links: d.links.map((l) => {
+      if (!l.url) return l;
+      const url = m(l.url);
+      return url === l.url ? l : { ...l, url, internal: new URL(url).hostname.replace(/^www\./, '') === to };
+    }),
+  };
 }
 
 function inScope(url: string, rootHost: string, opts: CrawlOptions): boolean {
@@ -128,6 +152,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
   const origin = new URL(start).origin;
   const rootHost = new URL(start).hostname.replace(/^www\./, '');
   const fetchOpts = { policy: opts.policy, timeoutMs: opts.timeoutMs, userAgent: opts.userAgent };
+  const map = originMap(opts.siteUrl, start);
 
   const robots = await fetchRobots(origin, fetchOpts);
   // A network-level robots.txt failure makes every URL disallowed (RFC 9309), so the start URL would never
@@ -159,7 +184,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
 
   const sitemapSeeds = robots.sitemaps.length ? robots.sitemaps : [new URL('/sitemap.xml', origin).toString()];
   // Sitemap downloads share the per-host politeness limiter with page fetches.
-  const sitemap: SitemapResult = opts.useSitemaps ? await collectSitemaps(sitemapSeeds, { ...fetchOpts, limiter }) : { sitemaps: [], urls: [], issues: [] };
+  const sitemap: SitemapResult = opts.useSitemaps ? await collectSitemaps(sitemapSeeds, { ...fetchOpts, limiter, mapUrl: (u) => mapOrigin(u, map) }) : { sitemaps: [], urls: [], issues: [] };
   const sitemapSet = new Set(sitemap.urls.map((u) => normalizeUrl(u.loc)).filter((x): x is string => !!x));
 
   // Resume support
@@ -224,11 +249,11 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
     };
     const isHtml = /html/i.test(res.contentType) || (!res.contentType && /^\s*</.test(res.body));
     if (!res.error && isHtml && res.body) {
-      rec.data = extractPage(res.body, res.finalUrl);
+      rec.data = mapPageData(extractPage(res.body, res.finalUrl), map);
       if (opts.render) {
         const r = await opts.render(res.finalUrl);
         if (r.error) rec.renderError = r.error;
-        else rec.rendered = extractPage(r.html, res.finalUrl);
+        else rec.rendered = mapPageData(extractPage(r.html, res.finalUrl), map);
       }
       const linkSource = rec.rendered ?? rec.data;
       const follow = !rec.data.metaRobots.includes('nofollow') && !rec.data.metaRobots.includes('none');
@@ -303,6 +328,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
       avgResponseMs: fetched.length ? Math.round(fetched.reduce((a, p) => a + p.timingMs, 0) / fetched.length) : 0,
     },
     truncated: queue.length > 0,
+    ...(map ? { siteUrl: map.from } : {}),
   };
   store?.writeJson('crawl-summary.json', {
     ...result,

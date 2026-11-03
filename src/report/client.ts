@@ -52,7 +52,7 @@ var PILLARS=[['index',['crawlability','indexability','canonicalization']],['tech
 function render(){var M=document.getElementById('main');M.textContent='';
 document.getElementById('kicker').textContent=T(R.mode==='repository'?'title.repo':'title.audit');
 document.getElementById('t').textContent=R.target;
-document.getElementById('meta').textContent=R.generatedAt.slice(0,16).replace('T',' ')+' UTC · Searvex '+R.tool.version+' · rules '+R.tool.rulesVersion+' · '+R.runId;
+document.getElementById('meta').textContent=(R.crawl&&R.crawl.siteUrl?T('hdr.auditedAs',{local:R.crawl.startUrl.replace(/^(https?:\/\/[^\/]+).*$/,'$1'),site:R.crawl.siteUrl})+' · ':'')+R.generatedAt.slice(0,16).replace('T',' ')+' UTC · Searvex '+R.tool.version+' · rules '+R.tool.rulesVersion+' · '+R.runId;
 var issues=R.findings.filter(isIssue),tabs=[['overview',T('nav.overview')],['priorities',T('nav.priorities')],['issues',T('nav.issues'),issues.length]];
 var hasGeo=R.mode==='website'&&R.geo&&R.geo.bots&&R.geo.bots.length;if(hasGeo)tabs.push(['geo',T('nav.geo')]);
 if(D.search)tabs.push(['search',T('nav.search')]);if(D.diff)tabs.push(['changes',T('nav.changes')]);tabs.push(['evidence',T('nav.evidence')]);

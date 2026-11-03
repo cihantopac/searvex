@@ -78,11 +78,12 @@ export function parseSitemapXml(xml: string, source: string): { urls: SitemapUrl
 
 export async function collectSitemaps(
   seeds: string[],
-  opts: FetchOptions & { maxSitemaps?: number; maxUrls?: number; limiter?: HostRateLimiter } = {},
+  opts: FetchOptions & { maxSitemaps?: number; maxUrls?: number; limiter?: HostRateLimiter; mapUrl?: (url: string) => string } = {},
 ): Promise<SitemapResult> {
   const maxSitemaps = opts.maxSitemaps ?? 50;
   const maxUrls = opts.maxUrls ?? 100000;
-  const queue = [...new Set(seeds)];
+  const map = opts.mapUrl ?? ((u: string) => u);
+  const queue = [...new Set(seeds.map(map))];
   const seen = new Set<string>();
   const result: SitemapResult = { sitemaps: [], urls: [], issues: [] };
   while (queue.length && seen.size < maxSitemaps && result.urls.length < maxUrls) {
@@ -104,8 +105,8 @@ export async function collectSitemaps(
     if (res.truncated) result.issues.push({ sitemap: sm, message: 'Sitemap exceeds 50 MB uncompressed limit (truncated)' });
     const parsed = parseSitemapXml(body, sm);
     result.issues.push(...parsed.issues);
-    for (const c of parsed.children) if (!seen.has(c)) queue.push(c);
-    result.urls.push(...parsed.urls.slice(0, maxUrls - result.urls.length));
+    for (const c of parsed.children.map(map)) if (!seen.has(c)) queue.push(c);
+    result.urls.push(...parsed.urls.slice(0, maxUrls - result.urls.length).map((u) => ({ ...u, loc: map(u.loc) })));
   }
   return result;
 }
