@@ -16,6 +16,13 @@ All notable changes to this project are documented here. The format follows
   site. Canonical, hreflang, sitemap and link URLs on the public origin are mapped to the crawled origin, so a
   public self-canonical no longer shows up as `canonical.cross-domain` / `canonical.noindex-conflict`, and the
   declared sitemap is read from the build. The report records `crawl.siteUrl` and says "Audited … as …".
+- Rule `robots.sitemap-unreachable` (low): a sitemap declared in robots.txt cannot be fetched (DNS, connection,
+  TLS or non-200). Each failing declared sitemap is reported, also when another one works; with `--site-url` the
+  evidence names where it was fetched.
+
+### Changed
+- `robots.no-sitemap` now only means no `Sitemap:` directive and no `/sitemap.xml`. A declared but failing sitemap
+  was reported as `robots.no-sitemap` before; `monitor` shows that change once as one resolved and one new finding.
 
 ### Changed
 - **Exit code for runtime errors is now `3`** (was `2`). `2` stays for usage errors. Scripts that checked

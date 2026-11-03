@@ -1,4 +1,4 @@
-import { normalizeUrl, sameSite } from '../core/url.js';
+import { mapOrigin, normalizeUrl, originMap, sameSite } from '../core/url.js';
 import type { FindingSink } from '../rules/engine.js';
 import { factsOf, isNoindex, isSelfCanonical, resolveRecord, robotsDirectives, type SiteContext } from './context.js';
 import { checkStructuredData } from './structured-data.js';
@@ -51,7 +51,18 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     }
     if (/^\s*crawl-delay\s*:/im.test(crawl.robots.raw)) sink.emit('robots.crawl-delay-ignored', { url: crawl.robots.url, observed: (/^\s*crawl-delay\s*:.*$/im.exec(crawl.robots.raw) ?? [''])[0].trim() });
   }
-  if (!crawl.sitemap.sitemaps.length) sink.emit('robots.no-sitemap', { url: crawl.robots.url, observed: crawl.robots.sitemaps.length ? `Declared sitemap(s) failed: ${crawl.sitemap.issues.map((i) => i.message).join('; ')}` : 'No Sitemap directive; /sitemap.xml not available' });
+  // A declared sitemap that cannot be fetched is not a missing sitemap. Declared URLs on the --site-url origin
+  // were fetched at the crawled origin.
+  const smMap = originMap(crawl.siteUrl, crawl.origin);
+  const smIssues = new Map(crawl.sitemap.issues.map((i) => [i.sitemap, i.message]));
+  for (const declared of new Set(crawl.robots.sitemaps)) {
+    const fetched = mapOrigin(declared, smMap);
+    const failed = smIssues.get(fetched);
+    if (failed !== undefined && !crawl.sitemap.sitemaps.includes(fetched)) {
+      sink.emit('robots.sitemap-unreachable', { url: declared, observed: `${failed}${fetched !== declared ? ` (fetched at ${fetched})` : ''}` });
+    }
+  }
+  if (!crawl.sitemap.sitemaps.length && !crawl.robots.sitemaps.length) sink.emit('robots.no-sitemap', { url: crawl.robots.url, observed: 'No Sitemap directive; /sitemap.xml not available' });
 
   // ---- start URL ----
   const start = ctx.byUrl.get(crawl.startUrl);

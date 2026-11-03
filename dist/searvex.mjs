@@ -36485,7 +36485,16 @@ function runTechnicalChecks(ctx, sink) {
     }
     if (/^\s*crawl-delay\s*:/im.test(crawl2.robots.raw)) sink.emit("robots.crawl-delay-ignored", { url: crawl2.robots.url, observed: (/^\s*crawl-delay\s*:.*$/im.exec(crawl2.robots.raw) ?? [""])[0].trim() });
   }
-  if (!crawl2.sitemap.sitemaps.length) sink.emit("robots.no-sitemap", { url: crawl2.robots.url, observed: crawl2.robots.sitemaps.length ? `Declared sitemap(s) failed: ${crawl2.sitemap.issues.map((i) => i.message).join("; ")}` : "No Sitemap directive; /sitemap.xml not available" });
+  const smMap = originMap(crawl2.siteUrl, crawl2.origin);
+  const smIssues = new Map(crawl2.sitemap.issues.map((i) => [i.sitemap, i.message]));
+  for (const declared of new Set(crawl2.robots.sitemaps)) {
+    const fetched = mapOrigin(declared, smMap);
+    const failed = smIssues.get(fetched);
+    if (failed !== void 0 && !crawl2.sitemap.sitemaps.includes(fetched)) {
+      sink.emit("robots.sitemap-unreachable", { url: declared, observed: `${failed}${fetched !== declared ? ` (fetched at ${fetched})` : ""}` });
+    }
+  }
+  if (!crawl2.sitemap.sitemaps.length && !crawl2.robots.sitemaps.length) sink.emit("robots.no-sitemap", { url: crawl2.robots.url, observed: "No Sitemap directive; /sitemap.xml not available" });
   const start = ctx.byUrl.get(crawl2.startUrl);
   if (start && !start.blockedByRobots && (start.error || start.status >= 400)) {
     sink.emit("http.start-url-error", { url: crawl2.startUrl, observed: start.error ?? `HTTP ${start.status}` });
@@ -37789,6 +37798,7 @@ var RULES_TR = {
   "robots.too-large": { title: "robots.txt 500 KiB\u2019\u0131 a\u015F\u0131yor", fix: "Dosyay\u0131 500 KiB alt\u0131na indirmek i\xE7in kurallar\u0131 birle\u015Ftirin (joker karakterler, dizin \xF6nekleri)." },
   "robots.disallow-all": { title: "robots.txt t\xFCm siteyi arama taray\u0131c\u0131lar\u0131na kapat\u0131yor", fix: 'Arama taray\u0131c\u0131lar\u0131 i\xE7in genel "Disallow: /" kural\u0131n\u0131 kald\u0131r\u0131n. Belirli sayfalar\u0131 dizin d\u0131\u015F\u0131nda tutmak i\xE7in (taranabilir sayfalarda) noindex kullan\u0131n.' },
   "robots.crawl-delay-ignored": { title: "crawl-delay Google veya Yandex taraf\u0131ndan dikkate al\u0131nmaz", fix: "crawl-delay\u2019i yaln\u0131zca Bing\u2019i (veya onu dikkate alan taray\u0131c\u0131lar\u0131) hedefliyorsan\u0131z tutun; Google/Yandex tarama h\u0131z\u0131n\u0131 webmaster ara\xE7lar\u0131ndan y\xF6netin." },
+  "robots.sitemap-unreachable": { title: "Belirtilen site haritas\u0131 al\u0131nam\u0131yor", fix: "Site haritas\u0131n\u0131 robots.txt\u2019de belirtilen URL\u2019de sunun (HTTP 200, ge\xE7erli XML) ya da Sitemap: sat\u0131r\u0131n\u0131 haritan\u0131n yay\u0131nland\u0131\u011F\u0131 URL ile d\xFCzeltin. robots.txt\u2019deki site haritas\u0131 URL\u2019leri mutlak olmal\u0131d\u0131r." },
   "robots.no-sitemap": { title: "Bulunabilir bir site haritas\u0131 yok", fix: 'Kanonik ve dizine eklenebilir URL\u2019lerden olu\u015Fan bir XML site haritas\u0131 yay\u0131nlay\u0131n ve robots.txt i\xE7inde "Sitemap: https://\u2026" ile belirtin.' },
   "robots.blocked-sitemap-url": { title: "Site haritas\u0131 robots.txt\u2019nin engelledi\u011Fi URL\u2019leri listeliyor", fix: "Engellenen URL\u2019leri site haritas\u0131ndan \xE7\u0131kar\u0131n veya dizine eklenmeleri gerekiyorsa engeli kald\u0131r\u0131n." },
   "http.server-error": { title: "Sayfalar 5xx sunucu hatas\u0131 d\xF6nd\xFCr\xFCyor", fix: "Sunucu taraf\u0131ndaki hatay\u0131 giderin; bak\u0131m i\xE7in k\u0131sa s\xFCreli Retry-After ile 503 d\xF6nd\xFCr\xFCn." },
@@ -39984,6 +39994,7 @@ var IMPLEMENTED_RULES = /* @__PURE__ */ new Set([
   "robots.disallow-all",
   "robots.crawl-delay-ignored",
   "robots.no-sitemap",
+  "robots.sitemap-unreachable",
   "robots.blocked-sitemap-url",
   "http.server-error",
   "http.fetch-error",

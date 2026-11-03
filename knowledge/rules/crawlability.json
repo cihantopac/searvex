@@ -182,6 +182,41 @@
       "autofix": true
     },
     {
+      "id": "robots.sitemap-unreachable",
+      "title": "A declared sitemap cannot be fetched",
+      "category": "crawlability",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": [
+        "all"
+      ],
+      "description": "robots.txt declares one or more sitemaps with a Sitemap: directive, but none of them could be fetched (DNS, connection or TLS error, or a non-200 response). Search engines read the declared location, so the sitemap does not help discovery until it is reachable there.",
+      "fix": "Serve the sitemap at the URL declared in robots.txt (HTTP 200, valid XML), or correct the Sitemap: line to the URL where it is published. Sitemap URLs in robots.txt must be absolute.",
+      "verify": "Fetch each Sitemap: URL from robots.txt and confirm HTTP 200 with a <urlset> or <sitemapindex>.",
+      "sources": [
+        {
+          "title": "Google: Build and submit a sitemap",
+          "url": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: How Google interprets robots.txt",
+          "url": "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "sitemaps.org protocol",
+          "url": "https://www.sitemaps.org/protocol.html",
+          "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active",
+      "exceptions": "With --site-url, a declared sitemap on the public origin is read from the crawled build instead; on a pre-launch site the public host may not exist yet."
+    },
+    {
       "id": "robots.blocked-sitemap-url",
       "title": "Sitemap lists URLs blocked by robots.txt",
       "category": "crawlability",
