@@ -13,7 +13,7 @@ searvex <command> [target] [options]
 | `2` | Usage error (unknown command or option, invalid value, a target blocked by the network policy without `--allow-private`) |
 | `3` | Runtime error (until 1.1.1 this was `2`) |
 | `4` | Target unreachable: the start URL failed at the network level (DNS, TCP, TLS). Reports are written with `crawl.status: "unreachable"`, no site findings and no score; `monitor` does not diff, and the run is never a baseline |
-| `5` | Interrupted; a partial report was written |
+| `5` | Reserved for interrupted runs with a partial report (SIGINT/SIGTERM and `--max-duration` handling is planned; not returned in 1.2.0) |
 
 ## Commands
 

@@ -1,6 +1,6 @@
 # Limitations & unsupported scenarios
 
-Searvex reports what it can observe and labels everything else. Known limits (v1.1.1):
+Searvex reports what it can observe and labels everything else. Known limits (v1.2.0):
 
 ## Data Searvex does not have
 
@@ -41,6 +41,23 @@ Searvex reports what it can observe and labels everything else. Known limits (v1
 - Faceted navigation is detected from parameter explosion and paginated canonicals; deeper crawl-budget
   analysis for very large catalogues is not implemented.
 - Business model and page types are heuristics (schema first, then URL patterns).
+- Image sizing (`img.dimensions-missing`) understands the inline `style`, simple class/id rules in the page's own
+  `<style>` and fixed-size utility classes; external stylesheets are not fetched, so some CSS-sized images can
+  still be reported (the rule is heuristic).
+- The Organization-or-Person suggestion uses a heuristic personal-site signal (a name-like homepage title, no
+  commercial pages); it does not know who owns the site.
+- No graceful interruption yet: a run stopped with SIGINT/SIGTERM leaves no report, and there is no
+  `--max-duration` (planned; exit code `5` is reserved for it). `--resume` continues from the last checkpoint.
+- `report.json` has no published schema or `schemaVersion` yet, and progress is plain text (planned).
+
+## Local and staging builds
+
+- `--site-url` maps only the exact public origin (scheme, host, port); `http://` and `www.` variants of it are
+  real differences and stay unmapped. Finding evidence shows the crawled origin, not the public URL.
+- `--pre-launch` evaluates noindex pages as if they were indexable and moves tagged findings out of the score.
+  Rules are tagged in the knowledge base (`environment`), not detected from the server, so on a production site
+  the profile would hide real HTTPS, compression and noindex problems: use it only for builds that are not live.
+- Host allow/deny lists, a port list and an upstream proxy cannot be set from the CLI yet (planned).
 
 ## Repository mode
 

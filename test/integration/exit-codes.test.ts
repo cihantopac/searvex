@@ -63,7 +63,7 @@ describe('exit codes', () => {
       const help = log.mock.calls.flat().join('\n');
       expect(help).toMatch(/3 runtime error/);
       expect(help).toMatch(/4 target unreachable/);
-      expect(help).toMatch(/5 interrupted/);
+      expect(help).toMatch(/5 reserved for interrupted runs/);
     } finally {
       log.mockRestore();
     }
