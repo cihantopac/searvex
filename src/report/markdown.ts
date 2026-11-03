@@ -16,6 +16,7 @@ export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = 
   const L: string[] = [];
   L.push(`# Searvex audit — ${md(r.target)}`, '');
   L.push(`Generated ${r.generatedAt} · Searvex ${r.tool.version} · rules ${r.tool.rulesVersion} · run \`${r.runId}\``, '');
+  if (r.crawl.status === 'unreachable') L.push(`> **Target unreachable:** ${md(r.crawl.error ?? 'network error')}. No page was fetched, so this report contains no findings about the site.`, '');
   L.push('## Summary', '');
   L.push(`| Metric | Value |`, `|---|---|`);
   L.push(`| Searvex health score¹ | **${scoreLabel(r.scores)}** |`);

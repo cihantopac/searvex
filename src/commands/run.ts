@@ -9,7 +9,7 @@ import { planFixes, type FixPlan } from '../optimize/fixes.js';
 import { auditRepository } from '../repo/audit.js';
 import { loadKnowledge } from '../rules/engine.js';
 import { md, renderMarkdown } from '../report/markdown.js';
-import { crawlOptionsFrom, failOnExit, log, num, UsageError, writeReports, type GlobalFlags } from '../cli.js';
+import { assertTargetAllowed, crawlOptionsFrom, EXIT, failOnExit, log, num, UsageError, writeReports, type GlobalFlags } from '../cli.js';
 import { diffReports, findBaseline, renderDiffMarkdown, type MonitorDiff } from './monitor.js';
 import { computeGaps, profile, renderResearchMarkdown, type ResearchReport } from './research.js';
 import { renderPlan } from './optimize.js';
@@ -49,7 +49,10 @@ export function renderRunSummary(s: RunSummary): string {
   L.push('| Step | Status | Note |', '|---|---|---|');
   for (const st of s.steps) L.push(`| ${st.step}. ${st.name} | ${st.status === 'done' ? '✅' : '⏭️ skipped'} | ${md(st.note)} |`);
   L.push('');
-  if (s.website) {
+  if (s.website?.report.crawl.status === 'unreachable') {
+    const r = s.website.report;
+    L.push('## 1. Website audit', '', `${md(r.target)} — **target unreachable** (${md(r.crawl.error ?? 'network error')}). No page was fetched, so there are no findings and no score; steps 2–4 were skipped.`, '');
+  } else if (s.website) {
     const r = s.website.report;
     L.push('## 1. Website audit', '', `${md(r.target)} — health score **${scoreLabel(r.scores)}**, ${r.crawl.crawled} pages${r.crawl.truncated ? ' (page limit reached)' : ''}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, '');
     for (const f of top(r)) L.push(`- [${f.severity}] ${md(f.title)} — ${f.count} × (\`${f.ruleId}\`)`);
@@ -112,33 +115,42 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
   if (url) {
     log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)…`);
     const { report, store } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v['check-external'], cruxApiKey: cruxKey()?.key });
+    assertTargetAllowed(report);
     const files = writeReports(store, report, kb, ['json', 'md', 'html']);
     summary.website = { report, runId: store.runId, files };
     summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!getCredential('gsc') || !!process.env['SEARVEX_GSC_TOKEN'] };
-    step(1, 'Website audit', 'done', `${report.crawl.crawled} pages, score ${report.scores.overall}/100`);
-    step(2, 'GEO / AI search', 'done', `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
-    const base = findBaseline(workspace, report.target, store.runId);
-    if (base) {
-      summary.diff = diffReports(base.report, report, base.id);
-      step(3, 'Change since previous run', 'done', `${summary.diff.newFindings.length} new, ${summary.diff.resolved.length} resolved${summary.diff.regression ? ' — regression' : ''}`);
-    } else step(3, 'Change since previous run', 'skipped', 'first run for this site: saved as baseline');
+    if (report.crawl.status === 'unreachable') {
+      const why = `target unreachable (${report.crawl.error ?? 'network error'})`;
+      step(1, 'Website audit', 'skipped', `${why}; reports written without findings`);
+      step(2, 'GEO / AI search', 'skipped', why);
+      step(3, 'Change since previous run', 'skipped', why);
+      step(4, 'Competitor research', 'skipped', why);
+    } else {
+      step(1, 'Website audit', 'done', `${report.crawl.crawled} pages, score ${report.scores.overall}/100`);
+      step(2, 'GEO / AI search', 'done', `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
+      const base = findBaseline(workspace, report.target, store.runId);
+      if (base) {
+        summary.diff = diffReports(base.report, report, base.id);
+        step(3, 'Change since previous run', 'done', `${summary.diff.newFindings.length} new, ${summary.diff.resolved.length} resolved${summary.diff.regression ? ' — regression' : ''}`);
+      } else step(3, 'Change since previous run', 'skipped', 'first run for this site: saved as baseline');
 
-    if (competitors.length) {
-      const perSite = num(v['max-pages'], 100, 1, 100000);
-      const compReports: AuditReport[] = [];
-      for (const c of competitors) {
-        log(v, `4. Crawling competitor ${c} (max ${perSite} pages)…`);
-        compReports.push(await analyzeCrawl(await crawl(c, { ...opts, maxPages: perSite }), kb, { ...opts, probes: false }));
-      }
-      const allTerms = new Set(report.content.pageTerms.flatMap((p) => p.terms).concat(report.content.topTerms.map((t) => t.term)));
-      summary.research = {
-        target: profile(report),
-        competitors: compReports.map(profile),
-        gaps: computeGaps(profile(report), compReports.map(profile), allTerms),
-        limitations: ['Topic gaps compare on-page term statistics of crawled pages; they show coverage differences, not search demand.'],
-      };
-      step(4, 'Competitor research', 'done', `${competitors.length} competitor(s), ${summary.research.gaps.topics.length} topic gaps`);
-    } else step(4, 'Competitor research', 'skipped', 'no --competitor given');
+      if (competitors.length) {
+        const perSite = num(v['max-pages'], 100, 1, 100000);
+        const compReports: AuditReport[] = [];
+        for (const c of competitors) {
+          log(v, `4. Crawling competitor ${c} (max ${perSite} pages)…`);
+          compReports.push(await analyzeCrawl(await crawl(c, { ...opts, maxPages: perSite }), kb, { ...opts, probes: false }));
+        }
+        const allTerms = new Set(report.content.pageTerms.flatMap((p) => p.terms).concat(report.content.topTerms.map((t) => t.term)));
+        summary.research = {
+          target: profile(report),
+          competitors: compReports.map(profile),
+          gaps: computeGaps(profile(report), compReports.map(profile), allTerms),
+          limitations: ['Topic gaps compare on-page term statistics of crawled pages; they show coverage differences, not search demand.'],
+        };
+        step(4, 'Competitor research', 'done', `${competitors.length} competitor(s), ${summary.research.gaps.topics.length} topic gaps`);
+      } else step(4, 'Competitor research', 'skipped', 'no --competitor given');
+    }
   } else {
     step(1, 'Website audit', 'skipped', 'no URL given');
     step(2, 'GEO / AI search', 'skipped', 'no URL given');
@@ -200,6 +212,7 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
     if (html) openFile(html);
   }
 
+  if (summary.website?.report.crawl.status === 'unreachable') return EXIT.unreachable;
   const codes = [summary.website && failOnExit(summary.website.report, v['fail-on']), summary.repository && failOnExit(summary.repository.report, v['fail-on'])];
-  return codes.some((c) => c === 1) ? 1 : 0;
+  return codes.some((c) => c === EXIT.failOn) ? EXIT.failOn : EXIT.ok;
 }

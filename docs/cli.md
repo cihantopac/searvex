@@ -4,8 +4,16 @@
 searvex <command> [target] [options]
 ```
 
-Exit codes: `0` success · `1` `--fail-on` threshold met, optimize verification failed, rollback conflict, or a
-`gsc|bing|crux status` integration that is not configured or not working · `2` usage or runtime error.
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Completed |
+| `1` | `--fail-on` threshold met, optimize verification failed, rollback conflict, or a `gsc\|bing\|crux status` integration that is not configured or not working |
+| `2` | Usage error (unknown command or option, invalid value, a target blocked by the network policy without `--allow-private`) |
+| `3` | Runtime error (until 1.1.1 this was `2`) |
+| `4` | Target unreachable: the start URL failed at the network level (DNS, TCP, TLS). Reports are written with `crawl.status: "unreachable"`, no site findings and no score; `monitor` does not diff, and the run is never a baseline |
+| `5` | Interrupted; a partial report was written |
 
 ## Commands
 

@@ -50,8 +50,11 @@ describe.runIf(hasBundle)('bundled CLI (bin/searvex → dist/searvex.mjs)', () =
   it('refuses private targets unless --allow-private', async () => {
     const r = await cli(['audit', server.url + '/', '--out', ws, '-q', '--max-pages', '3']);
     const report = JSON.parse(fs.readFileSync(path.join(ws, '.searvex', 'runs', fs.readdirSync(path.join(ws, '.searvex', 'runs'))[0]!, 'report.json'), 'utf8'));
-    expect(r.code).toBe(0);
-    expect(report.crawl.robots.state).toBe('unreachable');
+    // A target blocked by the network policy is a usage error with a hint (1.2.0), and nothing is fetched.
+    expect(r.code).toBe(2);
+    expect(r.stderr).toMatch(/blocked by the network policy.*--allow-private/);
+    expect(report.crawl.status).toBe('unreachable');
+    expect(fs.existsSync(path.join(ws, '.searvex', 'runs', report.runId, 'report.html'))).toBe(false);
     expect(server.hits.size).toBe(0);
   });
 

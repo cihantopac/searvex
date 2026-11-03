@@ -34930,6 +34930,27 @@ async function crawl(startUrl, partial = {}, store2) {
   const rootHost = new URL(start).hostname.replace(/^www\./, "");
   const fetchOpts = { policy: opts.policy, timeoutMs: opts.timeoutMs, userAgent: opts.userAgent };
   const robots = await fetchRobots(origin, fetchOpts);
+  if (robots.state === "unreachable" && robots.error) {
+    const probe = await safeFetch(start, { ...fetchOpts, maxBytes: 64 * 1024 });
+    if (probe.error) {
+      const unreachable = { error: probe.error, blocked: probe.error.startsWith("Blocked: ") };
+      const result2 = {
+        runId: store2?.runId ?? "ephemeral",
+        startUrl: start,
+        origin,
+        robots,
+        sitemap: { sitemaps: [], urls: [], issues: [] },
+        pages: [],
+        startedAt,
+        finishedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        stats: { crawled: 0, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: Date.now() - t0, avgResponseMs: 0 },
+        truncated: false,
+        unreachable
+      };
+      store2?.writeJson("meta.json", { runId: store2.runId, kind: "crawl", startUrl: start, startedAt, unreachable });
+      return result2;
+    }
+  }
   const limiter = new HostRateLimiter(opts.delayMs);
   const delay = robots.crawlDelay(opts.robotsAgent);
   if (delay && delay > 0) limiter.setDelay(new URL(origin).host, Math.min(delay, 30) * 1e3);
@@ -36906,6 +36927,19 @@ async function probeHostVariants(startUrl, opts, sink) {
   const res = await safeFetch(alt.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
   if (!res.error && res.status === 200) sink.emit("canonical.www-duplicate", { url: alt.toString(), observed: `${alt.host} and ${u.host} both return 200` });
 }
+function crawlSummary(result) {
+  return {
+    ...result.stats,
+    status: result.unreachable ? "unreachable" : "complete",
+    ...result.unreachable ? { error: result.unreachable.error } : {},
+    truncated: result.truncated,
+    startUrl: result.startUrl,
+    robots: { url: result.robots.url, state: result.robots.state, status: result.robots.status, sitemaps: result.robots.sitemaps },
+    sitemaps: result.sitemap.sitemaps,
+    sitemapUrls: result.sitemap.urls.length,
+    sitemapIssues: result.sitemap.issues.slice(0, 100)
+  };
+}
 async function auditWebsite(url, options = {}) {
   const kb = options.kb ?? loadKnowledge();
   const store2 = new RunStore(options.workspace ?? process.cwd(), options.resumeRunId ?? RunStore.newRunId("audit"));
@@ -36918,7 +36952,30 @@ async function analyzeCrawl(result, kb, opts = {}) {
   const sink = new FindingSink(kb);
   const ctx = buildContext(result);
   const netOpts = { policy: opts.policy ?? DEFAULT_POLICY, timeoutMs: opts.timeoutMs ?? 15e3, userAgent: opts.userAgent ?? DEFAULT_USER_AGENT };
+  const unreachable = result.unreachable;
   let llms;
+  if (unreachable) {
+    const none = new FindingSink(kb);
+    const geo2 = { ...runGeoChecks(ctx, none), bots: [] };
+    const content2 = runContentChecks(ctx, none);
+    return {
+      tool: { name: "searvex", version: SEARVEX_VERSION, rulesVersion: kb.version },
+      mode: "website",
+      target: result.startUrl,
+      runId: result.runId,
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      crawl: crawlSummary(result),
+      inventory: buildInventory(ctx),
+      findings: [],
+      geo: geo2,
+      content: content2,
+      scores: { ...computeScores([], 1), notApplicable: `target unreachable (${unreachable.error})` },
+      measurement: { verified: 0, heuristic: 0, unmeasurable: 0 },
+      limitations: [`The start URL could not be reached (${unreachable.error}); no page was fetched, so this report contains no findings about the site. Check the URL, DNS, the network or the server, then run the audit again.`],
+      affectedUrls: 0,
+      rendered: false
+    };
+  }
   if (opts.probes !== false) {
     await probeHostVariants(result.startUrl, netOpts, sink);
     await probeLocaleAdaptive(result.startUrl, netOpts, sink);
@@ -36955,15 +37012,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
     target: result.startUrl,
     runId: result.runId,
     generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    crawl: {
-      ...result.stats,
-      truncated: result.truncated,
-      startUrl: result.startUrl,
-      robots: { url: result.robots.url, state: result.robots.state, status: result.robots.status, sitemaps: result.robots.sitemaps },
-      sitemaps: result.sitemap.sitemaps,
-      sitemapUrls: result.sitemap.urls.length,
-      sitemapIssues: result.sitemap.issues.slice(0, 100)
-    },
+    crawl: crawlSummary(result),
     inventory,
     findings,
     geo,
@@ -38609,6 +38658,7 @@ function renderMarkdown(r, opts = {}) {
   const L = [];
   L.push(`# Searvex audit \u2014 ${md(r.target)}`, "");
   L.push(`Generated ${r.generatedAt} \xB7 Searvex ${r.tool.version} \xB7 rules ${r.tool.rulesVersion} \xB7 run \`${r.runId}\``, "");
+  if (r.crawl.status === "unreachable") L.push(`> **Target unreachable:** ${md(r.crawl.error ?? "network error")}. No page was fetched, so this report contains no findings about the site.`, "");
   L.push("## Summary", "");
   L.push(`| Metric | Value |`, `|---|---|`);
   L.push(`| Searvex health score\xB9 | **${scoreLabel(r.scores)}** |`);
@@ -39555,7 +39605,7 @@ function findBaseline(workspace, target, exclude) {
   const runs = RunStore.list(workspace).filter((id) => id !== exclude).reverse();
   for (const id of runs) {
     const r = new RunStore(workspace, id).readJson("report.json");
-    if (r && r.target === target && r.mode === "website") return { id, report: r };
+    if (r && r.target === target && r.mode === "website" && r.crawl.status !== "unreachable") return { id, report: r };
   }
   return null;
 }
@@ -39600,7 +39650,15 @@ async function commandMonitor(flags) {
   const apiProperty = site ? propertyOrUsage(() => parseProperty(site)) : void 0;
   log(v, `Re-auditing ${target}\u2026`);
   const { report, store: store2 } = await auditWebsite(target, { workspace, kb, crawl: crawlOptionsFrom(v) });
+  assertTargetAllowed(report);
   writeReports(store2, report, kb, ["json", "md", "html"]);
+  if (report.crawl.status === "unreachable") {
+    const note = `Target unreachable (${report.crawl.error ?? "network error"}): no comparison with the previous run.`;
+    store2.writeJson("monitor.json", { diff: null, notes: [note] });
+    if (v["json"]) process.stdout.write(JSON.stringify({ diff: null, notes: [note] }, null, 2) + "\n");
+    else console.error(`searvex: ${note}`);
+    return EXIT.unreachable;
+  }
   const explicit = v["baseline"];
   const base = explicit ? { id: explicit, report: new RunStore(workspace, explicit).readJson("report.json") } : findBaseline(workspace, report.target, store2.runId);
   if (explicit && !base?.report) throw new UsageError(`Baseline run ${explicit} has no report.json`);
@@ -42029,7 +42087,10 @@ function renderRunSummary(s) {
   L.push("| Step | Status | Note |", "|---|---|---|");
   for (const st of s.steps) L.push(`| ${st.step}. ${st.name} | ${st.status === "done" ? "\u2705" : "\u23ED\uFE0F skipped"} | ${md(st.note)} |`);
   L.push("");
-  if (s.website) {
+  if (s.website?.report.crawl.status === "unreachable") {
+    const r = s.website.report;
+    L.push("## 1. Website audit", "", `${md(r.target)} \u2014 **target unreachable** (${md(r.crawl.error ?? "network error")}). No page was fetched, so there are no findings and no score; steps 2\u20134 were skipped.`, "");
+  } else if (s.website) {
     const r = s.website.report;
     L.push("## 1. Website audit", "", `${md(r.target)} \u2014 health score **${scoreLabel(r.scores)}**, ${r.crawl.crawled} pages${r.crawl.truncated ? " (page limit reached)" : ""}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, "");
     for (const f of top(r)) L.push(`- [${f.severity}] ${md(f.title)} \u2014 ${f.count} \xD7 (\`${f.ruleId}\`)`);
@@ -42088,32 +42149,41 @@ async function commandRun(flags) {
   if (url) {
     log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)\u2026`);
     const { report, store: store3 } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v["check-external"], cruxApiKey: cruxKey()?.key });
+    assertTargetAllowed(report);
     const files = writeReports(store3, report, kb, ["json", "md", "html"]);
     summary.website = { report, runId: store3.runId, files };
     summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!getCredential("gsc") || !!process.env["SEARVEX_GSC_TOKEN"] };
-    step(1, "Website audit", "done", `${report.crawl.crawled} pages, score ${report.scores.overall}/100`);
-    step(2, "GEO / AI search", "done", `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
-    const base = findBaseline(workspace, report.target, store3.runId);
-    if (base) {
-      summary.diff = diffReports(base.report, report, base.id);
-      step(3, "Change since previous run", "done", `${summary.diff.newFindings.length} new, ${summary.diff.resolved.length} resolved${summary.diff.regression ? " \u2014 regression" : ""}`);
-    } else step(3, "Change since previous run", "skipped", "first run for this site: saved as baseline");
-    if (competitors.length) {
-      const perSite = num(v["max-pages"], 100, 1, 1e5);
-      const compReports = [];
-      for (const c of competitors) {
-        log(v, `4. Crawling competitor ${c} (max ${perSite} pages)\u2026`);
-        compReports.push(await analyzeCrawl(await crawl(c, { ...opts, maxPages: perSite }), kb, { ...opts, probes: false }));
-      }
-      const allTerms = new Set(report.content.pageTerms.flatMap((p) => p.terms).concat(report.content.topTerms.map((t) => t.term)));
-      summary.research = {
-        target: profile(report),
-        competitors: compReports.map(profile),
-        gaps: computeGaps(profile(report), compReports.map(profile), allTerms),
-        limitations: ["Topic gaps compare on-page term statistics of crawled pages; they show coverage differences, not search demand."]
-      };
-      step(4, "Competitor research", "done", `${competitors.length} competitor(s), ${summary.research.gaps.topics.length} topic gaps`);
-    } else step(4, "Competitor research", "skipped", "no --competitor given");
+    if (report.crawl.status === "unreachable") {
+      const why = `target unreachable (${report.crawl.error ?? "network error"})`;
+      step(1, "Website audit", "skipped", `${why}; reports written without findings`);
+      step(2, "GEO / AI search", "skipped", why);
+      step(3, "Change since previous run", "skipped", why);
+      step(4, "Competitor research", "skipped", why);
+    } else {
+      step(1, "Website audit", "done", `${report.crawl.crawled} pages, score ${report.scores.overall}/100`);
+      step(2, "GEO / AI search", "done", `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
+      const base = findBaseline(workspace, report.target, store3.runId);
+      if (base) {
+        summary.diff = diffReports(base.report, report, base.id);
+        step(3, "Change since previous run", "done", `${summary.diff.newFindings.length} new, ${summary.diff.resolved.length} resolved${summary.diff.regression ? " \u2014 regression" : ""}`);
+      } else step(3, "Change since previous run", "skipped", "first run for this site: saved as baseline");
+      if (competitors.length) {
+        const perSite = num(v["max-pages"], 100, 1, 1e5);
+        const compReports = [];
+        for (const c of competitors) {
+          log(v, `4. Crawling competitor ${c} (max ${perSite} pages)\u2026`);
+          compReports.push(await analyzeCrawl(await crawl(c, { ...opts, maxPages: perSite }), kb, { ...opts, probes: false }));
+        }
+        const allTerms = new Set(report.content.pageTerms.flatMap((p) => p.terms).concat(report.content.topTerms.map((t) => t.term)));
+        summary.research = {
+          target: profile(report),
+          competitors: compReports.map(profile),
+          gaps: computeGaps(profile(report), compReports.map(profile), allTerms),
+          limitations: ["Topic gaps compare on-page term statistics of crawled pages; they show coverage differences, not search demand."]
+        };
+        step(4, "Competitor research", "done", `${competitors.length} competitor(s), ${summary.research.gaps.topics.length} topic gaps`);
+      } else step(4, "Competitor research", "skipped", "no --competitor given");
+    }
   } else {
     step(1, "Website audit", "skipped", "no URL given");
     step(2, "GEO / AI search", "skipped", "no URL given");
@@ -42171,8 +42241,9 @@ Fix plan (dry run, nothing changed): ${summary.plan.fixes.length} automatic fix(
     const html3 = summary.website?.files.find((f) => f.endsWith(".html")) ?? summary.repositoryHtml;
     if (html3) openFile(html3);
   }
+  if (summary.website?.report.crawl.status === "unreachable") return EXIT.unreachable;
   const codes = [summary.website && failOnExit(summary.website.report, v["fail-on"]), summary.repository && failOnExit(summary.repository.report, v["fail-on"])];
-  return codes.some((c) => c === 1) ? 1 : 0;
+  return codes.some((c) => c === EXIT.failOn) ? EXIT.failOn : EXIT.ok;
 }
 
 // src/commands/ecosystem.ts
@@ -42475,6 +42546,11 @@ Environment (all optional, read-only integrations)
   SEARVEX_CREDENTIAL_STORE  file (default, 0600 file in the config dir) or keychain (macOS Keychain,
                         Secret Service via secret-tool, Windows DPAPI)
 
+Exit codes
+  0 completed \xB7 1 --fail-on threshold reached (also optimize verification failed, rollback conflict, or
+  an integration status that is not working) \xB7 2 usage error \xB7 3 runtime error \xB7 4 target unreachable
+  (reports written, no site findings) \xB7 5 interrupted (partial report written)
+
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
 `;
 var SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"];
@@ -42537,6 +42613,24 @@ function num(v, def, min = 0, max = Number.MAX_SAFE_INTEGER) {
 }
 var UsageError = class extends Error {
 };
+var EXIT = {
+  ok: 0,
+  /** --fail-on threshold reached (also: optimize verification failed, rollback conflict, integration not working). */
+  failOn: 1,
+  usage: 2,
+  runtime: 3,
+  /** The start URL failed at the network level; reports were written but contain no site findings. */
+  unreachable: 4,
+  /** Interrupted; a partial report was written. */
+  interrupted: 5
+};
+function assertTargetAllowed(report) {
+  const err = report.crawl.status === "unreachable" ? report.crawl.error : void 0;
+  if (err?.startsWith("Blocked: ")) throw new UsageError(`${report.target} is blocked by the network policy (${err.slice(9)}). Use --allow-private for a local or private development server.`);
+}
+function auditExit(report, failOn) {
+  return report.crawl.status === "unreachable" ? EXIT.unreachable : failOnExit(report, failOn);
+}
 function crawlOptionsFrom(v) {
   return {
     maxPages: num(v["max-pages"], 500, 1, 1e6),
@@ -42565,10 +42659,10 @@ function writeReports(store2, report, kb, formats) {
   return out;
 }
 function failOnExit(report, failOn) {
-  if (!failOn) return 0;
+  if (!failOn) return EXIT.ok;
   const idx = SEVERITY_ORDER.indexOf(String(failOn));
   if (idx < 0 || failOn === "info") throw new UsageError("--fail-on must be critical|high|medium|low");
-  return report.findings.some((f) => SEVERITY_ORDER.indexOf(f.severity) <= idx && f.confidence !== "unmeasurable") ? 1 : 0;
+  return report.findings.some((f) => SEVERITY_ORDER.indexOf(f.severity) <= idx && f.confidence !== "unmeasurable") ? EXIT.failOn : EXIT.ok;
 }
 function printSummary(report, files, v, autoRules = []) {
   if (v["json"]) {
@@ -42588,6 +42682,11 @@ function summaryText(report, files, autoRules = []) {
   const unit = report.mode === "website" ? "pages" : "locations";
   const L = [`
 Searvex \u2014 ${report.target}`];
+  if (report.crawl.status === "unreachable") {
+    L.push(`Target unreachable: ${report.crawl.error ?? "network error"}. No page was fetched, so there are no findings and no score.`);
+    L.push("Check the URL, DNS, the network or the server, then run the audit again.");
+    return withReportFiles(L, files);
+  }
   L.push(`Health score ${scoreLabel(report.scores)} (Searvex metric, not a search engine score) \xB7 ${report.crawl.crawled} ${report.mode === "website" ? "pages crawled" : "routes/pages"} \xB7 ${issues.length} issue types, ${report.affectedUrls ?? 0} affected ${unit}`);
   if (top2.length) {
     L.push("Top priorities:");
@@ -42603,6 +42702,9 @@ Searvex \u2014 ${report.target}`];
     if (!report.rendered) limits.push("JavaScript not rendered");
   }
   if (limits.length) L.push(`Limits: ${limits.join(" \xB7 ")}`);
+  return withReportFiles(L, files);
+}
+function withReportFiles(L, files) {
   const html3 = files.find((f) => f.endsWith(".html"));
   if (html3) {
     const ws = path22.resolve(html3, "..", "..", "..", "..");
@@ -42651,9 +42753,10 @@ async function commandAudit(flags) {
         `JavaScript rendering: Chromium ${st.sandbox ? "with" : "WITHOUT"} its OS sandbox${st.sandbox ? "" : " (not available on this system)"}, all traffic through Searvex's policy proxy; ${st.blockedRequests + st.proxy.blocked} browser request(s) blocked by the network policy${st.proxy.blockedTargets.length ? ` (${st.proxy.blockedTargets.slice(0, 5).join(", ")})` : ""}${st.proxy.budgetExceeded ? `; ${st.proxy.budgetExceeded} connection(s) cut at the per-page transfer limit` : ""}${st.deadlineExceeded ? `; ${st.deadlineExceeded} page(s) stopped at the hard time limit (scripts kept the browser busy)` : ""}.`
       );
     }
+    assertTargetAllowed(report);
     const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
     printSummary(report, files, v);
-    return failOnExit(report, v["fail-on"]);
+    return auditExit(report, v["fail-on"]);
   } finally {
     await render3?.close();
   }
@@ -42665,10 +42768,18 @@ async function commandGeo(flags) {
   const kb = loadKnowledge();
   const opts = crawlOptionsFrom({ ...v, "max-pages": v["max-pages"] ?? "50" });
   const { report, store: store2 } = await auditWebsite(target, { workspace: path22.resolve(String(v["out"] ?? process.cwd())), kb, crawl: opts });
+  assertTargetAllowed(report);
   const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
+  const unreachable = report.crawl.status === "unreachable";
   if (v["json"]) {
-    process.stdout.write(JSON.stringify({ target: report.target, geo: report.geo, findings: report.findings.filter((f) => f.category === "geo" || f.ruleId.startsWith("sd.")) }, null, 2) + "\n");
-    return 0;
+    process.stdout.write(JSON.stringify({ target: report.target, ...unreachable ? { crawl: { status: report.crawl.status, error: report.crawl.error } } : {}, geo: report.geo, findings: report.findings.filter((f) => f.category === "geo" || f.ruleId.startsWith("sd.")) }, null, 2) + "\n");
+    return unreachable ? EXIT.unreachable : EXIT.ok;
+  }
+  if (unreachable) {
+    console.error(`searvex: target unreachable: ${report.crawl.error ?? "network error"} \u2014 no GEO checks were run.
+Reports:
+${files.map((f) => "  " + f).join("\n")}`);
+    return EXIT.unreachable;
   }
   console.log(`
 GEO / AI search readiness \u2014 ${report.target}
@@ -42784,11 +42895,11 @@ async function main(argv = process.argv.slice(2)) {
   } catch (e) {
     console.error(`searvex: ${e.message}
 Run "searvex --help" for usage.`);
-    return 2;
+    return EXIT.usage;
   }
   if (flags.values["version"]) return console.log(SEARVEX_VERSION), 0;
   const cmd = flags.positionals[0];
-  if (!cmd || flags.values["help"]) return console.log(HELP), cmd ? 0 : flags.values["help"] ? 0 : 2;
+  if (!cmd || flags.values["help"]) return console.log(HELP), cmd || flags.values["help"] ? EXIT.ok : EXIT.usage;
   try {
     switch (cmd) {
       case "run":
@@ -42831,10 +42942,10 @@ Run "searvex --help" for usage.`);
   } catch (e) {
     if (e instanceof UsageError) {
       console.error(`searvex: ${e.message}`);
-      return 2;
+      return EXIT.usage;
     }
     console.error(`searvex: ${e.stack ?? e}`);
-    return 2;
+    return EXIT.runtime;
   }
 }
 var invoked = process.argv[1] ? path22.resolve(process.argv[1]) : "";
@@ -42844,8 +42955,11 @@ if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") ||
   });
 }
 export {
+  EXIT,
   SEVERITY_ORDER,
   UsageError,
+  assertTargetAllowed,
+  auditExit,
   crawlOptionsFrom,
   failOnExit,
   log,

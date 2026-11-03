@@ -77,6 +77,11 @@ export interface CrawlResult {
   stats: { crawled: number; queuedRemaining: number; blocked: number; errors: number; durationMs: number; avgResponseMs: number };
   /** True when the crawl stopped because maxPages was reached with URLs still queued. */
   truncated: boolean;
+  /**
+   * Set when the start URL failed at the network level (DNS, TCP, TLS, or blocked by the network policy)
+   * and nothing was crawled: the run says nothing about the site.
+   */
+  unreachable?: { error: string; blocked: boolean };
 }
 
 interface QueueItem {
@@ -125,6 +130,29 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
   const fetchOpts = { policy: opts.policy, timeoutMs: opts.timeoutMs, userAgent: opts.userAgent };
 
   const robots = await fetchRobots(origin, fetchOpts);
+  // A network-level robots.txt failure makes every URL disallowed (RFC 9309), so the start URL would never
+  // be fetched. Probe it directly: if it fails too, the target itself is unreachable, not the site broken.
+  if (robots.state === 'unreachable' && robots.error) {
+    const probe = await safeFetch(start, { ...fetchOpts, maxBytes: 64 * 1024 });
+    if (probe.error) {
+      const unreachable = { error: probe.error, blocked: probe.error.startsWith('Blocked: ') };
+      const result: CrawlResult = {
+        runId: store?.runId ?? 'ephemeral',
+        startUrl: start,
+        origin,
+        robots,
+        sitemap: { sitemaps: [], urls: [], issues: [] },
+        pages: [],
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        stats: { crawled: 0, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: Date.now() - t0, avgResponseMs: 0 },
+        truncated: false,
+        unreachable,
+      };
+      store?.writeJson('meta.json', { runId: store.runId, kind: 'crawl', startUrl: start, startedAt, unreachable });
+      return result;
+    }
+  }
   const limiter = new HostRateLimiter(opts.delayMs);
   const delay = robots.crawlDelay(opts.robotsAgent);
   if (delay && delay > 0) limiter.setDelay(new URL(origin).host, Math.min(delay, 30) * 1000);
