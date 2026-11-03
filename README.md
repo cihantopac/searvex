@@ -85,6 +85,7 @@ Then run `/searvex <url> [path]`. Requires Node.js ≥ 20.10. Full reference: [d
 ## What it checks
 
 - **Technical SEO** — crawlability, indexability, canonicals, redirects, hreflang, metadata, structured data, links, performance and security signals.
+- **Local and staging builds** — audit a build as its public site (`--site-url`) with a pre-launch profile (`--pre-launch`): test-server findings and deliberate pre-launch states go to a launch checklist instead of the score.
 - **GEO / AI search** — AI crawler access by purpose, snippet controls, entity consistency, content clarity.
 - **Repositories** — findings with `file:line` in framework source, plus 12 rule types fixed automatically (dry run → approval → apply → verify → rollback).
 - **Search data, optional and read-only** — Search Console (API or CSV export) and Chrome UX Report. Without them, clicks and Core Web Vitals are shown as *not measured*, never estimated.
@@ -92,7 +93,7 @@ Then run `/searvex <url> [path]`. Requires Node.js ≥ 20.10. Full reference: [d
 
 ## Evidence, not claims
 
-Status: **v1.1.1** ([release notes](docs/release-notes-1.1.1.md), [changelog](CHANGELOG.md)).
+Status: **v1.2.0** ([release notes](docs/release-notes-1.2.0.md), [changelog](CHANGELOG.md)).
 
 - **91 rules**, each tied to an official source: 72 verified, 17 heuristic, 2 reported as unmeasurable. `searvex rules show <id>`
 - **Tested** with unit, integration, browser and end-to-end runs; CI on Linux, macOS and Windows with Node 20, 22 and 24 ([quality report](docs/quality.md)).

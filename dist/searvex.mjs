@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Searvex 1.1.1 — Apache-2.0 — https://github.com/cihantopac/searvex
+// Searvex 1.2.0 — Apache-2.0 — https://github.com/cihantopac/searvex
 import { createRequire as __searvexCreateRequire } from 'node:module';
 const require = __searvexCreateRequire(import.meta.url);
 var __create = Object.create;
@@ -930,7 +930,7 @@ var init_fetcher = __esm({
   "src/net/fetcher.ts"() {
     "use strict";
     init_ssrf();
-    SEARVEX_VERSION = "1.1.1";
+    SEARVEX_VERSION = "1.2.0";
     DEFAULT_USER_AGENT = `Mozilla/5.0 (compatible; SearvexBot/${SEARVEX_VERSION}; +https://github.com/cihantopac/searvex)`;
     DEFAULTS = {
       timeoutMs: 15e3,
@@ -42797,7 +42797,7 @@ Environment (all optional, read-only integrations)
 Exit codes
   0 completed \xB7 1 --fail-on threshold reached (also optimize verification failed, rollback conflict, or
   an integration status that is not working) \xB7 2 usage error \xB7 3 runtime error \xB7 4 target unreachable
-  (reports written, no site findings) \xB7 5 interrupted (partial report written)
+  (reports written, no site findings) \xB7 5 reserved for interrupted runs (not used yet)
 
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
 `;
@@ -42872,7 +42872,7 @@ var EXIT = {
   runtime: 3,
   /** The start URL failed at the network level; reports were written but contain no site findings. */
   unreachable: 4,
-  /** Interrupted; a partial report was written. */
+  /** Reserved: interrupted run with a partial report (signal / --max-duration handling is planned, not used yet). */
   interrupted: 5
 };
 function assertTargetAllowed(report) {

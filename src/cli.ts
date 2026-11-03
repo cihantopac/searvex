@@ -115,7 +115,7 @@ Environment (all optional, read-only integrations)
 Exit codes
   0 completed · 1 --fail-on threshold reached (also optimize verification failed, rollback conflict, or
   an integration status that is not working) · 2 usage error · 3 runtime error · 4 target unreachable
-  (reports written, no site findings) · 5 interrupted (partial report written)
+  (reports written, no site findings) · 5 reserved for interrupted runs (not used yet)
 
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
 `;
@@ -203,7 +203,7 @@ export const EXIT = {
   runtime: 3,
   /** The start URL failed at the network level; reports were written but contain no site findings. */
   unreachable: 4,
-  /** Interrupted; a partial report was written. */
+  /** Reserved: interrupted run with a partial report (signal / --max-duration handling is planned, not used yet). */
   interrupted: 5,
 } as const;
 

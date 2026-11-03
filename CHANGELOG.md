@@ -5,13 +5,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-03
+
+Trustworthy in pre-launch and embedded use. Release notes: [docs/release-notes-1.2.0.md](docs/release-notes-1.2.0.md).
+
 ### Added
 - Exit code `4`: the start URL failed at the network level (DNS, TCP, TLS). `audit`, `geo`, `monitor` and `run`
   write their reports with `crawl.status: "unreachable"`, no site findings and `scores.notApplicable`, instead of
   reporting `robots.unreachable` with a score. An unreachable run is never used as a monitor baseline.
 - A target blocked by the network policy (for example a local server without `--allow-private`) is now a usage
   error (exit `2`) with a hint.
-- `--help` and `docs/cli.md` list the exit codes.
+- `--help` and `docs/cli.md` list the exit codes; `5` is reserved for interrupted runs (planned, not returned yet).
 - `--site-url <url>` in URL mode (`audit`, `geo`, `monitor`, `run`): audit a local or staging build as its public
   site. Canonical, hreflang, sitemap and link URLs on the public origin are mapped to the crawled origin, so a
   public self-canonical no longer shows up as `canonical.cross-domain` / `canonical.noindex-conflict`, and the
