@@ -25,6 +25,8 @@ export interface AuditReport {
     status?: 'complete' | 'unreachable';
     /** Network error for an unreachable target. */
     error?: string;
+    /** Public origin the crawled origin stands for (--site-url); URLs on it were mapped to the crawled origin. */
+    siteUrl?: string;
     truncated: boolean; startUrl: string; robots: { url: string; state: string; status: number; sitemaps: string[] }; sitemaps: string[]; sitemapUrls: number; sitemapIssues: Array<{ sitemap: string; message: string }> };
   inventory: SiteInventory;
   findings: Array<Finding & { count: number }>;
@@ -133,6 +135,7 @@ function crawlSummary(result: CrawlResult): AuditReport['crawl'] {
     ...result.stats,
     status: result.unreachable ? 'unreachable' : 'complete',
     ...(result.unreachable ? { error: result.unreachable.error } : {}),
+    ...(result.siteUrl ? { siteUrl: result.siteUrl } : {}),
     truncated: result.truncated,
     startUrl: result.startUrl,
     robots: { url: result.robots.url, state: result.robots.state, status: result.robots.status, sitemaps: result.robots.sitemaps },
@@ -220,6 +223,7 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
     'Response times are single-location lab samples, not Core Web Vitals field data.',
   ];
   if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
+  if (result.siteUrl) limitations.push(`Audited ${result.origin} as ${result.siteUrl} (--site-url): canonical, hreflang, sitemap and link URLs on ${result.siteUrl} were checked against the crawled pages at ${result.origin}; the public site itself was not fetched.`);
   if (!opts.checkExternal) limitations.push('Outbound links were not checked (use --check-external).');
   if (!result.pages.some((p) => p.rendered)) limitations.push('JavaScript was not executed (run with --render to compare rendered DOM); client-rendered content is only detected heuristically.');
   return {

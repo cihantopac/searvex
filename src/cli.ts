@@ -76,7 +76,10 @@ Common options
   --out <dir>           Workspace for .searvex/ (default: current directory)
   --fail-on <severity>  Exit 1 if findings at/above severity exist (critical|high|medium|low)
   --allow-private       Allow localhost/private network targets (local dev servers only)
-  --site-url <url>      Public URL of a repository's site (canonical/sitemap fixes)
+  --site-url <url>      Public URL of the site. URL mode: audit a local/staging build as that site
+                        (its canonical, hreflang, sitemap and link URLs map to the crawled origin).
+                        Repository mode: base URL for canonical/sitemap fixes. monitor: also accepts
+                        a Search Console property (sc-domain:…)
   --lang <tag>          Document language for fixes when the framework has no locale idiom
   --apply / --yes       optimize: write changes (after confirmation) / skip the prompt
   --only <ruleId>       optimize: restrict fixes to a rule (repeatable)
@@ -208,7 +211,15 @@ export function crawlOptionsFrom(v: GlobalFlags['values']) {
     include: (v['include'] as string[] | undefined)?.map((r) => new RegExp(r)),
     exclude: (v['exclude'] as string[] | undefined)?.map((r) => new RegExp(r)),
     policy: { ...DEFAULT_POLICY, allowPrivate: !!v['allow-private'] },
+    // monitor also accepts a Search Console property (sc-domain:…) here; only URLs map origins.
+    siteUrl: typeof v['site-url'] === 'string' && /^https?:\/\//i.test(v['site-url']) ? v['site-url'] : undefined,
   };
+}
+
+/** audit/geo: --site-url must be an absolute http(s) URL. */
+export function assertSiteUrl(v: GlobalFlags['values']): void {
+  const s = v['site-url'];
+  if (s !== undefined && (typeof s !== 'string' || !/^https?:\/\/[^/]/i.test(s))) throw new UsageError('--site-url must be an absolute http(s) URL (the public URL of the audited site)');
 }
 
 export function log(v: GlobalFlags['values'], ...args: unknown[]): void {
@@ -261,6 +272,7 @@ export function summaryText(report: AuditReport, files: string[], autoRules: str
     L.push('Check the URL, DNS, the network or the server, then run the audit again.');
     return withReportFiles(L, files);
   }
+  if (report.crawl.siteUrl) L.push(`Audited ${new URL(report.crawl.startUrl).origin} as ${report.crawl.siteUrl} (--site-url)`);
   L.push(`Health score ${scoreLabel(report.scores)} (Searvex metric, not a search engine score) · ${report.crawl.crawled} ${report.mode === 'website' ? 'pages crawled' : 'routes/pages'} · ${issues.length} issue types, ${report.affectedUrls ?? 0} affected ${unit}`);
   if (top.length) {
     L.push('Top priorities:');
@@ -298,6 +310,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
     if (fs.existsSync(target)) return commandRepo(flags);
     throw new UsageError(`Not a URL and not an existing path: ${target}`);
   }
+  assertSiteUrl(v);
   const kb = loadKnowledge();
   const workspace = path.resolve(String(v['out'] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
@@ -341,6 +354,7 @@ async function commandGeo(flags: GlobalFlags): Promise<number> {
   const { values: v } = flags;
   const target = flags.positionals[1];
   if (!target || !/^https?:\/\//i.test(target)) throw new UsageError('geo requires a URL');
+  assertSiteUrl(v);
   const kb = loadKnowledge();
   const opts = crawlOptionsFrom({ ...v, 'max-pages': v['max-pages'] ?? '50' });
   const { report, store } = await auditWebsite(target, { workspace: path.resolve(String(v['out'] ?? process.cwd())), kb, crawl: opts });

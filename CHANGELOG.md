@@ -12,6 +12,10 @@ All notable changes to this project are documented here. The format follows
 - A target blocked by the network policy (for example a local server without `--allow-private`) is now a usage
   error (exit `2`) with a hint.
 - `--help` and `docs/cli.md` list the exit codes.
+- `--site-url <url>` in URL mode (`audit`, `geo`, `monitor`, `run`): audit a local or staging build as its public
+  site. Canonical, hreflang, sitemap and link URLs on the public origin are mapped to the crawled origin, so a
+  public self-canonical no longer shows up as `canonical.cross-domain` / `canonical.noindex-conflict`, and the
+  declared sitemap is read from the build. The report records `crawl.siteUrl` and says "Audited … as …".
 
 ### Changed
 - **Exit code for runtime errors is now `3`** (was `2`). `2` stays for usage errors. Scripts that checked

@@ -55,3 +55,41 @@ export function pathDepth(url: string): number {
 export function looksLikeAsset(url: string): boolean {
   return /\.(png|jpe?g|gif|webp|avif|svg|ico|css|js|mjs|map|woff2?|ttf|otf|eot|mp4|webm|mp3|wav|pdf|zip|gz|tar|rar|7z|exe|dmg|apk|json|xml|txt|csv)(\?|$)/i.test(url);
 }
+
+/**
+ * `--site-url` origin mapping: a local or staging build declares its public URLs (canonical, hreflang,
+ * sitemap locations, absolute links), but is crawled at another origin. Mapping rewrites the public origin
+ * to the crawled one, so those URLs are checked against the crawled pages instead of an unrelated site.
+ */
+export interface OriginMap {
+  /** Public origin, from --site-url. */
+  from: string;
+  /** Crawled origin. */
+  to: string;
+}
+
+/** Origin map from --site-url to the crawled URL; undefined when either is invalid or the origins are equal. */
+export function originMap(siteUrl: string | undefined, crawledUrl: string): OriginMap | undefined {
+  if (!siteUrl) return undefined;
+  try {
+    const from = new URL(siteUrl);
+    const to = new URL(crawledUrl).origin;
+    if ((from.protocol !== 'http:' && from.protocol !== 'https:') || from.origin === to) return undefined;
+    return { from: from.origin, to };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Rewrite a URL on the public origin to the crawled origin; other URLs are returned unchanged. */
+export function mapOrigin(url: string, map: OriginMap | undefined): string {
+  if (!map || !url) return url;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return url;
+  }
+  if (u.origin !== map.from) return url;
+  return map.to + u.pathname + u.search + u.hash;
+}

@@ -92,7 +92,8 @@ export async function commandResearch(flags: GlobalFlags): Promise<number> {
   const workspace = path.resolve(String(v['out'] ?? process.cwd()));
   const store = new RunStore(workspace, RunStore.newRunId('research'));
   const perSite = num(v['max-pages'], 150, 1, 100000);
-  const base = { ...crawlOptionsFrom(v), maxPages: perSite };
+  // Several sites: a single --site-url origin mapping would apply to all of them.
+  const base = { ...crawlOptionsFrom(v), siteUrl: undefined, maxPages: perSite };
 
   const analyse = async (url: string) => {
     log(v, `Crawling ${url} (max ${perSite} pages)…`);
