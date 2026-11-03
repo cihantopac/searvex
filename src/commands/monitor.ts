@@ -8,7 +8,7 @@ import { querySearchConsole, type GscRow } from '../integrations/gsc.js';
 import { gscAccessToken } from '../integrations/google-oauth.js';
 import { GscImportError, importGscFiles, parseGscTable, type GscExport } from '../integrations/gsc-csv.js';
 import { assertAuditInProperty, matchAuditToProperty, parseProperty, propertyForExport, PropertyError, type SearchProperty } from '../integrations/property.js';
-import { crawlOptionsFrom, log, UsageError, writeReports, type GlobalFlags } from '../cli.js';
+import { assertTargetAllowed, crawlOptionsFrom, EXIT, log, UsageError, writeReports, type GlobalFlags } from '../cli.js';
 
 export interface FindingDelta {
   ruleId: string;
@@ -94,7 +94,8 @@ export function findBaseline(workspace: string, target: string, exclude: string)
   const runs = RunStore.list(workspace).filter((id) => id !== exclude).reverse();
   for (const id of runs) {
     const r = new RunStore(workspace, id).readJson<AuditReport>('report.json');
-    if (r && r.target === target && r.mode === 'website') return { id, report: r };
+    // An unreachable run audited nothing and is never a baseline.
+    if (r && r.target === target && r.mode === 'website' && r.crawl.status !== 'unreachable') return { id, report: r };
   }
   return null;
 }
@@ -146,7 +147,16 @@ export async function commandMonitor(flags: GlobalFlags): Promise<number> {
 
   log(v, `Re-auditing ${target}…`);
   const { report, store } = await auditWebsite(target, { workspace, kb, crawl: crawlOptionsFrom(v) });
+  assertTargetAllowed(report);
   writeReports(store, report, kb, ['json', 'md', 'html']);
+  if (report.crawl.status === 'unreachable') {
+    // Nothing was audited: diffing against the baseline would report every finding as resolved.
+    const note = `Target unreachable (${report.crawl.error ?? 'network error'}): no comparison with the previous run.`;
+    store.writeJson('monitor.json', { diff: null, notes: [note] });
+    if (v['json']) process.stdout.write(JSON.stringify({ diff: null, notes: [note] }, null, 2) + '\n');
+    else console.error(`searvex: ${note}`);
+    return EXIT.unreachable;
+  }
   const explicit = v['baseline'] as string | undefined;
   const base = explicit
     ? { id: explicit, report: new RunStore(workspace, explicit).readJson<AuditReport>('report.json') }

@@ -5,6 +5,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Exit code `4`: the start URL failed at the network level (DNS, TCP, TLS). `audit`, `geo`, `monitor` and `run`
+  write their reports with `crawl.status: "unreachable"`, no site findings and `scores.notApplicable`, instead of
+  reporting `robots.unreachable` with a score. An unreachable run is never used as a monitor baseline.
+- A target blocked by the network policy (for example a local server without `--allow-private`) is now a usage
+  error (exit `2`) with a hint.
+- `--help` and `docs/cli.md` list the exit codes.
+
+### Changed
+- **Exit code for runtime errors is now `3`** (was `2`). `2` stays for usage errors. Scripts that checked
+  `== 2` for crashes must check `3`.
+
 ## [1.1.1] - 2026-11-01
 
 Visual polish; the analysis engine, rules, evidence and CLI are unchanged. Release notes:

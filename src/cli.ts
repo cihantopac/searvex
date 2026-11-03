@@ -94,6 +94,11 @@ Environment (all optional, read-only integrations)
   SEARVEX_CREDENTIAL_STORE  file (default, 0600 file in the config dir) or keychain (macOS Keychain,
                         Secret Service via secret-tool, Windows DPAPI)
 
+Exit codes
+  0 completed · 1 --fail-on threshold reached (also optimize verification failed, rollback conflict, or
+  an integration status that is not working) · 2 usage error · 3 runtime error · 4 target unreachable
+  (reports written, no site findings) · 5 interrupted (partial report written)
+
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
 `;
 
@@ -165,6 +170,33 @@ export function num(v: unknown, def: number, min = 0, max = Number.MAX_SAFE_INTE
 
 export class UsageError extends Error {}
 
+/** Process exit codes (documented in docs/cli.md and --help). */
+export const EXIT = {
+  ok: 0,
+  /** --fail-on threshold reached (also: optimize verification failed, rollback conflict, integration not working). */
+  failOn: 1,
+  usage: 2,
+  runtime: 3,
+  /** The start URL failed at the network level; reports were written but contain no site findings. */
+  unreachable: 4,
+  /** Interrupted; a partial report was written. */
+  interrupted: 5,
+} as const;
+
+/**
+ * A target blocked by the network policy is a usage problem (the user can allow it), not an unreachable
+ * site: fail before writing reports.
+ */
+export function assertTargetAllowed(report: AuditReport): void {
+  const err = report.crawl.status === 'unreachable' ? report.crawl.error : undefined;
+  if (err?.startsWith('Blocked: ')) throw new UsageError(`${report.target} is blocked by the network policy (${err.slice(9)}). Use --allow-private for a local or private development server.`);
+}
+
+/** Exit code for a finished website audit: unreachable target, else the --fail-on result. */
+export function auditExit(report: AuditReport, failOn: unknown): number {
+  return report.crawl.status === 'unreachable' ? EXIT.unreachable : failOnExit(report, failOn);
+}
+
 export function crawlOptionsFrom(v: GlobalFlags['values']) {
   return {
     maxPages: num(v['max-pages'], 500, 1, 1_000_000),
@@ -196,10 +228,10 @@ export function writeReports(store: RunStore, report: AuditReport, kb: Knowledge
 }
 
 export function failOnExit(report: AuditReport, failOn: unknown): number {
-  if (!failOn) return 0;
+  if (!failOn) return EXIT.ok;
   const idx = SEVERITY_ORDER.indexOf(String(failOn) as Severity);
   if (idx < 0 || failOn === 'info') throw new UsageError('--fail-on must be critical|high|medium|low');
-  return report.findings.some((f) => SEVERITY_ORDER.indexOf(f.severity) <= idx && f.confidence !== 'unmeasurable') ? 1 : 0;
+  return report.findings.some((f) => SEVERITY_ORDER.indexOf(f.severity) <= idx && f.confidence !== 'unmeasurable') ? EXIT.failOn : EXIT.ok;
 }
 
 /**
@@ -224,6 +256,11 @@ export function summaryText(report: AuditReport, files: string[], autoRules: str
   const auto = issues.filter((f) => remediationOf(f.ruleId, plan) === 'auto');
   const unit = report.mode === 'website' ? 'pages' : 'locations';
   const L = [`\nSearvex — ${report.target}`];
+  if (report.crawl.status === 'unreachable') {
+    L.push(`Target unreachable: ${report.crawl.error ?? 'network error'}. No page was fetched, so there are no findings and no score.`);
+    L.push('Check the URL, DNS, the network or the server, then run the audit again.');
+    return withReportFiles(L, files);
+  }
   L.push(`Health score ${scoreLabel(report.scores)} (Searvex metric, not a search engine score) · ${report.crawl.crawled} ${report.mode === 'website' ? 'pages crawled' : 'routes/pages'} · ${issues.length} issue types, ${report.affectedUrls ?? 0} affected ${unit}`);
   if (top.length) {
     L.push('Top priorities:');
@@ -239,6 +276,10 @@ export function summaryText(report: AuditReport, files: string[], autoRules: str
     if (!report.rendered) limits.push('JavaScript not rendered');
   }
   if (limits.length) L.push(`Limits: ${limits.join(' · ')}`);
+  return withReportFiles(L, files);
+}
+
+function withReportFiles(L: string[], files: string[]): string {
   const html = files.find((f) => f.endsWith('.html'));
   if (html) {
     const ws = path.resolve(html, '..', '..', '..', '..');
@@ -287,9 +328,10 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
         `JavaScript rendering: Chromium ${st.sandbox ? 'with' : 'WITHOUT'} its OS sandbox${st.sandbox ? '' : ' (not available on this system)'}, all traffic through Searvex's policy proxy; ${st.blockedRequests + st.proxy.blocked} browser request(s) blocked by the network policy${st.proxy.blockedTargets.length ? ` (${st.proxy.blockedTargets.slice(0, 5).join(', ')})` : ''}${st.proxy.budgetExceeded ? `; ${st.proxy.budgetExceeded} connection(s) cut at the per-page transfer limit` : ''}${st.deadlineExceeded ? `; ${st.deadlineExceeded} page(s) stopped at the hard time limit (scripts kept the browser busy)` : ''}.`,
       );
     }
+    assertTargetAllowed(report);
     const files = writeReports(store, report, kb, String(v['format'] ?? 'md,html,json').split(','));
     printSummary(report, files, v);
-    return failOnExit(report, v['fail-on']);
+    return auditExit(report, v['fail-on']);
   } finally {
     await render?.close();
   }
@@ -302,10 +344,16 @@ async function commandGeo(flags: GlobalFlags): Promise<number> {
   const kb = loadKnowledge();
   const opts = crawlOptionsFrom({ ...v, 'max-pages': v['max-pages'] ?? '50' });
   const { report, store } = await auditWebsite(target, { workspace: path.resolve(String(v['out'] ?? process.cwd())), kb, crawl: opts });
+  assertTargetAllowed(report);
   const files = writeReports(store, report, kb, String(v['format'] ?? 'md,html,json').split(','));
+  const unreachable = report.crawl.status === 'unreachable';
   if (v['json']) {
-    process.stdout.write(JSON.stringify({ target: report.target, geo: report.geo, findings: report.findings.filter((f) => f.category === 'geo' || f.ruleId.startsWith('sd.')) }, null, 2) + '\n');
-    return 0;
+    process.stdout.write(JSON.stringify({ target: report.target, ...(unreachable ? { crawl: { status: report.crawl.status, error: report.crawl.error } } : {}), geo: report.geo, findings: report.findings.filter((f) => f.category === 'geo' || f.ruleId.startsWith('sd.')) }, null, 2) + '\n');
+    return unreachable ? EXIT.unreachable : EXIT.ok;
+  }
+  if (unreachable) {
+    console.error(`searvex: target unreachable: ${report.crawl.error ?? 'network error'} — no GEO checks were run.\nReports:\n${files.map((f) => '  ' + f).join('\n')}`);
+    return EXIT.unreachable;
   }
   console.log(`\nGEO / AI search readiness — ${report.target}\n`);
   console.log('Crawler access (homepage):');
@@ -411,11 +459,11 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     flags = parse(argv);
   } catch (e) {
     console.error(`searvex: ${(e as Error).message}\nRun "searvex --help" for usage.`);
-    return 2;
+    return EXIT.usage;
   }
   if (flags.values['version']) return (console.log(SEARVEX_VERSION), 0);
   const cmd = flags.positionals[0];
-  if (!cmd || flags.values['help']) return (console.log(HELP), cmd ? 0 : flags.values['help'] ? 0 : 2);
+  if (!cmd || flags.values['help']) return (console.log(HELP), cmd || flags.values['help'] ? EXIT.ok : EXIT.usage);
   try {
     switch (cmd) {
       case 'run':
@@ -458,10 +506,10 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   } catch (e) {
     if (e instanceof UsageError) {
       console.error(`searvex: ${e.message}`);
-      return 2;
+      return EXIT.usage;
     }
     console.error(`searvex: ${(e as Error).stack ?? e}`);
-    return 2;
+    return EXIT.runtime;
   }
 }
 

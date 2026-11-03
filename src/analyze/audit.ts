@@ -20,7 +20,12 @@ export interface AuditReport {
   target: string;
   runId: string;
   generatedAt: string;
-  crawl: CrawlResult['stats'] & { truncated: boolean; startUrl: string; robots: { url: string; state: string; status: number; sitemaps: string[] }; sitemaps: string[]; sitemapUrls: number; sitemapIssues: Array<{ sitemap: string; message: string }> };
+  crawl: CrawlResult['stats'] & {
+    /** Website mode: `unreachable` when the start URL failed at the network level and nothing was audited. */
+    status?: 'complete' | 'unreachable';
+    /** Network error for an unreachable target. */
+    error?: string;
+    truncated: boolean; startUrl: string; robots: { url: string; state: string; status: number; sitemaps: string[] }; sitemaps: string[]; sitemapUrls: number; sitemapIssues: Array<{ sitemap: string; message: string }> };
   inventory: SiteInventory;
   findings: Array<Finding & { count: number }>;
   geo: GeoReport;
@@ -123,6 +128,20 @@ async function probeHostVariants(startUrl: string, opts: Pick<CrawlOptions, 'pol
   if (!res.error && res.status === 200) sink.emit('canonical.www-duplicate', { url: alt.toString(), observed: `${alt.host} and ${u.host} both return 200` });
 }
 
+function crawlSummary(result: CrawlResult): AuditReport['crawl'] {
+  return {
+    ...result.stats,
+    status: result.unreachable ? 'unreachable' : 'complete',
+    ...(result.unreachable ? { error: result.unreachable.error } : {}),
+    truncated: result.truncated,
+    startUrl: result.startUrl,
+    robots: { url: result.robots.url, state: result.robots.state, status: result.robots.status, sitemaps: result.robots.sitemaps },
+    sitemaps: result.sitemap.sitemaps,
+    sitemapUrls: result.sitemap.urls.length,
+    sitemapIssues: result.sitemap.issues.slice(0, 100),
+  };
+}
+
 export interface AuditOptions {
   crawl?: Partial<CrawlOptions>;
   workspace?: string;
@@ -146,7 +165,33 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
   const sink = new FindingSink(kb);
   const ctx = buildContext(result);
   const netOpts = { policy: opts.policy ?? DEFAULT_POLICY, timeoutMs: opts.timeoutMs ?? 15000, userAgent: opts.userAgent ?? DEFAULT_USER_AGENT };
+  const unreachable = result.unreachable;
   let llms: LlmsTxtStatus | undefined;
+  if (unreachable) {
+    // Nothing was fetched, so no check can say anything about the site. Run them on a throwaway sink
+    // only to build the (empty) report sections.
+    const none = new FindingSink(kb);
+    // robots.txt was never read, so no crawler access can be stated.
+    const geo = { ...runGeoChecks(ctx, none), bots: [] };
+    const content = runContentChecks(ctx, none);
+    return {
+      tool: { name: 'searvex', version: SEARVEX_VERSION, rulesVersion: kb.version },
+      mode: 'website',
+      target: result.startUrl,
+      runId: result.runId,
+      generatedAt: new Date().toISOString(),
+      crawl: crawlSummary(result),
+      inventory: buildInventory(ctx),
+      findings: [],
+      geo,
+      content,
+      scores: { ...computeScores([], 1), notApplicable: `target unreachable (${unreachable.error})` },
+      measurement: { verified: 0, heuristic: 0, unmeasurable: 0 },
+      limitations: [`The start URL could not be reached (${unreachable.error}); no page was fetched, so this report contains no findings about the site. Check the URL, DNS, the network or the server, then run the audit again.`],
+      affectedUrls: 0,
+      rendered: false,
+    };
+  }
   if (opts.probes !== false) {
     await probeHostVariants(result.startUrl, netOpts, sink);
     await probeLocaleAdaptive(result.startUrl, netOpts, sink);
@@ -183,15 +228,7 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
     target: result.startUrl,
     runId: result.runId,
     generatedAt: new Date().toISOString(),
-    crawl: {
-      ...result.stats,
-      truncated: result.truncated,
-      startUrl: result.startUrl,
-      robots: { url: result.robots.url, state: result.robots.state, status: result.robots.status, sitemaps: result.robots.sitemaps },
-      sitemaps: result.sitemap.sitemaps,
-      sitemapUrls: result.sitemap.urls.length,
-      sitemapIssues: result.sitemap.issues.slice(0, 100),
-    },
+    crawl: crawlSummary(result),
     inventory,
     findings,
     geo,
