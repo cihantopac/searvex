@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { auditWebsite, countsTowardScore, scoreLabel, type AuditReport } from './analyze/audit.js';
+import { auditWebsite, countsTowardScore, indexableSummary, scoreLabel, type AuditReport } from './analyze/audit.js';
 import type { Severity } from './core/types.js';
 import { RunStore } from './crawl/store.js';
 import { SEARVEX_VERSION } from './net/fetcher.js';
@@ -68,6 +68,7 @@ Commands
 Common options
   --max-pages <n>       Page limit (default 500)          --depth <n>        Max click depth (default 10)
   --concurrency <n>     Parallel requests (default 4)     --delay <ms>       Per-host delay (default 250)
+  --timeout <ms>        Per-request timeout (default 15000, 1000–120000)
   --render              Execute JavaScript with Playwright (optional dependency) and compare DOMs
   --include <regex>     Only crawl matching URLs          --exclude <regex>  Skip matching URLs
   --check-external      Check outbound links (HEAD, robots.txt-aware, max 200)
@@ -90,7 +91,18 @@ Common options
   --open                Open the HTML report in the default browser when done
   --json                Print the JSON report to stdout
   -q, --quiet           Less output
-  -h, --help            Show help
+  -h, --help            Show help                         -v, --version      Print the version
+
+Command options
+  --baseline <runId>    monitor: compare with this run instead of the previous run of the same site
+  --import <file>       monitor / gsc import: Search Console Performance export (.zip or .csv, repeatable)
+  --property <P>        Search Console property of an export or connect choice (sc-domain:example.com,
+                        https://example.com/)
+  --days <n>            gsc|bing report: period in days (default 28)
+  --max-rows <n>        gsc report: row limit of the API query (default 25000)
+  --category <c>        rules list: only rules of this category
+  --strict              rules validate: treat warnings as errors
+  --force               gsc auth: authorise again even when a valid authorization is stored
 
 Environment (all optional, read-only integrations)
   SEARVEX_CRUX_API_KEY  Chrome UX Report API key (instead of "searvex crux auth")
@@ -115,58 +127,63 @@ export interface GlobalFlags {
   positionals: string[];
 }
 
+export const HELP_TEXT = HELP;
+
 function parse(argv: string[]): GlobalFlags {
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
     strict: true,
-    options: {
-      'max-pages': { type: 'string' },
-      depth: { type: 'string' },
-      concurrency: { type: 'string' },
-      delay: { type: 'string' },
-      timeout: { type: 'string' },
-      render: { type: 'boolean' },
-      include: { type: 'string', multiple: true },
-      exclude: { type: 'string', multiple: true },
-      'no-sitemap': { type: 'boolean' },
-      resume: { type: 'string' },
-      format: { type: 'string' },
-      out: { type: 'string' },
-      'fail-on': { type: 'string' },
-      'allow-private': { type: 'boolean' },
-      'pre-launch': { type: 'boolean' },
-      json: { type: 'boolean' },
-      quiet: { type: 'boolean', short: 'q' },
-      help: { type: 'boolean', short: 'h' },
-      version: { type: 'boolean', short: 'v' },
-      apply: { type: 'boolean' },
-      yes: { type: 'boolean', short: 'y' },
-      only: { type: 'string', multiple: true },
-      'site-url': { type: 'string' },
-      lang: { type: 'string' },
-      'check-external': { type: 'boolean' },
-      reuse: { type: 'boolean' },
-      update: { type: 'boolean' },
-      client: { type: 'string' },
-      days: { type: 'string' },
-      audit: { type: 'string' },
-      'max-rows': { type: 'string' },
-      competitor: { type: 'string', multiple: true },
-      category: { type: 'string' },
-      strict: { type: 'boolean' },
-      baseline: { type: 'string' },
-      import: { type: 'string', multiple: true },
-      force: { type: 'boolean' },
-      property: { type: 'string' },
-      choice: { type: 'string' },
-      'no-browser': { type: 'boolean' },
-      open: { type: 'boolean' },
-      note: { type: 'string' },
-    },
+    options: CLI_OPTIONS,
   });
   return { values, positionals };
 }
+
+/** Every option of the CLI; test/unit/help.test.ts checks that each appears in --help. */
+export const CLI_OPTIONS = {
+  'max-pages': { type: 'string' },
+  depth: { type: 'string' },
+  concurrency: { type: 'string' },
+  delay: { type: 'string' },
+  timeout: { type: 'string' },
+  render: { type: 'boolean' },
+  include: { type: 'string', multiple: true },
+  exclude: { type: 'string', multiple: true },
+  'no-sitemap': { type: 'boolean' },
+  resume: { type: 'string' },
+  format: { type: 'string' },
+  out: { type: 'string' },
+  'fail-on': { type: 'string' },
+  'allow-private': { type: 'boolean' },
+  'pre-launch': { type: 'boolean' },
+  json: { type: 'boolean' },
+  quiet: { type: 'boolean', short: 'q' },
+  help: { type: 'boolean', short: 'h' },
+  version: { type: 'boolean', short: 'v' },
+  apply: { type: 'boolean' },
+  yes: { type: 'boolean', short: 'y' },
+  only: { type: 'string', multiple: true },
+  'site-url': { type: 'string' },
+  lang: { type: 'string' },
+  'check-external': { type: 'boolean' },
+  reuse: { type: 'boolean' },
+  update: { type: 'boolean' },
+  client: { type: 'string' },
+  days: { type: 'string' },
+  audit: { type: 'string' },
+  'max-rows': { type: 'string' },
+  competitor: { type: 'string', multiple: true },
+  category: { type: 'string' },
+  strict: { type: 'boolean' },
+  baseline: { type: 'string' },
+  import: { type: 'string', multiple: true },
+  force: { type: 'boolean' },
+  property: { type: 'string' },
+  choice: { type: 'string' },
+  'no-browser': { type: 'boolean' },
+  open: { type: 'boolean' },
+  note: { type: 'string' },
+} as const;
 
 export function num(v: unknown, def: number, min = 0, max = Number.MAX_SAFE_INTEGER): number {
   if (v === undefined) return def;
@@ -295,7 +312,7 @@ export function summaryText(report: AuditReport, files: string[], autoRules: str
     return withReportFiles(L, files);
   }
   if (report.crawl.siteUrl) L.push(`Audited ${new URL(report.crawl.startUrl).origin} as ${report.crawl.siteUrl} (--site-url)`);
-  L.push(`Health score ${scoreLabel(report.scores)} (Searvex metric, not a search engine score) · ${report.crawl.crawled} ${report.mode === 'website' ? 'pages crawled' : 'routes/pages'} · ${issues.length} issue types, ${report.affectedUrls ?? 0} affected ${unit}`);
+  L.push(`Health score ${scoreLabel(report.scores)} (Searvex metric, not a search engine score) · ${report.crawl.crawled} ${report.mode === 'website' ? 'pages crawled' : `routes/pages, ${indexableSummary(report)}`} · ${issues.length} issue types, ${report.affectedUrls ?? 0} affected ${unit}`);
   if (top.length) {
     L.push('Top priorities:');
     top.forEach((f, i) => L.push(`  ${i + 1}. [${f.severity}] ${f.title} — ${f.count} ${f.count === 1 ? unit.replace(/s$/, '') : unit}${f.confidence === 'heuristic' ? ' (heuristic)' : ''}${remediationOf(f.ruleId, plan) === 'auto' ? ' · automatic fix' : ''}`));

@@ -19,7 +19,6 @@ All notable changes to this project are documented here. The format follows
 - Rule `robots.sitemap-unreachable` (low): a sitemap declared in robots.txt cannot be fetched (DNS, connection,
   TLS or non-200). Each failing declared sitemap is reported, also when another one works; with `--site-url` the
   evidence names where it was fetched.
-
 - `--pre-launch` profile for local and staging builds. Noindex pages are evaluated as they will be once live, and
   their noindex is listed in a **Launch checklist**. Findings of rules tagged `environment: server | launch` (HTTPS
   and compression on the test server; noindex, disallow-all, an unreachable public sitemap) get
@@ -28,12 +27,22 @@ All notable changes to this project are documented here. The format follows
   Environment-dependent note (EN/TR). On a local or private target the CLI suggests the flag.
 
 ### Changed
-- `robots.no-sitemap` now only means no `Sitemap:` directive and no `/sitemap.xml`. A declared but failing sitemap
-  was reported as `robots.no-sitemap` before; `monitor` shows that change once as one resolved and one new finding.
-
-### Changed
 - **Exit code for runtime errors is now `3`** (was `2`). `2` stays for usage errors. Scripts that checked
   `== 2` for crashes must check `3`.
+- `robots.no-sitemap` now only means no `Sitemap:` directive and no `/sitemap.xml`. A declared but failing sitemap
+  was reported as `robots.no-sitemap` before; `monitor` shows that change once as one resolved and one new finding.
+- `geo.organization-missing` suggests Organization (company or brand) **or** ProfilePage with a Person mainEntity
+  (personal site). A heuristic personal-site signal (a name-like homepage title, no product, pricing or shop
+  pages) makes Person the primary suggestion and says so. New source: Google ProfilePage structured data.
+- `img.dimensions-missing` no longer reports images sized in CSS: fixed width and height (or `aspect-ratio`) in the
+  inline `style`, in a simple class or id rule of the page's own `<style>`, or fixed-size utility classes
+  (`size-10`, `w-10 h-10`, `w-[40px] h-[40px]`). External stylesheets are still not fetched.
+- Repository mode (Next.js App Router): a route inherits `robots` noindex from its layouts unless the page sets
+  its own `robots`, so `canonical.missing` and `description.missing` no longer fire on routes that are noindex
+  through a layout. The summary and Markdown report say "0 indexable: all noindex" when that is the reason.
+  Pages router: a noindex in `_app` applies to every page.
+- `--help` lists every option, including `--timeout <ms>` (default 15000, 1000–120000) and the command options;
+  a test keeps it complete.
 
 ## [1.1.1] - 2026-11-01
 

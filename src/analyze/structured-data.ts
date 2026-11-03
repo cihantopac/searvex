@@ -84,10 +84,44 @@ export function validateNode(n: Node): SdIssue | null {
   return null;
 }
 
-export function checkStructuredData(url: string, f: PageData, sink: FindingSink, isHomepage: boolean): void {
+/** Paths that indicate a business site (products, plans, a shop). */
+const COMMERCIAL_PATH = /\/(pricing|prices|plans|products?|shop|store|cart|checkout|buy|fiyat(lar)?|urun(ler)?|magaza|sepet)(\/|$|\.)/i;
+const ORG_WORDS = /\b(inc|ltd|llc|gmbh|corp|co|company|studio|studios|agency|labs?|group|team|solutions|software|technologies|a\.?ş|ltd\.?\s*şti)\b\.?/i;
+
+/**
+ * Heuristic personal-site signal for the Organization-or-Person suggestion: the homepage title starts with a
+ * name-like phrase (2–3 capitalised words, no company words) and no page looks commercial.
+ */
+export function personalSiteSignal(homepageTitle: string | null | undefined, pageUrls: string[]): { personal: boolean; reason: string } {
+  const name = (homepageTitle ?? '').split(/\s+[|·•—–:-]\s+/)[0]!.trim();
+  const word = "\\p{Lu}\\p{Ll}+(?:[-'’]\\p{Lu}?\\p{Ll}+)*\\.?";
+  const nameLike = new RegExp(`^${word}(?:\\s${word}){1,2}$`, 'u').test(name) && !ORG_WORDS.test(name);
+  const commercial = pageUrls.find((u) => {
+    try {
+      return COMMERCIAL_PATH.test(new URL(u).pathname);
+    } catch {
+      return false;
+    }
+  });
+  if (!nameLike) return { personal: false, reason: 'homepage title does not start with a personal name' };
+  if (commercial) return { personal: false, reason: `commercial page ${commercial}` };
+  return { personal: true, reason: `homepage title starts with a name ("${name}") and no product, pricing or shop pages` };
+}
+
+function organizationMissing(url: string, observed: string, sink: FindingSink, signal?: { personal: boolean; reason: string }): void {
+  if (signal?.personal) {
+    sink.emit('geo.organization-missing', { url, observed: `${observed} — looks like a personal site (heuristic: ${signal.reason}): add ProfilePage with a Person mainEntity` }, {
+      message: 'The homepage has no Person / ProfilePage markup, and the site looks personal (heuristic). Google uses ProfilePage structured data for a page about a single person; Organization markup applies when the site represents a company or brand.',
+    });
+  } else {
+    sink.emit('geo.organization-missing', { url, observed: `${observed} — add Organization (company or brand) or ProfilePage with a Person mainEntity (personal site)` });
+  }
+}
+
+export function checkStructuredData(url: string, f: PageData, sink: FindingSink, isHomepage: boolean, signal?: { personal: boolean; reason: string }): void {
   if (!f.jsonLd.length && !f.microdataTypes.length) {
     sink.emit('sd.none', { url });
-    if (isHomepage) sink.emit('geo.organization-missing', { url, observed: 'no structured data on homepage' });
+    if (isHomepage) organizationMissing(url, 'no structured data on homepage', sink, signal);
     return;
   }
   const allTypes = new Set<string>(f.microdataTypes);
@@ -114,6 +148,6 @@ export function checkStructuredData(url: string, f: PageData, sink: FindingSink,
   // A personal site describes a Person (often on a ProfilePage); Organization markup does not apply there.
   const personal = allTypes.has('Person') || allTypes.has('ProfilePage');
   if (isHomepage && !personal && !['Organization', 'Corporation', 'OnlineStore', 'OnlineBusiness', 'NGO', 'EducationalOrganization', 'GovernmentOrganization', ...LOCAL_BUSINESS_SUBTYPES].some((t) => allTypes.has(t))) {
-    sink.emit('geo.organization-missing', { url, observed: `types present: ${[...allTypes].join(', ') || 'none'}` });
+    organizationMissing(url, `types present: ${[...allTypes].join(', ') || 'none'}`, sink, signal);
   }
 }

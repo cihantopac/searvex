@@ -1,7 +1,7 @@
 import { mapOrigin, normalizeUrl, originMap, sameSite } from '../core/url.js';
 import type { FindingSink } from '../rules/engine.js';
 import { factsOf, isNoindex, isSelfCanonical, resolveRecord, robotsDirectives, type SiteContext } from './context.js';
-import { checkStructuredData } from './structured-data.js';
+import { checkStructuredData, personalSiteSignal } from './structured-data.js';
 import { detectLanguage, detectShortLanguage, primaryTag } from './language.js';
 
 /** ISO 639-1 codes (complete list) used to validate hreflang. */
@@ -164,7 +164,7 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     const noAlt = f.images.filter((i) => i.alt === null && i.src);
     if (noAlt.length) sink.emit('img.alt-missing', { url: p.url, observed: `${noAlt.length} image(s), e.g. ${noAlt[0]!.src.slice(0, 120)}` });
     const noDim = f.images.filter((i) => i.src && (!i.width || !i.height) && !i.sizedByLayout);
-    if (noDim.length) sink.emit('img.dimensions-missing', { url: p.url, observed: `${noDim.length} image(s) without width/height attributes` });
+    if (noDim.length) sink.emit('img.dimensions-missing', { url: p.url, observed: `${noDim.length} image(s) without width/height attributes or a fixed size in inline CSS (external stylesheets are not checked)` });
 
     // Links
     const uncrawlable = f.links.filter((l) => l.uncrawlable && l.text);
@@ -216,7 +216,7 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     if (selfCanon && !noindex) checkHreflang(ctx, p.url, f, sink);
 
     // Structured data
-    checkStructuredData(p.url, f, sink, p === ctx.homepage);
+    checkStructuredData(p.url, f, sink, p === ctx.homepage, p === ctx.homepage ? personalSiteSignal(f.title, ctx.htmlPages.map((x) => x.url)) : undefined);
   }
 
   for (const [title, urls] of titleMap) if (urls.length > 1) sink.emit('duplicate.title', { url: urls[0], observed: `"${title.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(', ')}` });

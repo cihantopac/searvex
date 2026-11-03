@@ -1,4 +1,4 @@
-import { scoreLabel, type AuditReport } from '../analyze/audit.js';
+import { indexableSummary, scoreLabel, type AuditReport } from '../analyze/audit.js';
 import type { Severity } from '../core/types.js';
 
 const ICON: Record<Severity, string> = { critical: '🔴', high: '🟠', medium: '🟡', low: '🔵', info: '⚪' };
@@ -22,7 +22,7 @@ export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = 
   L.push(`| Metric | Value |`, `|---|---|`);
   L.push(`| Searvex health score¹ | **${scoreLabel(r.scores)}** |`);
   L.push(`| Pages crawled | ${r.crawl.crawled}${r.crawl.truncated ? ` (limit reached, ${r.crawl.queuedRemaining} queued)` : ''} |`);
-  L.push(`| Indexable HTML pages | ${r.inventory.pages.filter((p) => p.indexable).length} |`);
+  L.push(`| Indexable HTML pages | ${indexableSummary(r).replace(/ indexable/, '')} |`);
   L.push(`| Likely site type (heuristic) | ${md(r.inventory.businessModel.label)} |`);
   L.push(`| Findings | ${r.findings.filter((f) => f.severity !== 'info').length} issues + ${r.findings.filter((f) => f.severity === 'info').length} informational |`);
   L.push(`| Evidence quality | ${r.measurement.verified} verified · ${r.measurement.heuristic} heuristic · ${r.measurement.unmeasurable} unmeasurable |`);

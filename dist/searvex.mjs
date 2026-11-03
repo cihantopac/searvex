@@ -30427,11 +30427,49 @@ var adapter = {
 };
 
 // src/extract/html.ts
-function sizedByLayout(style, nimg, cls) {
+var FIXED_LENGTH = /^-?\d*\.?\d+(px|rem|em|ch|vw|vh|vmin|vmax|cm|mm|in|pt)$/;
+function boxDecl(decls) {
+  const out = {};
+  for (const d of decls.split(";")) {
+    const i = d.indexOf(":");
+    if (i < 0) continue;
+    const prop3 = d.slice(0, i).trim().toLowerCase();
+    const value = d.slice(i + 1).replace(/!important/i, "").trim().toLowerCase();
+    if (prop3 === "width" && FIXED_LENGTH.test(value)) out.width = true;
+    else if (prop3 === "height" && FIXED_LENGTH.test(value)) out.height = true;
+    else if (prop3 === "aspect-ratio" && value && value !== "auto") out.aspect = true;
+  }
+  return out;
+}
+var boxSized = (b) => !!b.width && !!b.height || !!b.aspect;
+function cssSizedSelectors(css2) {
+  const acc = /* @__PURE__ */ new Map();
+  const text4 = css2.replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const m of text4.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const decl = boxDecl(m[2]);
+    if (!decl.width && !decl.height && !decl.aspect) continue;
+    for (const raw of m[1].split(",")) {
+      const sel = /^(?:img)?([.#][\w-]+)$/i.exec(raw.trim());
+      if (!sel) continue;
+      const prev2 = acc.get(sel[1]) ?? {};
+      acc.set(sel[1], { width: prev2.width || decl.width, height: prev2.height || decl.height, aspect: prev2.aspect || decl.aspect });
+    }
+  }
+  const classes = /* @__PURE__ */ new Set();
+  const ids = /* @__PURE__ */ new Set();
+  for (const [sel, b] of acc) if (boxSized(b)) (sel[0] === "." ? classes : ids).add(sel.slice(1));
+  return { classes, ids };
+}
+function sizedByLayout(style, nimg, cls, id, css2) {
   if (nimg === "fill") return true;
   if (/(^|\s)aspect-(video|square|\[\d+(\.\d+)?\/\d+(\.\d+)?\]|\d+\/\d+)(\s|$)/.test(cls ?? "")) return true;
+  const tw = (p) => new RegExp(`(^|\\s)${p}-(\\d+(\\.\\d+)?|\\[\\d*\\.?\\d+(px|rem|em)\\])(\\s|$)`).test(cls ?? "");
+  if (tw("size") || tw("w") && tw("h")) return true;
+  const classes = (cls ?? "").split(/\s+/).filter(Boolean);
+  if (classes.some((c) => css2.classes.has(c)) || id && css2.ids.has(id)) return true;
   const s = (style ?? "").toLowerCase().replace(/\s+/g, "");
-  return /aspect-ratio:/.test(s) || /position:absolute/.test(s) && /(^|;)width:100%/.test(s) && /(^|;)height:100%/.test(s);
+  if (boxSized(boxDecl(style ?? ""))) return true;
+  return /position:absolute/.test(s) && /(^|;)width:100%/.test(s) && /(^|;)height:100%/.test(s);
 }
 function collapse(s) {
   return s.replace(/\s+/g, " ").trim();
@@ -30513,13 +30551,14 @@ function extractPage(html3, pageUrl) {
     if (url) internal = new URL(url).hostname.replace(/^www\./, "") === origin;
     links.push({ href, url, text: text4, rel: rel2, internal, uncrawlable });
   });
+  const css2 = cssSizedSelectors($2("style").map((_, el) => $2(el).text()).get().join("\n"));
   const images = $2("img").map((_, el) => ({
     src: $2(el).attr("src") ?? $2(el).attr("data-src") ?? "",
     alt: $2(el).attr("alt") ?? null,
     width: $2(el).attr("width"),
     height: $2(el).attr("height"),
     loading: $2(el).attr("loading"),
-    sizedByLayout: sizedByLayout($2(el).attr("style"), $2(el).attr("data-nimg"), $2(el).attr("class"))
+    sizedByLayout: sizedByLayout($2(el).attr("style"), $2(el).attr("data-nimg"), $2(el).attr("class"), $2(el).attr("id"), css2)
   })).get();
   const jsonLd = [];
   $2('script[type="application/ld+json" i]').each((_, el) => {
@@ -35592,10 +35631,36 @@ function validateNode(n) {
   }
   return null;
 }
-function checkStructuredData(url, f, sink, isHomepage) {
+var COMMERCIAL_PATH = /\/(pricing|prices|plans|products?|shop|store|cart|checkout|buy|fiyat(lar)?|urun(ler)?|magaza|sepet)(\/|$|\.)/i;
+var ORG_WORDS = /\b(inc|ltd|llc|gmbh|corp|co|company|studio|studios|agency|labs?|group|team|solutions|software|technologies|a\.?ş|ltd\.?\s*şti)\b\.?/i;
+function personalSiteSignal(homepageTitle, pageUrls) {
+  const name = (homepageTitle ?? "").split(/\s+[|·•—–:-]\s+/)[0].trim();
+  const word = "\\p{Lu}\\p{Ll}+(?:[-'\u2019]\\p{Lu}?\\p{Ll}+)*\\.?";
+  const nameLike = new RegExp(`^${word}(?:\\s${word}){1,2}$`, "u").test(name) && !ORG_WORDS.test(name);
+  const commercial = pageUrls.find((u) => {
+    try {
+      return COMMERCIAL_PATH.test(new URL(u).pathname);
+    } catch {
+      return false;
+    }
+  });
+  if (!nameLike) return { personal: false, reason: "homepage title does not start with a personal name" };
+  if (commercial) return { personal: false, reason: `commercial page ${commercial}` };
+  return { personal: true, reason: `homepage title starts with a name ("${name}") and no product, pricing or shop pages` };
+}
+function organizationMissing(url, observed, sink, signal) {
+  if (signal?.personal) {
+    sink.emit("geo.organization-missing", { url, observed: `${observed} \u2014 looks like a personal site (heuristic: ${signal.reason}): add ProfilePage with a Person mainEntity` }, {
+      message: "The homepage has no Person / ProfilePage markup, and the site looks personal (heuristic). Google uses ProfilePage structured data for a page about a single person; Organization markup applies when the site represents a company or brand."
+    });
+  } else {
+    sink.emit("geo.organization-missing", { url, observed: `${observed} \u2014 add Organization (company or brand) or ProfilePage with a Person mainEntity (personal site)` });
+  }
+}
+function checkStructuredData(url, f, sink, isHomepage, signal) {
   if (!f.jsonLd.length && !f.microdataTypes.length) {
     sink.emit("sd.none", { url });
-    if (isHomepage) sink.emit("geo.organization-missing", { url, observed: "no structured data on homepage" });
+    if (isHomepage) organizationMissing(url, "no structured data on homepage", sink, signal);
     return;
   }
   const allTypes = new Set(f.microdataTypes);
@@ -35620,7 +35685,7 @@ function checkStructuredData(url, f, sink, isHomepage) {
   for (const t of allTypes) if (RETIRED_TYPES.has(t)) sink.emit("sd.retired-type", { url, observed: t });
   const personal = allTypes.has("Person") || allTypes.has("ProfilePage");
   if (isHomepage && !personal && !["Organization", "Corporation", "OnlineStore", "OnlineBusiness", "NGO", "EducationalOrganization", "GovernmentOrganization", ...LOCAL_BUSINESS_SUBTYPES].some((t) => allTypes.has(t))) {
-    sink.emit("geo.organization-missing", { url, observed: `types present: ${[...allTypes].join(", ") || "none"}` });
+    organizationMissing(url, `types present: ${[...allTypes].join(", ") || "none"}`, sink, signal);
   }
 }
 
@@ -36625,7 +36690,7 @@ function runTechnicalChecks(ctx, sink) {
     const noAlt = f.images.filter((i) => i.alt === null && i.src);
     if (noAlt.length) sink.emit("img.alt-missing", { url: p.url, observed: `${noAlt.length} image(s), e.g. ${noAlt[0].src.slice(0, 120)}` });
     const noDim = f.images.filter((i) => i.src && (!i.width || !i.height) && !i.sizedByLayout);
-    if (noDim.length) sink.emit("img.dimensions-missing", { url: p.url, observed: `${noDim.length} image(s) without width/height attributes` });
+    if (noDim.length) sink.emit("img.dimensions-missing", { url: p.url, observed: `${noDim.length} image(s) without width/height attributes or a fixed size in inline CSS (external stylesheets are not checked)` });
     const uncrawlable = f.links.filter((l) => l.uncrawlable && l.text);
     if (uncrawlable.length) sink.emit("links.uncrawlable", { url: p.url, observed: `${uncrawlable.length} link(s), e.g. "${uncrawlable[0].text}" href="${uncrawlable[0].href}"` });
     const named = new Set(f.links.filter((l) => l.text && l.url).map((l) => l.url));
@@ -36658,7 +36723,7 @@ function runTechnicalChecks(ctx, sink) {
       }
     }
     if (selfCanon && !noindex) checkHreflang(ctx, p.url, f, sink);
-    checkStructuredData(p.url, f, sink, p === ctx.homepage);
+    checkStructuredData(p.url, f, sink, p === ctx.homepage, p === ctx.homepage ? personalSiteSignal(f.title, ctx.htmlPages.map((x) => x.url)) : void 0);
   }
   for (const [title, urls] of titleMap) if (urls.length > 1) sink.emit("duplicate.title", { url: urls[0], observed: `"${title.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(", ")}` });
   for (const [desc, urls] of descMap) if (urls.length > 1) sink.emit("duplicate.description", { url: urls[0], observed: `"${desc.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(", ")}` });
@@ -36975,6 +37040,12 @@ function countAffected(findings, affected) {
     for (const u of affected(f.ruleId)) if (!/\/robots\.txt$/.test(u)) all2.add(u);
   }
   return all2.size;
+}
+function indexableSummary(r) {
+  const total = r.inventory.pages.length;
+  const indexable = r.inventory.pages.filter((p) => p.indexable).length;
+  const noindex = r.findings.find((f) => f.ruleId === "index.noindex")?.count ?? 0;
+  return `${indexable} indexable${indexable === 0 && total > 0 && noindex >= total ? ": all noindex" : ""}`;
 }
 function scoreLabel(s) {
   return s.notApplicable ? "n/a (nothing to audit)" : `${s.overall}/100${s.profile === "pre-launch" ? " (pre-launch profile)" : ""}`;
@@ -37936,7 +38007,7 @@ var RULES_TR = {
   "sd.missing-required": { title: "Zengin sonu\xE7lar i\xE7in gerekli \xF6zellikleri eksik yap\u0131land\u0131r\u0131lm\u0131\u015F veri", fix: "Gerekli \xF6zellikleri, g\xF6r\xFCn\xFCr sayfa i\xE7eri\u011Fiyle e\u015Fle\u015Fen de\u011Ferlerle ekleyin." },
   "sd.retired-type": { title: "Kullan\u0131mdan kald\u0131r\u0131lm\u0131\u015F zengin sonu\xE7 t\xFCr\xFC i\xE7in i\u015Faretleme", fix: "\u0130\u015Flem gerekmez. \u0130\u015Faretlemeyi yaln\u0131zca ba\u015Fka t\xFCketiciler kullan\u0131yorsa tutun." },
   "sd.none": { title: "Yap\u0131land\u0131r\u0131lm\u0131\u015F veri yok", fix: "Sayfay\u0131 tan\u0131mlayan t\xFCrler i\xE7in (Organization, Product, Article, BreadcrumbList, \u2026) yaln\u0131zca g\xF6r\xFCn\xFCr bilgilerle JSON-LD ekleyin." },
-  "geo.organization-missing": { title: "Ana sayfada Organization yap\u0131land\u0131r\u0131lm\u0131\u015F verisi yok", fix: "Ana sayfaya Organization JSON-LD\u2019si (name, url, logo, sameAs) ekleyin." }
+  "geo.organization-missing": { title: "Ana sayfada Organization veya Person yap\u0131land\u0131r\u0131lm\u0131\u015F verisi yok", fix: "\u015Eirket veya marka i\xE7in ana sayfaya Organization JSON-LD\u2019si (name, url, logo, sameAs) ekleyin; ki\u015Fisel bir site i\xE7in mainEntity\u2019si Person olan ProfilePage (name, url, sameAs) ekleyin." }
 };
 
 // src/report/prompt.ts
@@ -38393,7 +38464,7 @@ function planFixes(report, scan, opts = {}) {
     "img.alt-missing": 'Describe what each informative image shows; use alt="" for decorative images.',
     "links.uncrawlable": 'Use <a href="/path"> for navigation (framework Link components render real hrefs).',
     "h1.missing": "Add a visible main heading that matches the page purpose.",
-    "geo.organization-missing": "Add Organization JSON-LD (name, url, logo, sameAs) on the homepage using only verifiable facts.",
+    "geo.organization-missing": "Add Organization JSON-LD (name, url, logo, sameAs) on the homepage for a company or brand, or ProfilePage with a Person mainEntity for a personal site, using only verifiable facts.",
     "index.client-rendered": "Render primary content on the server (SSR/SSG/prerender) so crawlers that do not execute JavaScript can read it.",
     "sd.missing-required": "Add the required properties listed in the evidence, using values visible on the page.",
     "content.low-text": "Review whether the page serves its purpose; expand with useful, original content, consolidate, or noindex placeholders."
@@ -38790,7 +38861,7 @@ function renderMarkdown(r, opts = {}) {
   L.push(`| Metric | Value |`, `|---|---|`);
   L.push(`| Searvex health score\xB9 | **${scoreLabel(r.scores)}** |`);
   L.push(`| Pages crawled | ${r.crawl.crawled}${r.crawl.truncated ? ` (limit reached, ${r.crawl.queuedRemaining} queued)` : ""} |`);
-  L.push(`| Indexable HTML pages | ${r.inventory.pages.filter((p) => p.indexable).length} |`);
+  L.push(`| Indexable HTML pages | ${indexableSummary(r).replace(/ indexable/, "")} |`);
   L.push(`| Likely site type (heuristic) | ${md(r.inventory.businessModel.label)} |`);
   L.push(`| Findings | ${r.findings.filter((f) => f.severity !== "info").length} issues + ${r.findings.filter((f) => f.severity === "info").length} informational |`);
   L.push(`| Evidence quality | ${r.measurement.verified} verified \xB7 ${r.measurement.heuristic} heuristic \xB7 ${r.measurement.unmeasurable} unmeasurable |`);
@@ -40345,7 +40416,7 @@ function present(obj, name) {
   if (v === void 0) return false;
   return !isEmptyLiteral(unwrap2(v));
 }
-var NONE = { exported: false, title: false, description: false, canonical: false, noindex: false };
+var NONE = { exported: false, title: false, description: false, canonical: false, noindex: false, robots: false };
 function localObjects(program) {
   const m = /* @__PURE__ */ new Map();
   for (const st of program["body"]) {
@@ -40447,6 +40518,7 @@ function nextMetadata(program) {
     description: all(objs, (o) => present(o, "description")),
     canonical: all(objs, canonicalOf),
     noindex: all(objs, noindexOf),
+    robots: all(objs, (o) => present(o, "robots")),
     line
   };
 }
@@ -40549,8 +40621,17 @@ function metadataOf(src, file2) {
     title: exported && hasKey(src, "title"),
     description: exported && hasKey(src, "description"),
     canonical: /alternates\s*:\s*\{[^}]*canonical/s.test(src),
-    noindex: /robots\s*:\s*\{[^}]*index\s*:\s*false/s.test(src) || /robots\s*:\s*['"][^'"]*noindex/.test(src)
+    noindex: /robots\s*:\s*\{[^}]*index\s*:\s*false/s.test(src) || /robots\s*:\s*['"][^'"]*noindex/.test(src),
+    robots: exported && hasKey(src, "robots")
   };
+}
+function inheritedNoindex(chain) {
+  for (const m of chain) {
+    if (!m.exported || m.robots === false) continue;
+    if (m.robots === null) return null;
+    return m.noindex;
+  }
+  return false;
 }
 var anyOf = (...xs) => xs.includes(true) ? true : xs.includes(null) ? null : false;
 function scanNextApp(appRoot, files, read, sink, scan) {
@@ -40579,14 +40660,14 @@ function scanNextApp(appRoot, files, read, sink, scan) {
     const hasTitle = anyOf(pageTitle, ...chain.map((l) => l.exported ? l.title : false));
     const hasDesc = anyOf(pageDesc, ...chain.map((l) => l.exported ? l.description : false));
     const canonical = anyOf(meta.canonical, ...chain.map((l) => l.canonical));
-    const noindex = meta.noindex === true;
+    const noindex = inheritedNoindex([meta, ...chain]) === true;
     const route = nextRoute(p.rel, baseRe);
     scan.routes.push({ route, file: p.rel, framework: "nextjs-app", dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: hasDesc, noindex });
     if (hasTitle === false) sink.emit("title.missing", { file: p.rel, observed: `route ${route}: no metadata.title in page or ancestor layouts` });
     else if (pageTitle === false && hasTitle === true && !noindex) (titleOwners["inherited"] ??= []).push(`${route} (${p.rel})`);
     if (hasDesc === false && !noindex) sink.emit("description.missing", { file: p.rel, line: meta.line, observed: `route ${route}: no metadata.description` });
     if (canonical === false && !noindex) sink.emit("canonical.missing", { file: p.rel, line: meta.line, observed: `route ${route}: no metadata.alternates.canonical` });
-    if (noindex) sink.emit("index.noindex", { file: p.rel, observed: `route ${route}: robots index:false` });
+    if (noindex) sink.emit("index.noindex", { file: p.rel, observed: `route ${route}: robots index:false${meta.robots ? "" : " (inherited from a layout)"}` });
   }
   const inherited = titleOwners["inherited"] ?? [];
   if (inherited.length > 1) sink.emit("duplicate.title", { file: rootLayoutPath ?? void 0, observed: `${inherited.length} routes inherit the same layout title (unless title.template is combined with page titles): ${inherited.slice(0, 5).join(", ")}` });
@@ -40614,7 +40695,7 @@ function scanNextPages(appRoot, files, read, sink, scan) {
     const head = pagesHead(src, p.rel);
     const hasTitle = head.title;
     const hasDesc = head.description;
-    scan.routes.push({ route, file: p.rel, framework: "nextjs-pages", dynamic: /\[.+\]/.test(route), hasTitle: hasTitle || globalTitle, hasDescription: hasDesc || globalDesc, noindex: head.noindex });
+    scan.routes.push({ route, file: p.rel, framework: "nextjs-pages", dynamic: /\[.+\]/.test(route), hasTitle: hasTitle || globalTitle, hasDescription: hasDesc || globalDesc, noindex: head.noindex || appHead.noindex });
     if (!hasTitle && !globalTitle) sink.emit("title.missing", { file: p.rel, observed: `route ${route}: no <title> in next/head` });
     if (!hasTitle && globalTitle) sink.emit("duplicate.title", { file: p.rel, observed: `route ${route} only gets the global title from ${appFile?.rel}` });
     if (!hasDesc && !globalDesc) sink.emit("description.missing", { file: p.rel, observed: `route ${route}` });
@@ -42669,6 +42750,7 @@ Commands
 Common options
   --max-pages <n>       Page limit (default 500)          --depth <n>        Max click depth (default 10)
   --concurrency <n>     Parallel requests (default 4)     --delay <ms>       Per-host delay (default 250)
+  --timeout <ms>        Per-request timeout (default 15000, 1000\u2013120000)
   --render              Execute JavaScript with Playwright (optional dependency) and compare DOMs
   --include <regex>     Only crawl matching URLs          --exclude <regex>  Skip matching URLs
   --check-external      Check outbound links (HEAD, robots.txt-aware, max 200)
@@ -42691,7 +42773,18 @@ Common options
   --open                Open the HTML report in the default browser when done
   --json                Print the JSON report to stdout
   -q, --quiet           Less output
-  -h, --help            Show help
+  -h, --help            Show help                         -v, --version      Print the version
+
+Command options
+  --baseline <runId>    monitor: compare with this run instead of the previous run of the same site
+  --import <file>       monitor / gsc import: Search Console Performance export (.zip or .csv, repeatable)
+  --property <P>        Search Console property of an export or connect choice (sc-domain:example.com,
+                        https://example.com/)
+  --days <n>            gsc|bing report: period in days (default 28)
+  --max-rows <n>        gsc report: row limit of the API query (default 25000)
+  --category <c>        rules list: only rules of this category
+  --strict              rules validate: treat warnings as errors
+  --force               gsc auth: authorise again even when a valid authorization is stored
 
 Environment (all optional, read-only integrations)
   SEARVEX_CRUX_API_KEY  Chrome UX Report API key (instead of "searvex crux auth")
@@ -42709,58 +42802,60 @@ Exit codes
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
 `;
 var SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"];
+var HELP_TEXT = HELP;
 function parse8(argv) {
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
     strict: true,
-    options: {
-      "max-pages": { type: "string" },
-      depth: { type: "string" },
-      concurrency: { type: "string" },
-      delay: { type: "string" },
-      timeout: { type: "string" },
-      render: { type: "boolean" },
-      include: { type: "string", multiple: true },
-      exclude: { type: "string", multiple: true },
-      "no-sitemap": { type: "boolean" },
-      resume: { type: "string" },
-      format: { type: "string" },
-      out: { type: "string" },
-      "fail-on": { type: "string" },
-      "allow-private": { type: "boolean" },
-      "pre-launch": { type: "boolean" },
-      json: { type: "boolean" },
-      quiet: { type: "boolean", short: "q" },
-      help: { type: "boolean", short: "h" },
-      version: { type: "boolean", short: "v" },
-      apply: { type: "boolean" },
-      yes: { type: "boolean", short: "y" },
-      only: { type: "string", multiple: true },
-      "site-url": { type: "string" },
-      lang: { type: "string" },
-      "check-external": { type: "boolean" },
-      reuse: { type: "boolean" },
-      update: { type: "boolean" },
-      client: { type: "string" },
-      days: { type: "string" },
-      audit: { type: "string" },
-      "max-rows": { type: "string" },
-      competitor: { type: "string", multiple: true },
-      category: { type: "string" },
-      strict: { type: "boolean" },
-      baseline: { type: "string" },
-      import: { type: "string", multiple: true },
-      force: { type: "boolean" },
-      property: { type: "string" },
-      choice: { type: "string" },
-      "no-browser": { type: "boolean" },
-      open: { type: "boolean" },
-      note: { type: "string" }
-    }
+    options: CLI_OPTIONS
   });
   return { values, positionals };
 }
+var CLI_OPTIONS = {
+  "max-pages": { type: "string" },
+  depth: { type: "string" },
+  concurrency: { type: "string" },
+  delay: { type: "string" },
+  timeout: { type: "string" },
+  render: { type: "boolean" },
+  include: { type: "string", multiple: true },
+  exclude: { type: "string", multiple: true },
+  "no-sitemap": { type: "boolean" },
+  resume: { type: "string" },
+  format: { type: "string" },
+  out: { type: "string" },
+  "fail-on": { type: "string" },
+  "allow-private": { type: "boolean" },
+  "pre-launch": { type: "boolean" },
+  json: { type: "boolean" },
+  quiet: { type: "boolean", short: "q" },
+  help: { type: "boolean", short: "h" },
+  version: { type: "boolean", short: "v" },
+  apply: { type: "boolean" },
+  yes: { type: "boolean", short: "y" },
+  only: { type: "string", multiple: true },
+  "site-url": { type: "string" },
+  lang: { type: "string" },
+  "check-external": { type: "boolean" },
+  reuse: { type: "boolean" },
+  update: { type: "boolean" },
+  client: { type: "string" },
+  days: { type: "string" },
+  audit: { type: "string" },
+  "max-rows": { type: "string" },
+  competitor: { type: "string", multiple: true },
+  category: { type: "string" },
+  strict: { type: "boolean" },
+  baseline: { type: "string" },
+  import: { type: "string", multiple: true },
+  force: { type: "boolean" },
+  property: { type: "string" },
+  choice: { type: "string" },
+  "no-browser": { type: "boolean" },
+  open: { type: "boolean" },
+  note: { type: "string" }
+};
 function num(v, def, min = 0, max = Number.MAX_SAFE_INTEGER) {
   if (v === void 0) return def;
   const n = Number(v);
@@ -42864,7 +42959,7 @@ Searvex \u2014 ${report.target}`];
     return withReportFiles(L, files);
   }
   if (report.crawl.siteUrl) L.push(`Audited ${new URL(report.crawl.startUrl).origin} as ${report.crawl.siteUrl} (--site-url)`);
-  L.push(`Health score ${scoreLabel(report.scores)} (Searvex metric, not a search engine score) \xB7 ${report.crawl.crawled} ${report.mode === "website" ? "pages crawled" : "routes/pages"} \xB7 ${issues.length} issue types, ${report.affectedUrls ?? 0} affected ${unit}`);
+  L.push(`Health score ${scoreLabel(report.scores)} (Searvex metric, not a search engine score) \xB7 ${report.crawl.crawled} ${report.mode === "website" ? "pages crawled" : `routes/pages, ${indexableSummary(report)}`} \xB7 ${issues.length} issue types, ${report.affectedUrls ?? 0} affected ${unit}`);
   if (top2.length) {
     L.push("Top priorities:");
     top2.forEach((f, i) => L.push(`  ${i + 1}. [${f.severity}] ${f.title} \u2014 ${f.count} ${f.count === 1 ? unit.replace(/s$/, "") : unit}${f.confidence === "heuristic" ? " (heuristic)" : ""}${remediationOf(f.ruleId, plan) === "auto" ? " \xB7 automatic fix" : ""}`));
@@ -43141,7 +43236,9 @@ if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") ||
   });
 }
 export {
+  CLI_OPTIONS,
   EXIT,
+  HELP_TEXT,
   SEVERITY_ORDER,
   UsageError,
   assertSiteUrl,

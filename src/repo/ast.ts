@@ -103,10 +103,12 @@ export interface NextMetadata {
   description: boolean | null;
   canonical: boolean | null;
   noindex: boolean | null;
+  /** `robots` is set (a page's robots replaces its layouts'; Next.js merges metadata per top-level key). */
+  robots?: boolean | null;
   line?: number;
 }
 
-const NONE: NextMetadata = { exported: false, title: false, description: false, canonical: false, noindex: false };
+const NONE: NextMetadata = { exported: false, title: false, description: false, canonical: false, noindex: false, robots: false };
 
 /** Top-level `const x = { … }` declarations, to resolve `export const metadata = base`. */
 function localObjects(program: Node): Map<string, Node> {
@@ -223,6 +225,7 @@ export function nextMetadata(program: Node): NextMetadata {
     description: all(objs, (o) => present(o, 'description')),
     canonical: all(objs, canonicalOf),
     noindex: all(objs, noindexOf),
+    robots: all(objs, (o) => present(o, 'robots')),
     line,
   };
 }

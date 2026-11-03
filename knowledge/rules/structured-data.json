@@ -148,21 +148,27 @@
     },
     {
       "id": "geo.organization-missing",
-      "title": "No Organization structured data on the homepage",
+      "title": "No Organization or Person structured data on the homepage",
       "category": "geo",
       "severity": "low",
       "confidence": "verified",
       "engines": [
         "google"
       ],
-      "description": "The homepage has no Organization markup. Google uses Organization structured data for logo and organisation details; consistent entity data helps search and AI systems identify the brand.",
-      "fix": "Add Organization JSON-LD (name, url, logo, sameAs) on the homepage.",
+      "description": "The homepage has no Organization markup (a company or brand) and no Person / ProfilePage markup (a personal site). Google uses Organization structured data for logo and organisation details, and ProfilePage for a page about a single person; consistent entity data helps search and AI systems identify who the site belongs to.",
+      "fix": "Add Organization JSON-LD (name, url, logo, sameAs) on the homepage for a company or brand, or ProfilePage with a Person mainEntity (name, url, sameAs) for a personal site.",
       "verify": "Validate with the Rich Results Test.",
       "sources": [
         {
           "title": "Google: Organization structured data",
           "url": "https://developers.google.com/search/docs/appearance/structured-data/organization",
           "checked": "2026-10-30",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: Profile page (ProfilePage) structured data",
+          "url": "https://developers.google.com/search/docs/appearance/structured-data/profile-page",
+          "checked": "2026-11-03",
           "level": "fetched"
         }
       ],
