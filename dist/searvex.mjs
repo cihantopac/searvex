@@ -37231,12 +37231,20 @@ var CONSEQUENCES = [
   }
 ];
 function linkRootCauses(findings) {
+  for (const f of findings) {
+    delete f.priority?.causedBy;
+    delete f.priority?.effects;
+  }
   for (const c of CONSEQUENCES) {
     const cause = findings.find((f) => f.ruleId === c.cause && f.evidence.some((e) => c.when.test(e.observed ?? "")));
     if (!cause) continue;
     const effects = findings.filter((f) => c.effects.includes(f.ruleId) && f.priority);
     if (!effects.length || !cause.priority) continue;
-    for (const f of effects) f.priority.reasons.push(`likely a consequence of ${c.cause} \u2014 ${c.why}; fix that first, then re-run`);
+    for (const f of effects) {
+      f.priority.reasons.push(`likely a consequence of ${c.cause} \u2014 ${c.why}; fix that first, then re-run`);
+      f.priority.causedBy = { ruleId: c.cause, why: c.why };
+    }
+    cause.priority.effects = effects.map((f) => f.ruleId);
     const top2 = Math.max(...effects.map((f) => f.priority.score));
     if (cause.priority.score <= top2) {
       cause.priority.score = Math.min(100, top2 + 1);
@@ -38222,11 +38230,22 @@ function render(){var M=document.getElementById('main');M.textContent='';
 document.getElementById('kicker').textContent=T(R.mode==='repository'?'title.repo':'title.audit');
 document.getElementById('t').textContent=R.target;
 document.getElementById('meta').textContent=(R.crawl&&R.crawl.siteUrl?T('hdr.auditedAs',{local:R.crawl.startUrl.replace(/^(https?:\/\/[^\/]+).*$/,'$1'),site:R.crawl.siteUrl})+' · ':'')+R.generatedAt.slice(0,16).replace('T',' ')+' UTC · Searvex '+R.tool.version+' · rules '+R.tool.rulesVersion+' · '+R.runId;
-var issues=R.findings.filter(isIssue),tabs=[['overview',T('nav.overview')],['priorities',T('nav.priorities')],['issues',T('nav.issues'),issues.length]];
+var issues=R.findings.filter(isIssue),tabs=[['overview',T('nav.overview')],['priorities',T('nav.priorities')],['issues',T('nav.issues'),issues.length]];if(issues.length)tabs.push(['causes',T('nav.causes')]);
 var hasGeo=R.mode==='website'&&R.geo&&R.geo.bots&&R.geo.bots.length;if(hasGeo)tabs.push(['geo',T('nav.geo')]);
 if(D.search)tabs.push(['search',T('nav.search')]);if(D.diff)tabs.push(['changes',T('nav.changes')]);tabs.push(['evidence',T('nav.evidence')]);
-overview(panel('overview'),issues);priorities(panel('priorities'),issues);issuesPanel(panel('issues'));if(hasGeo)geo(panel('geo'));if(D.search)search(panel('search'));if(D.diff)changes(panel('changes'));evidence(panel('evidence'));
+overview(panel('overview'),issues);priorities(panel('priorities'),issues);issuesPanel(panel('issues'));if(issues.length)causes(panel('causes'),issues);if(hasGeo)geo(panel('geo'));if(D.search)search(panel('search'));if(D.diff)changes(panel('changes'));evidence(panel('evidence'));
 mkTabs(tabs);actionbar()}
+function causes(P,issues){var byId={};R.findings.forEach(function(f){byId[f.ruleId]=f});var unit=R.mode==='website'?'iss.pages':'iss.locations';
+var roots=issues.filter(function(f){return f.priority&&f.priority.effects&&f.priority.effects.length});
+P.appendChild(h2(T('rc.title'),T('rc.note')));
+if(!roots.length)P.appendChild(el('p',{class:'muted',text:T('rc.none')}));
+roots.forEach(function(c){var eff=c.priority.effects.map(function(id){return byId[id]}).filter(Boolean),why=eff[0]&&eff[0].priority&&eff[0].priority.causedBy?eff[0].priority.causedBy.why:'';
+P.appendChild(el('div',{class:'card rc'},[el('div',{},[sevChip(c.severity),' ',el('b',{text:rt(c.ruleId).title}),' ',el('code',{text:c.ruleId})]),why?el('p',{class:'muted small',text:T('rc.why')+': '+why}):null,el('p',{class:'small',text:T('rc.effects',{n:eff.length})}),el('ul',{},eff.map(function(f){return el('li',{},[sevChip(f.severity),' ',rt(f.ruleId).title,' — ',T(unit,{n:fmt(f.count)})])}))]))});
+var areas={};issues.forEach(function(f){(D.groups[f.ruleId]||[]).forEach(function(g){if(g.kind!=='template'&&g.kind!=='file')return;var k=g.kind+':'+g.key,a=areas[k]||(areas[k]={kind:g.kind,key:g.key,rules:[],pages:0});a.rules.push({id:f.ruleId,sev:f.severity,pages:g.pages});if(g.pages>a.pages)a.pages=g.pages})});
+var list=Object.keys(areas).map(function(k){return areas[k]}).filter(function(a){return a.rules.length>=2}).sort(function(a,b){return b.rules.length-a.rules.length||b.pages-a.pages});
+P.appendChild(h2(T('rc.areas'),T('rc.areasNote')));
+if(!list.length)P.appendChild(el('p',{class:'muted',text:T('rc.noAreas')}));
+list.slice(0,30).forEach(function(a){P.appendChild(el('div',{class:'card rc'},[el('div',{},[el('span',{class:'gkind',text:T('iss.group.'+a.kind)}),' ',el('code',{text:a.key}),' · ',T('rc.rules',{n:a.rules.length})]),el('ul',{},a.rules.map(function(r){return el('li',{},[sevChip(r.sev),' ',rt(r.id).title,' — ',T(unit,{n:fmt(r.pages)})])}))]))})}
 function overview(P,issues){
 function TT(k,fb){var s=T(k);return s===k?fb:s}
 var lim=[];if(R.crawl.interrupted)lim.push([T('lim.interrupted'),T('warn.interrupted',{n:fmt(R.crawl.queuedRemaining),run:R.runId})]);else if(R.crawl.truncated)lim.push([T('lim.truncated'),T('warn.truncated',{n:fmt(R.crawl.queuedRemaining)})]);if(R.scores.notApplicable)lim.push([T('warn.notApplicable'),T('warn.notApplicable')+': '+R.scores.notApplicable]);
@@ -38301,7 +38320,7 @@ var more=g.pages-Math.min(30,g.evidence.length);
 body.appendChild(el('div',{class:'group'},[el('div',{class:'grow'},[gc,el('details',{},[el('summary',{},[el('span',{class:'gkind',text:T('iss.group.'+g.kind)}),' ',g.kind==='layout'?null:el('code',{text:g.kind==='site'?(f.evidence[0]&&(f.evidence[0].url||f.evidence[0].file)||'—'):g.key}),' ',chip(T(R.mode==='website'&&g.kind!=='file'?'iss.pages':'iss.locations',{n:fmt(g.pages)})),g.kind==='template'&&g.pages>1?chip(T('iss.shared'),'accent'):g.kind==='layout'?chip(T('iss.layout'),'accent'):null,g.langs.length?chip(g.langs.join(', ')):null])].concat(ev).concat(more>0?[el('div',{class:'muted small',text:T('iss.more',{n:fmt(more)})})]:[]))])]))});
 body.appendChild(el('p',{class:'muted small'},[T('iss.rule')+' ',el('code',{text:f.ruleId}),' · '+T('iss.engines')+': '+f.engines.join(', ')+(f.priority?' · '+T('iss.priority')+' '+f.priority.bucket+' ('+f.priority.score+') · '+T('iss.effort')+' '+f.priority.effort:'')]));
 body.appendChild(el('div',{class:'sources'},[el('b',{class:'small',text:T('iss.sources')}),el('ul',{},r.sources.map(function(s){return el('li',{class:'small'},[el('a',{href:safeHref(s.url),rel:'noopener noreferrer',target:'_blank',text:s.title}),' — '+T('iss.checked',{d:s.checked})])}))]));
-var det=el('details',{class:'fdet'},[el('summary',{},[el('span',{class:'ftitle',text:r.title}),el('span',{class:'chips'},[sevChip(f.severity),chip(T('rem.'+rem),'rem-'+rem,T('rem.'+rem+'.help')),chip(T('conf.'+f.confidence),'conf-'+f.confidence),chip(T(R.mode==='website'?'iss.pages':'iss.locations',{n:fmt(Math.max(pages,f.count))})),G.length>1?chip(T('act.groups',{n:G.length})):null,rv?chip(T('iss.review.'+rv.status),'review-'+rv.status):null])]),body]);
+var det=el('details',{class:'fdet'},[el('summary',{},[el('span',{class:'ftitle',text:r.title}),el('span',{class:'chips'},[sevChip(f.severity),f.priority&&f.priority.causedBy?chip(T('rc.of',{t:rt(f.priority.causedBy.ruleId).title}),'rc-of'):null,chip(T('rem.'+rem),'rem-'+rem,T('rem.'+rem+'.help')),chip(T('conf.'+f.confidence),'conf-'+f.confidence),chip(T(R.mode==='website'?'iss.pages':'iss.locations',{n:fmt(Math.max(pages,f.count))})),G.length>1?chip(T('act.groups',{n:G.length})):null,rv?chip(T('iss.review.'+rv.status),'review-'+rv.status):null])]),body]);
 return el('article',{class:'finding','data-sev':f.severity},[cb,det])}
 function selection(){var items=[];R.findings.forEach(function(f){var gs=groupsOf(f).filter(function(g){return SEL[g.id]});if(gs.length)items.push({f:f,groups:gs})});return items}
 function actionbar(){var A=document.getElementById('actionbar');A.textContent='';var s=selection(),n=0,mix={auto:0,agent:0,manual:0};s.forEach(function(x){n+=x.groups.length;mix[D.rem[x.f.ruleId]]++});
@@ -38447,6 +38466,19 @@ var UI = {
     "lim.render": "JavaScript rendering",
     "lim.truncated": "Partial crawl",
     "lim.interrupted": "Interrupted run",
+    "nav.causes": "By cause",
+    "rc.title": "Root causes",
+    "rc.note": 'Findings that are likely consequences of a cause Searvex observed. Fix the cause first, then re-run the audit: the consequences usually disappear with it. "Likely": the link is inferred, not proven.',
+    "rc.none": "No root cause with likely consequences was observed in this audit.",
+    "rc.why": "Why",
+    "rc.effects": "Likely consequences ({n}):",
+    "rc.effects.one": "Likely consequence (1):",
+    "rc.areas": "By template or file",
+    "rc.areasNote": "Templates and source files with several issues: one place to fix, often in one change.",
+    "rc.noAreas": "No template or file has more than one issue type.",
+    "rc.rules": "{n} issue types",
+    "rc.rules.one": "1 issue type",
+    "rc.of": "likely from: {t}",
     "warn.interrupted": "The run was interrupted with {n} URLs still queued: this is a partial report. Continue with --resume {run}.",
     "lim.geo.citations-unmeasured": "AI citations",
     "lim.perf.cwv-unmeasured": "Core Web Vitals",
@@ -38704,6 +38736,19 @@ var UI = {
     "lim.render": "JavaScript i\u015Fleme",
     "lim.truncated": "K\u0131smi tarama",
     "lim.interrupted": "Yar\u0131da kesilen \xE7al\u0131\u015Fma",
+    "nav.causes": "Nedene g\xF6re",
+    "rc.title": "K\xF6k nedenler",
+    "rc.note": 'Searvex\u2019in g\xF6zledi\u011Fi bir nedenin olas\u0131 sonu\xE7lar\u0131 olan bulgular. \xD6nce nedeni d\xFCzeltin, sonra denetimi yeniden \xE7al\u0131\u015Ft\u0131r\u0131n: sonu\xE7lar genellikle onunla birlikte kaybolur. "Olas\u0131": ba\u011F \xE7\u0131kar\u0131md\u0131r, kan\u0131tlanm\u0131\u015F de\u011Fildir.',
+    "rc.none": "Bu denetimde olas\u0131 sonu\xE7lar\u0131 olan bir k\xF6k neden g\xF6zlenmedi.",
+    "rc.why": "Neden",
+    "rc.effects": "Olas\u0131 sonu\xE7lar ({n}):",
+    "rc.effects.one": "Olas\u0131 sonu\xE7 (1):",
+    "rc.areas": "\u015Eablona veya dosyaya g\xF6re",
+    "rc.areasNote": "Birden \xE7ok sorunu olan \u015Fablonlar ve kaynak dosyalar: d\xFCzeltilecek tek yer, \xE7o\u011Fu zaman tek de\u011Fi\u015Fiklikte.",
+    "rc.noAreas": "Hi\xE7bir \u015Fablonda veya dosyada birden fazla sorun t\xFCr\xFC yok.",
+    "rc.rules": "{n} sorun t\xFCr\xFC",
+    "rc.rules.one": "1 sorun t\xFCr\xFC",
+    "rc.of": "olas\u0131 kaynak: {t}",
     "warn.interrupted": "\xC7al\u0131\u015Fma, {n} URL h\xE2l\xE2 kuyruktayken yar\u0131da kesildi: bu k\u0131smi bir rapor. --resume {run} ile devam edin.",
     "lim.geo.citations-unmeasured": "Yapay zek\xE2 al\u0131nt\u0131lar\u0131",
     "lim.perf.cwv-unmeasured": "Core Web Vitals",

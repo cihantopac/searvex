@@ -74,6 +74,13 @@ describe('root causes', () => {
     expect(why(switched, 'lang.locale-adaptive')).toMatch(/root cause of 2 other finding/);
     expect(why(switched, 'hreflang.target-error')).toMatch(/consequence/);
     expect(why(switched, 'title.multiple')).not.toMatch(/consequence/);
+    // The same links as structured data for the "By cause" view.
+    const pr = (id: string) => (switched as Array<{ ruleId: string; priority?: { causedBy?: { ruleId: string }; effects?: string[] } }>).find((x) => x.ruleId === id)!.priority!;
+    expect(pr('lang.locale-adaptive').effects).toEqual(['index.render-mismatch', 'hreflang.target-error']);
+    expect(pr('index.render-mismatch').causedBy?.ruleId).toBe('lang.locale-adaptive');
+    expect(pr('title.multiple').causedBy).toBeUndefined();
+    prioritise(switched, () => ['https://e.com/']);
+    expect(pr('lang.locale-adaptive').effects).toEqual(['index.render-mismatch', 'hreflang.target-error']);
     const serverOnly = [f('lang.locale-adaptive', 'server responds differently by Accept-Language'), f('index.render-mismatch')];
     prioritise(serverOnly, () => ['https://e.com/']);
     expect(why(serverOnly, 'index.render-mismatch')).not.toMatch(/consequence/);
