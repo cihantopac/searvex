@@ -27,7 +27,7 @@ beforeAll(async () => {
   // Pages with a description, so the finding is not on most pages (that would be the "shared layout" case).
   for (let i = 0; i < 8; i++) {
     routes[`/guides/g${i}`] = { body: article(`Guide number ${i}`).replace('</title>', '</title><meta name="description" content="A guide from the workshop with useful steps.">') };
-    routes['/'].body = routes['/'].body.replace('</body>', `<a href="/guides/g${i}">g${i}</a></body>`);
+    routes['/']!.body = routes['/']!.body.replace('</body>', `<a href="/guides/g${i}">g${i}</a></body>`);
   }
   // Flat slugs: six URL patterns, one product template, none with a meta description.
   for (const s of SLUGS) routes[`/${s}`] = { body: product(s[0]!.toUpperCase() + s.slice(1), s === 'delta' ? '<ul><li>extra list</li></ul>' : '') };
