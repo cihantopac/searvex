@@ -51,6 +51,24 @@ describe('C3: per-finding affected URLs', () => {
     for (const e of f.evidence) expect(f.affected!.urls).toContain(e.url);
   });
 
+  it('a group finding (duplicate title) lists every page of the group', async () => {
+    const routes: Record<string, Route> = {
+      '/': { body: page({ title: 'Home page of the dupes site', body: `<h1>Home</h1>${text(200)}<a href="/a">a</a><a href="/b">b</a><a href="/c">c</a>` }) },
+      '/a': { body: page({ title: 'Same title on three pages', body: `<h1>A</h1>${text(200)}` }) },
+      '/b': { body: page({ title: 'Same title on three pages', body: `<h1>B</h1>${text(210)}` }) },
+      '/c': { body: page({ title: 'Same title on three pages', body: `<h1>C</h1>${text(220)}` }) },
+    };
+    const s = await startServer(routes);
+    try {
+      const { report } = await auditWebsite(s.url + '/', { workspace: ws, crawl: { policy: { ...DEFAULT_POLICY, allowPrivate: true }, delayMs: 0 }, probes: false });
+      const f = report.findings.find((x) => x.ruleId === 'duplicate.title')!;
+      expect(f.evidence).toHaveLength(1);
+      expect(f.affected).toEqual({ count: 3, urls: [`${s.url}/a`, `${s.url}/b`, `${s.url}/c`] });
+    } finally {
+      await s.close();
+    }
+  });
+
   it('caps the list at 10,000 and counts the rest; never lists robots.txt or llms.txt', () => {
     const urls = Array.from({ length: AFFECTED_URL_CAP + 5 }, (_, i) => `https://e.com/p${i}`);
     const s = affectedSummary([...urls, 'https://e.com/robots.txt', 'https://e.com/llms.txt']);

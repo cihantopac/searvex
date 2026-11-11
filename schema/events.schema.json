@@ -1,0 +1,213 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/cihantopac/searvex/main/schema/events.schema.json",
+  "title": "Searvex progress event",
+  "description": "One line of --progress ndjson output on stderr. Schema version 1.0 (see docs/schema.md).",
+  "x-searvex-schema-version": "1.0",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "const": "start"
+        },
+        "time": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "event",
+        "time",
+        "version",
+        "command"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "const": "phase"
+        },
+        "time": {
+          "type": "string"
+        },
+        "phase": {
+          "$ref": "#/definitions/ProgressPhase"
+        }
+      },
+      "required": [
+        "event",
+        "time",
+        "phase"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "const": "page"
+        },
+        "time": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "status": {
+          "description": "HTTP status; 0 for a URL blocked by robots.txt or a network error.",
+          "type": "number"
+        },
+        "blocked": {
+          "description": "True when robots.txt disallows the URL (it was not requested).",
+          "type": "boolean"
+        },
+        "fetched": {
+          "description": "URLs requested so far / processed so far (fetched + blocked) / still queued.",
+          "type": "number"
+        },
+        "crawled": {
+          "type": "number"
+        },
+        "queued": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "event",
+        "time",
+        "url",
+        "status",
+        "blocked",
+        "fetched",
+        "crawled",
+        "queued"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "const": "finding-summary"
+        },
+        "time": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "bySeverity": {
+          "description": "Findings that count toward the score, by severity.",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "findings": {
+          "type": "number"
+        },
+        "affectedUrls": {
+          "type": "number"
+        },
+        "score": {
+          "type": [
+            "null",
+            "number"
+          ]
+        }
+      },
+      "required": [
+        "event",
+        "time",
+        "runId",
+        "status",
+        "bySeverity",
+        "findings",
+        "affectedUrls",
+        "score"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "const": "signal"
+        },
+        "time": {
+          "type": "string"
+        },
+        "signal": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "event",
+        "time",
+        "signal"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "const": "end"
+        },
+        "time": {
+          "type": "string"
+        },
+        "exitCode": {
+          "type": "number"
+        },
+        "reports": {
+          "description": "Report files written by the command.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "interrupted": {
+          "type": "string",
+          "enum": [
+            "max-duration",
+            "signal"
+          ]
+        }
+      },
+      "required": [
+        "event",
+        "time",
+        "exitCode",
+        "reports"
+      ]
+    }
+  ],
+  "definitions": {
+    "ProgressPhase": {
+      "description": "Structured progress (`--progress ndjson`): one JSON event per line on stderr, so an embedding system can follow a run while --json keeps stdout for the report. In this mode every stderr line is a JSON object: the plain log lines are suppressed and errors are written as the JSON error object (`{\"error\":…}`). The event shapes are part of the published schema (`searvex schema events`).",
+      "type": "string",
+      "enum": [
+        "analyze",
+        "crawl",
+        "report"
+      ]
+    }
+  }
+}

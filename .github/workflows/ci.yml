@@ -56,6 +56,8 @@ jobs:
       - run: npm run bundle
       - name: Committed plugin bundle matches sources
         run: git diff --exit-code -- dist/searvex.mjs
+      - name: Committed JSON Schemas match the TypeScript types
+        run: node scripts/schema.mjs --check
       - name: Third-party notices match the lockfile
         run: node scripts/third-party-notices.mjs --check
 

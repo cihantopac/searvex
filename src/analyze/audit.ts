@@ -15,9 +15,19 @@ import { prioritise } from './priority.js';
 import { checkExternalLinks, type ExternalLinkResult } from './external-links.js';
 import { failingMetrics, queryCrux, type CruxResult } from '../integrations/crux.js';
 import { annotateReport, type RootCauseGroup } from '../report/remediation.js';
+import { SCHEMA_VERSION } from '../contract.js';
 
 export interface AuditReport {
-  tool: { name: 'searvex'; version: string; rulesVersion: string };
+  /** Version of the report schema (`searvex schema report`); independent of the package version. Since 1.3.0. */
+  schemaVersion: typeof SCHEMA_VERSION;
+  tool: {
+    name: 'searvex';
+    version: string;
+    /** Newest version of all rule files (`knowledge/rules/*.json`). */
+    rulesVersion: string;
+    /** Version of the rule file of each rule that produced a finding. Since 1.3.0. */
+    rules?: Record<string, string>;
+  };
   mode: 'website' | 'repository';
   target: string;
   runId: string;
@@ -145,6 +155,16 @@ export function computeScores(findings: Array<Finding & { count: number }>, page
     byCategory,
     method: 'Searvex health score = 100 − Σ(severity weight × share of affected pages); heuristic findings weigh 50%; unmeasurable findings are excluded. It summarises Searvex findings and is not a search engine metric.',
   };
+}
+
+/** `tool` of a report: versions, and the rule-file version of every rule that produced a finding. */
+export function toolInfo(kb: KnowledgeBase, findings: Array<Pick<Finding, 'ruleId'>>): AuditReport['tool'] {
+  const rules: Record<string, string> = {};
+  for (const f of findings) {
+    const v = kb.ruleVersions?.get(f.ruleId);
+    if (v) rules[f.ruleId] = v;
+  }
+  return { name: 'searvex', version: SEARVEX_VERSION, rulesVersion: kb.version, rules };
 }
 
 /** Scores of a run that audited nothing: no overall score, no categories. */
@@ -289,7 +309,8 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
             : `To audit the site, allow the ${robotsAgent} user agent in robots.txt (on a staging build, for the test only), then run the audit again.`
         }`;
     return {
-      tool: { name: 'searvex', version: SEARVEX_VERSION, rulesVersion: kb.version },
+      schemaVersion: SCHEMA_VERSION,
+    tool: toolInfo(kb, findings),
       mode: 'website',
       target: result.startUrl,
       runId: result.runId,
@@ -353,7 +374,8 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
   if (!opts.checkExternal) limitations.push('Outbound links were not checked (use --check-external).');
   if (!result.pages.some((p) => p.rendered)) limitations.push('JavaScript was not executed (run with --render to compare rendered DOM); client-rendered content is only detected heuristically.');
   return {
-    tool: { name: 'searvex', version: SEARVEX_VERSION, rulesVersion: kb.version },
+    schemaVersion: SCHEMA_VERSION,
+    tool: toolInfo(kb, findings),
     mode: 'website',
     target: result.startUrl,
     runId: result.runId,

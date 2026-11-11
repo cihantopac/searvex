@@ -1,0 +1,1461 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/cihantopac/searvex/main/schema/report.schema.json",
+  "title": "Searvex report.json",
+  "description": "An audit report (website or repository mode) as written to report.json and printed by --json. Schema version 1.0 (see docs/schema.md).",
+  "x-searvex-schema-version": "1.0",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "description": "Version of the report schema (`searvex schema report`); independent of the package version. Since 1.3.0.",
+      "type": "string",
+      "const": "1.0"
+    },
+    "tool": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "const": "searvex"
+        },
+        "version": {
+          "type": "string"
+        },
+        "rulesVersion": {
+          "description": "Newest version of all rule files (`knowledge/rules/*.json`).",
+          "type": "string"
+        },
+        "rules": {
+          "description": "Version of the rule file of each rule that produced a finding. Since 1.3.0.",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "rulesVersion"
+      ]
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "repository",
+        "website"
+      ]
+    },
+    "target": {
+      "type": "string"
+    },
+    "runId": {
+      "type": "string"
+    },
+    "generatedAt": {
+      "type": "string"
+    },
+    "crawl": {
+      "type": "object",
+      "properties": {
+        "crawled": {
+          "type": "number"
+        },
+        "fetched": {
+          "type": "number"
+        },
+        "queuedRemaining": {
+          "type": "number"
+        },
+        "blocked": {
+          "type": "number"
+        },
+        "errors": {
+          "type": "number"
+        },
+        "durationMs": {
+          "type": "number"
+        },
+        "avgResponseMs": {
+          "type": "number"
+        },
+        "status": {
+          "description": "Website mode. `unreachable`: the start URL failed at the network level. `robots-blocked`: robots.txt (unreachable with 5xx/429, or disallowing every URL) blocked every queued URL, so no page was fetched. In both cases nothing was analysed: `scores.overall` is null and the CLI exits 4.",
+          "type": "string",
+          "enum": [
+            "complete",
+            "robots-blocked",
+            "unreachable"
+          ]
+        },
+        "error": {
+          "description": "Network error for an unreachable target.",
+          "type": "string"
+        },
+        "siteUrl": {
+          "description": "Public origin the crawled origin stands for (--site-url); URLs on it were mapped to the crawled origin.",
+          "type": "string"
+        },
+        "interrupted": {
+          "description": "The run was stopped early by SIGINT/SIGTERM (`signal`) or at --max-duration: the report covers only the pages fetched before (partial report, exit 5). Resume with --resume <runId>.",
+          "type": "string",
+          "enum": [
+            "max-duration",
+            "signal"
+          ]
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "startUrl": {
+          "type": "string"
+        },
+        "robots": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string"
+            },
+            "status": {
+              "type": "number"
+            },
+            "sitemaps": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "url",
+            "state",
+            "status",
+            "sitemaps"
+          ]
+        },
+        "sitemaps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sitemapUrls": {
+          "type": "number"
+        },
+        "sitemapIssues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sitemap": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "sitemap",
+              "message"
+            ]
+          }
+        }
+      },
+      "required": [
+        "crawled",
+        "fetched",
+        "queuedRemaining",
+        "blocked",
+        "errors",
+        "durationMs",
+        "avgResponseMs",
+        "truncated",
+        "startUrl",
+        "robots",
+        "sitemaps",
+        "sitemapUrls",
+        "sitemapIssues"
+      ]
+    },
+    "inventory": {
+      "$ref": "#/definitions/SiteInventory"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/definitions/Severity"
+          },
+          "confidence": {
+            "$ref": "#/definitions/Confidence"
+          },
+          "category": {
+            "$ref": "#/definitions/Category"
+          },
+          "engines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/Engine"
+            }
+          },
+          "message": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/Evidence"
+            }
+          },
+          "fix": {
+            "description": "Short actionable fix.",
+            "type": "string"
+          },
+          "autofixable": {
+            "description": "True when an automated, framework-aware code fix exists.",
+            "type": "boolean"
+          },
+          "priority": {
+            "description": "Impact-based priority (see analyze/priority.ts).",
+            "allOf": [
+              {
+                "$ref": "#/definitions/Priority"
+              }
+            ]
+          },
+          "templates": {
+            "description": "URL-pattern templates the affected pages belong to (\"fix once\" signal).",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string"
+                },
+                "pages": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "pattern",
+                "pages"
+              ]
+            }
+          },
+          "context": {
+            "description": "Pre-launch profile only: `environment` = depends on the test server, `launch-checklist` = a deliberate pre-launch state to change before going live. Either way the finding does not count toward the score, --fail-on or monitor regressions.",
+            "type": "string",
+            "enum": [
+              "environment",
+              "launch-checklist"
+            ]
+          },
+          "affected": {
+            "description": "Every affected URL (website) or file (repository) of this finding, sorted; `evidence` is only a sample of at most 50. `urls` is complete up to 10,000 entries, `truncated` counts the rest; with --compact only `count` is written. robots.txt and llms.txt locations are never listed (those findings are about the site). Since 1.3.0.",
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "number"
+              },
+              "urls": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "truncated": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "count"
+            ]
+          },
+          "ref": {
+            "description": "Stable reference of the finding: its rule id (a report has one finding per rule). Since 1.3.0.",
+            "type": "string"
+          },
+          "remediation": {
+            "description": "How it gets fixed: `auto` (a concrete Searvex patch exists in the linked repository), `agent` (needs code or content work) or `manual` (server, infrastructure, account or business decision). Since 1.3.0.",
+            "type": "string",
+            "enum": [
+              "agent",
+              "auto",
+              "manual"
+            ]
+          },
+          "count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "ruleId",
+          "title",
+          "severity",
+          "confidence",
+          "category",
+          "engines",
+          "message",
+          "evidence",
+          "count"
+        ]
+      }
+    },
+    "geo": {
+      "$ref": "#/definitions/GeoReport"
+    },
+    "content": {
+      "$ref": "#/definitions/ContentReport"
+    },
+    "scores": {
+      "$ref": "#/definitions/Scores"
+    },
+    "measurement": {
+      "type": "object",
+      "properties": {
+        "verified": {
+          "type": "number"
+        },
+        "heuristic": {
+          "type": "number"
+        },
+        "unmeasurable": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "verified",
+        "heuristic",
+        "unmeasurable"
+      ]
+    },
+    "fieldData": {
+      "description": "Real-user field data when a CrUX API key is configured.",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "ok"
+            },
+            "origin": {
+              "type": "string"
+            },
+            "metrics": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/CruxMetrics"
+              }
+            }
+          },
+          "required": [
+            "status",
+            "origin",
+            "metrics"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "error",
+                "no-data"
+              ]
+            },
+            "origin": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "origin",
+            "message"
+          ]
+        }
+      ]
+    },
+    "externalLinks": {
+      "$ref": "#/definitions/ExternalLinkResult"
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "affectedUrls": {
+      "description": "Distinct URLs (website) or locations (repository) with at least one non-informational finding.",
+      "type": "number"
+    },
+    "rendered": {
+      "description": "Whether JavaScript was executed for at least one page (`--render`).",
+      "type": "boolean"
+    },
+    "rootCauseGroups": {
+      "description": "Root-cause groups per rule id: occurrences of one rule split by URL template, source file, shared layout or site (see `rootCauseGroups`). Since 1.3.0.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/RootCauseGroup"
+        }
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "tool",
+    "mode",
+    "target",
+    "runId",
+    "generatedAt",
+    "crawl",
+    "inventory",
+    "findings",
+    "geo",
+    "content",
+    "scores",
+    "measurement",
+    "limitations"
+  ],
+  "definitions": {
+    "AnswerabilityScore": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "score": {
+          "description": "0–100. A heuristic clarity signal, NOT a prediction of AI citation or ranking.",
+          "type": "number"
+        },
+        "signals": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        }
+      },
+      "required": [
+        "url",
+        "score",
+        "signals"
+      ]
+    },
+    "Category": {
+      "type": "string",
+      "enum": [
+        "accessibility",
+        "architecture",
+        "canonicalization",
+        "content",
+        "crawlability",
+        "geo",
+        "indexability",
+        "international",
+        "links",
+        "metadata",
+        "mobile",
+        "performance",
+        "security",
+        "structured-data"
+      ]
+    },
+    "Confidence": {
+      "type": "string",
+      "enum": [
+        "heuristic",
+        "unmeasurable",
+        "verified"
+      ]
+    },
+    "ContentReport": {
+      "type": "object",
+      "properties": {
+        "topTerms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "term": {
+                "type": "string"
+              },
+              "pages": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "term",
+              "pages"
+            ]
+          }
+        },
+        "pageTerms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string"
+              },
+              "terms": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "url",
+              "terms"
+            ]
+          }
+        },
+        "clusters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "pages": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "terms": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "key",
+              "pages",
+              "terms"
+            ]
+          }
+        },
+        "cannibalization": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "terms": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "pages": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "terms",
+              "pages"
+            ]
+          }
+        },
+        "nearDuplicates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "a": {
+                "type": "string"
+              },
+              "b": {
+                "type": "string"
+              },
+              "similarity": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "a",
+              "b",
+              "similarity"
+            ]
+          }
+        },
+        "exactDuplicates": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "linkOpportunities": {
+          "description": "Topically related indexable pages that do not link to each other (suggested direction from → to).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "similarity": {
+                "type": "number"
+              },
+              "sharedTerms": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "toInlinks": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "from",
+              "to",
+              "similarity",
+              "sharedTerms",
+              "toInlinks"
+            ]
+          }
+        }
+      },
+      "required": [
+        "topTerms",
+        "pageTerms",
+        "clusters",
+        "cannibalization",
+        "nearDuplicates",
+        "exactDuplicates"
+      ]
+    },
+    "CruxMetrics": {
+      "description": "Chrome UX Report (CrUX) API — real-user Core Web Vitals field data (p75, 28-day window). Opt-in: a free Google Cloud API key with the CrUX API enabled (`searvex crux auth`, or SEARVEX_CRUX_API_KEY). Only the origin (or page URL) is sent to Google. Docs: https://developer.chrome.com/docs/crux/api Thresholds (\"good\"): LCP ≤ 2500 ms, INP ≤ 200 ms, CLS ≤ 0.1 — https://web.dev/articles/vitals",
+      "type": "object",
+      "properties": {
+        "formFactor": {
+          "type": "string",
+          "enum": [
+            "ALL",
+            "DESKTOP",
+            "PHONE"
+          ]
+        },
+        "lcpMs": {
+          "type": "number"
+        },
+        "inpMs": {
+          "type": "number"
+        },
+        "cls": {
+          "type": "number"
+        },
+        "collectionPeriod": {
+          "type": "object",
+          "properties": {
+            "first": {
+              "type": "string"
+            },
+            "last": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "first",
+            "last"
+          ]
+        }
+      },
+      "required": [
+        "formFactor"
+      ]
+    },
+    "Engine": {
+      "description": "Core domain types shared by every Searvex module. Design rule: every finding must carry evidence and must say how certain it is. \"verified\" means it was observed directly (HTTP response, parsed HTML, file on disk). \"heuristic\" means it is an inference from observed data and may be wrong. \"unmeasurable\" is used when a metric cannot be measured with the data available (for example real AI citations without a platform integration).",
+      "type": "string",
+      "enum": [
+        "ai",
+        "all",
+        "bing",
+        "google",
+        "yandex"
+      ]
+    },
+    "Evidence": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "number"
+        },
+        "observed": {
+          "description": "Short excerpt or observed value. Never contains secrets.",
+          "type": "string"
+        },
+        "expected": {
+          "type": "string"
+        },
+        "ref": {
+          "description": "Stable reference of this occurrence, `<ruleId>#<hash of url|file|line>` (the one the HTML report, repair prompts and `searvex review` use). Set on reports written since 1.3.0.",
+          "type": "string"
+        }
+      }
+    },
+    "ExternalLinkResult": {
+      "type": "object",
+      "properties": {
+        "checked": {
+          "type": "number"
+        },
+        "broken": {
+          "type": "number"
+        },
+        "skippedByRobots": {
+          "type": "number"
+        },
+        "skippedOverLimit": {
+          "type": "number"
+        },
+        "skippedByPolicy": {
+          "description": "Links the network policy forbids (private address, --deny-host, --allow-host, --ports); not checked.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "checked",
+        "broken",
+        "skippedByRobots",
+        "skippedOverLimit"
+      ]
+    },
+    "GeoReport": {
+      "type": "object",
+      "properties": {
+        "bots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "token": {
+                "type": "string"
+              },
+              "operator": {
+                "type": "string"
+              },
+              "purpose": {
+                "type": "string"
+              },
+              "allowed": {
+                "type": "boolean"
+              },
+              "explicit": {
+                "type": "boolean"
+              },
+              "docs": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "token",
+              "operator",
+              "purpose",
+              "allowed",
+              "explicit",
+              "docs"
+            ]
+          }
+        },
+        "llmsTxt": {
+          "$ref": "#/definitions/LlmsTxtStatus"
+        },
+        "entityNames": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "answerability": {
+          "type": "object",
+          "properties": {
+            "average": {
+              "type": "number"
+            },
+            "pages": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/AnswerabilityScore"
+              }
+            }
+          },
+          "required": [
+            "average",
+            "pages"
+          ]
+        },
+        "snippetRestricted": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "citations": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "measured": {
+                  "type": "boolean",
+                  "const": false
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "measured",
+                "reason"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "measured": {
+                  "type": "boolean",
+                  "const": true
+                },
+                "source": {
+                  "type": "string"
+                },
+                "rows": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "measured",
+                "source",
+                "rows"
+              ]
+            }
+          ]
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "bots",
+        "entityNames",
+        "answerability",
+        "snippetRestricted",
+        "citations",
+        "notes"
+      ]
+    },
+    "InventoryPage": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/definitions/PageType"
+        },
+        "basis": {
+          "description": "How the type was decided: \"schema\" is strongest, \"url\" is a pattern guess.",
+          "type": "string",
+          "enum": [
+            "default",
+            "schema",
+            "url"
+          ]
+        },
+        "lang": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "type": "number"
+        },
+        "indexable": {
+          "type": "boolean"
+        },
+        "depth": {
+          "type": "number"
+        },
+        "inlinks": {
+          "type": "number"
+        },
+        "words": {
+          "type": "number"
+        },
+        "intent": {
+          "description": "Intent the page type is built for (inferred, never measured).",
+          "type": "string",
+          "enum": [
+            "commercial",
+            "informational",
+            "navigational",
+            "transactional"
+          ]
+        }
+      },
+      "required": [
+        "url",
+        "type",
+        "basis",
+        "lang",
+        "title",
+        "status",
+        "indexable",
+        "depth",
+        "inlinks",
+        "words"
+      ]
+    },
+    "LlmsTxtStatus": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "number"
+        },
+        "bytes": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "url",
+        "present",
+        "status",
+        "bytes"
+      ]
+    },
+    "PageType": {
+      "type": "string",
+      "enum": [
+        "about",
+        "author",
+        "blog-index",
+        "blog-post",
+        "careers",
+        "category",
+        "contact",
+        "docs",
+        "home",
+        "landing",
+        "legal",
+        "other",
+        "pricing",
+        "product",
+        "search",
+        "service",
+        "tag-archive"
+      ]
+    },
+    "Priority": {
+      "type": "object",
+      "properties": {
+        "score": {
+          "description": "0–100; higher = fix first.",
+          "type": "number"
+        },
+        "bucket": {
+          "type": "string",
+          "enum": [
+            "P1",
+            "P2",
+            "P3"
+          ]
+        },
+        "reach": {
+          "description": "Importance-weighted share of indexable pages affected (0–1); 1 for site-wide findings.",
+          "type": "number"
+        },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "high",
+            "low",
+            "medium"
+          ]
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "score",
+        "bucket",
+        "reach",
+        "effort",
+        "reasons"
+      ]
+    },
+    "RootCauseGroup": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`<ruleId>@<key>`; stable for the same rule and template/file.",
+          "type": "string"
+        },
+        "ruleId": {
+          "type": "string"
+        },
+        "key": {
+          "description": "URL template (`/blog/*`), source file, `layout` (most page types at once) or `site` for site-wide findings.",
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "file",
+            "layout",
+            "site",
+            "template"
+          ]
+        },
+        "pages": {
+          "description": "Affected pages/locations in this group (all of them, not only the evidence sample).",
+          "type": "number"
+        },
+        "evidence": {
+          "description": "Indexes into the finding's `evidence` array.",
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "langs": {
+          "description": "Languages of the affected pages (website mode), when known.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "ruleId",
+        "key",
+        "kind",
+        "pages",
+        "evidence",
+        "langs"
+      ]
+    },
+    "Scores": {
+      "type": "object",
+      "properties": {
+        "overall": {
+          "description": "0–100. Searvex health score: a summary of Searvex findings, NOT a search engine metric. `null` when `notApplicable` is set (nothing was audited).",
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "byCategory": {
+          "type": "object",
+          "properties": {
+            "crawlability": {
+              "type": "number"
+            },
+            "indexability": {
+              "type": "number"
+            },
+            "canonicalization": {
+              "type": "number"
+            },
+            "international": {
+              "type": "number"
+            },
+            "metadata": {
+              "type": "number"
+            },
+            "content": {
+              "type": "number"
+            },
+            "links": {
+              "type": "number"
+            },
+            "structured-data": {
+              "type": "number"
+            },
+            "performance": {
+              "type": "number"
+            },
+            "mobile": {
+              "type": "number"
+            },
+            "accessibility": {
+              "type": "number"
+            },
+            "security": {
+              "type": "number"
+            },
+            "geo": {
+              "type": "number"
+            },
+            "architecture": {
+              "type": "number"
+            }
+          }
+        },
+        "method": {
+          "type": "string"
+        },
+        "notApplicable": {
+          "description": "Why nothing could be audited (unreachable or robots-blocked target, repository without a website); `overall` is then null.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "`pre-launch`: environment and launch-checklist findings were excluded (--pre-launch).",
+          "type": "string",
+          "const": "pre-launch"
+        }
+      },
+      "required": [
+        "overall",
+        "byCategory",
+        "method"
+      ]
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "critical",
+        "high",
+        "info",
+        "low",
+        "medium"
+      ]
+    },
+    "SiteInventory": {
+      "type": "object",
+      "properties": {
+        "pages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InventoryPage"
+          }
+        },
+        "byType": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "intents": {
+          "description": "Pages per inferred intent (from page type).",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "languages": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "hreflangLanguages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "statusCodes": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "unfetched": {
+          "description": "Every crawled URL that is not in `pages` (which lists only HTML pages that answered 200 without a redirect), in crawl order, so a consumer can account for every URL the crawl touched. Capped at `UNFETCHED_CAP`; `unfetchedTotal` is the full count. Absent in reports written before 1.3.0.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/UnfetchedUrl"
+          }
+        },
+        "unfetchedTotal": {
+          "type": "number"
+        },
+        "businessModel": {
+          "description": "Heuristic classification with the signals that produced it and runner-up labels.",
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "confidence": {
+              "type": "string",
+              "enum": [
+                "high",
+                "low",
+                "medium"
+              ]
+            },
+            "alternatives": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "score": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "label",
+                  "score"
+                ]
+              }
+            }
+          },
+          "required": [
+            "label",
+            "evidence"
+          ]
+        },
+        "offerings": {
+          "description": "Products / services / apps declared in structured data (names, kinds, prices as declared).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "price": {
+                "type": "string"
+              },
+              "currency": {
+                "type": "string"
+              },
+              "pages": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "name",
+              "kind",
+              "pages"
+            ]
+          }
+        },
+        "relations": {
+          "description": "Organisation relationships declared in structured data (brand family / ecosystem).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "relation": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "toUrl": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "from",
+              "relation",
+              "to"
+            ]
+          }
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "pages": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "path",
+              "pages"
+            ]
+          }
+        },
+        "structuredData": {
+          "description": "Structured data actually present on crawled pages, by type.",
+          "type": "object",
+          "properties": {
+            "types": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "pages": {
+                    "type": "number"
+                  },
+                  "formats": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "json-ld",
+                        "microdata",
+                        "rdfa"
+                      ]
+                    }
+                  },
+                  "example": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "pages",
+                  "formats",
+                  "example"
+                ]
+              }
+            },
+            "pagesWithStructuredData": {
+              "type": "number"
+            },
+            "invalidJsonLdPages": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "types",
+            "pagesWithStructuredData",
+            "invalidJsonLdPages"
+          ]
+        }
+      },
+      "required": [
+        "pages",
+        "byType",
+        "languages",
+        "hreflangLanguages",
+        "statusCodes",
+        "businessModel",
+        "sections",
+        "structuredData"
+      ]
+    },
+    "UnfetchedUrl": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "status": {
+          "description": "HTTP status; 0 when no response was received (robots.txt block or network error).",
+          "type": "number"
+        },
+        "reason": {
+          "description": "`robots-blocked`: not requested because robots.txt disallows it. `error`: no usable response (network, TLS, timeout, redirect loop). `redirect`: answered with a redirect (the target is crawled as its own URL). `non-200`: any other status than 200 (4xx, 5xx, …). `not-html`: 200 with a non-HTML body. `policy-blocked`: the network policy forbids it (private address, --deny-host, --allow-host, --ports).",
+          "type": "string",
+          "enum": [
+            "error",
+            "non-200",
+            "not-html",
+            "policy-blocked",
+            "redirect",
+            "robots-blocked"
+          ]
+        },
+        "detail": {
+          "description": "Error message, or the redirect target.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "status",
+        "reason"
+      ]
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/cihantopac/searvex/main/schema/error.schema.json",
+  "title": "Searvex error object",
+  "description": "The JSON error line written on stderr with --json or --progress ndjson. Schema version 1.0 (see docs/schema.md).",
+  "x-searvex-schema-version": "1.0",
+  "type": "object",
+  "properties": {
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "Process exit code: 2 usage/policy, 3 runtime, 4 not analysable, 5 interrupted.",
+          "type": "number"
+        },
+        "kind": {
+          "$ref": "#/definitions/ErrorKind"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "kind",
+        "message"
+      ]
+    }
+  },
+  "required": [
+    "error"
+  ],
+  "definitions": {
+    "ErrorKind": {
+      "description": "`kind` of the JSON error object written to stderr with --json (see `errorLine`).",
+      "type": "string",
+      "enum": [
+        "interrupted",
+        "policy",
+        "robots-blocked",
+        "runtime",
+        "unreachable",
+        "usage"
+      ]
+    }
+  }
+}

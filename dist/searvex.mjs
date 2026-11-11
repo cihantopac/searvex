@@ -35391,6 +35391,7 @@ function loadKnowledge(dir = defaultKnowledgeDir()) {
   const rulesDir = path2.join(dir, "rules");
   const files = fs2.readdirSync(rulesDir).filter((f) => f.endsWith(".json")).sort();
   const rules = /* @__PURE__ */ new Map();
+  const ruleVersions = /* @__PURE__ */ new Map();
   let version = "0.0.0";
   for (const f of files) {
     const data2 = JSON.parse(fs2.readFileSync(path2.join(rulesDir, f), "utf8"));
@@ -35398,9 +35399,10 @@ function loadKnowledge(dir = defaultKnowledgeDir()) {
     for (const r of data2.rules) {
       if (rules.has(r.id)) throw new Error(`Duplicate rule id ${r.id} in ${f}`);
       rules.set(r.id, r);
+      ruleVersions.set(r.id, data2.version);
     }
   }
-  return { version, rules, files };
+  return { version, rules, files, ruleVersions };
 }
 function validateKnowledge(kb, opts = {}) {
   const issues = [];
@@ -35500,6 +35502,15 @@ var FindingSink = class {
       count: list.length
     };
     this.byRule.set(ruleId, f);
+  }
+  /**
+   * Record more affected URLs/files for a rule without adding evidence: one evidence item can stand for a group
+   * (all pages sharing a duplicate title), while `affected` must list every page of the group.
+   */
+  markAffected(ruleId, locations) {
+    const affected = this.affectedByRule.get(ruleId);
+    if (!affected) return;
+    for (const l of locations) if (affected.size < 1e5) affected.add(l);
   }
   affected(ruleId) {
     return [...this.affectedByRule.get(ruleId) ?? []];
@@ -36282,7 +36293,10 @@ function runContentChecks(ctx, sink) {
     else byHash.set(h, [p.url]);
   }
   const exactDuplicates = [...byHash.values()].filter((g) => g.length > 1);
-  for (const g of exactDuplicates) sink.emit("duplicate.content", { url: g[0], observed: `identical text on ${g.length} URLs: ${g.slice(0, 5).join(", ")}` });
+  for (const g of exactDuplicates) {
+    sink.emit("duplicate.content", { url: g[0], observed: `identical text on ${g.length} URLs: ${g.slice(0, 5).join(", ")}` });
+    sink.markAffected("duplicate.content", g);
+  }
   const allSh = /* @__PURE__ */ new Map();
   for (const { p, f } of pages) {
     const words2 = f.mainText.toLowerCase().split(/\s+/).filter(Boolean);
@@ -36399,7 +36413,10 @@ function runContentChecks(ctx, sink) {
     const common = [...sets[0]].filter((t) => sets.every((x) => x.has(t)));
     return { terms: (common.length ? common : [...sets[0]]).slice(0, 4), pages: g };
   });
-  for (const c of cannibalization) sink.emit("content.cannibalization", { url: c.pages[0], observed: `"${c.terms.join(" ")}" shared by ${c.pages.length} pages: ${c.pages.slice(0, 5).join(", ")}` });
+  for (const c of cannibalization) {
+    sink.emit("content.cannibalization", { url: c.pages[0], observed: `"${c.terms.join(" ")}" shared by ${c.pages.length} pages: ${c.pages.slice(0, 5).join(", ")}` });
+    sink.markAffected("content.cannibalization", c.pages);
+  }
   const clusterMap = /* @__PURE__ */ new Map();
   for (const { p } of pages) {
     const seg = new URL(p.finalUrl).pathname.split("/").filter(Boolean)[0] ?? "(root)";
@@ -36809,8 +36826,16 @@ function runTechnicalChecks(ctx, sink) {
     if (selfCanon && !noindex) checkHreflang(ctx, p.url, f, sink);
     checkStructuredData(p.url, f, sink, p === ctx.homepage, p === ctx.homepage ? personalSiteSignal(f.title, ctx.htmlPages.map((x) => x.url)) : void 0);
   }
-  for (const [title, urls] of titleMap) if (urls.length > 1) sink.emit("duplicate.title", { url: urls[0], observed: `"${title.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(", ")}` });
-  for (const [desc, urls] of descMap) if (urls.length > 1) sink.emit("duplicate.description", { url: urls[0], observed: `"${desc.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(", ")}` });
+  for (const [title, urls] of titleMap) {
+    if (urls.length < 2) continue;
+    sink.emit("duplicate.title", { url: urls[0], observed: `"${title.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(", ")}` });
+    sink.markAffected("duplicate.title", urls);
+  }
+  for (const [desc, urls] of descMap) {
+    if (urls.length < 2) continue;
+    sink.emit("duplicate.description", { url: urls[0], observed: `"${desc.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(", ")}` });
+    sink.markAffected("duplicate.description", urls);
+  }
   for (const [target, sources] of ctx.inlinks) {
     const rec = resolveRecord(ctx, target);
     if (new URL(target).pathname.startsWith("/cdn-cgi/")) continue;
@@ -37675,6 +37700,9 @@ function rootCauseGroups(r) {
   return out;
 }
 
+// src/contract.ts
+var SCHEMA_VERSION = "1.0";
+
 // src/analyze/audit.ts
 function notAnalysed(r) {
   return r.crawl.status === "unreachable" || r.crawl.status === "robots-blocked";
@@ -37718,6 +37746,14 @@ function computeScores(findings, pageCount) {
     byCategory,
     method: "Searvex health score = 100 \u2212 \u03A3(severity weight \xD7 share of affected pages); heuristic findings weigh 50%; unmeasurable findings are excluded. It summarises Searvex findings and is not a search engine metric."
   };
+}
+function toolInfo(kb, findings) {
+  const rules = {};
+  for (const f of findings) {
+    const v = kb.ruleVersions?.get(f.ruleId);
+    if (v) rules[f.ruleId] = v;
+  }
+  return { name: "searvex", version: SEARVEX_VERSION, rulesVersion: kb.version, rules };
 }
 function notApplicableScores(reason) {
   return { ...computeScores([], 1), overall: null, notApplicable: reason };
@@ -37814,7 +37850,8 @@ async function analyzeCrawl(result, kb, opts = {}) {
     const why = unreachable ? `target unreachable (${unreachable.error})` : robotsBlockReason(result, robotsAgent);
     const limitation = unreachable ? `The start URL could not be reached (${unreachable.error}); no page was fetched, so this report contains no findings about the site. Check the URL, DNS, the network or the server, then run the audit again.` : `No page was fetched: ${why}, so all ${result.pages.length} queued URL(s) were skipped and this report contains no findings about the pages. ${result.robots.state === "unreachable" ? "Make /robots.txt return 200 (with rules) or 404 (no rules), then run the audit again." : `To audit the site, allow the ${robotsAgent} user agent in robots.txt (on a staging build, for the test only), then run the audit again.`}`;
     return {
-      tool: { name: "searvex", version: SEARVEX_VERSION, rulesVersion: kb.version },
+      schemaVersion: SCHEMA_VERSION,
+      tool: toolInfo(kb, findings2),
       mode: "website",
       target: result.startUrl,
       runId: result.runId,
@@ -37877,7 +37914,8 @@ async function analyzeCrawl(result, kb, opts = {}) {
   if (!opts.checkExternal) limitations.push("Outbound links were not checked (use --check-external).");
   if (!result.pages.some((p) => p.rendered)) limitations.push("JavaScript was not executed (run with --render to compare rendered DOM); client-rendered content is only detected heuristically.");
   return {
-    tool: { name: "searvex", version: SEARVEX_VERSION, rulesVersion: kb.version },
+    schemaVersion: SCHEMA_VERSION,
+    tool: toolInfo(kb, findings),
     mode: "website",
     target: result.startUrl,
     runId: result.runId,
@@ -40248,7 +40286,7 @@ function repairPromptInput(r, kb, extras, sel) {
 }
 
 // src/cli.ts
-import { pathToFileURL } from "node:url";
+import { fileURLToPath as fileURLToPath2, pathToFileURL } from "node:url";
 
 // src/report/sarif.ts
 var LEVEL = { critical: "error", high: "error", medium: "warning", low: "note", info: "none" };
@@ -40491,7 +40529,6 @@ import path14 from "node:path";
 
 // src/repo/audit.ts
 import path13 from "node:path";
-init_fetcher();
 
 // src/repo/scan.ts
 import path12 from "node:path";
@@ -41320,7 +41357,8 @@ function auditRepository(root2, opts = {}) {
   if (scan.skipped.symlinks) limitations.push(`${scan.skipped.symlinks} symlink(s) were not followed.`);
   if (scan.skipped.truncated) limitations.push("File limit reached; repository scan is partial.");
   const report = {
-    tool: { name: "searvex", version: SEARVEX_VERSION, rulesVersion: kb.version },
+    schemaVersion: SCHEMA_VERSION,
+    tool: toolInfo(kb, findings),
     mode: "repository",
     target: path13.resolve(root2),
     runId: "repository",
@@ -43005,6 +43043,9 @@ Commands
                         Record an agent/human review of a finding next to the audit (evidence is kept)
   prompt <runId|latest>  Print the repair prompt the HTML report builds, for every issue or --rules a,b
                         (--lang en|tr, --format md|json); secrets are redacted the same way
+  schema [report|events|error]
+                        Print the JSON Schema of report.json, --progress ndjson events or the --json
+                        error object (default: report)
   runs                  List stored runs
 
 Common options
@@ -43570,6 +43611,15 @@ function commandPrompt(flags) {
   else process.stdout.write(prompt.endsWith("\n") ? prompt : prompt + "\n");
   return EXIT.ok;
 }
+function commandSchema(flags) {
+  const name = flags.positionals[1] ?? "report";
+  if (!["report", "events", "error"].includes(name)) throw new UsageError(`Unknown schema: ${name} (report, events or error)`);
+  const here = path22.dirname(fileURLToPath2(import.meta.url));
+  const file2 = [path22.resolve(here, "..", "schema", `${name}.schema.json`), path22.resolve(here, "..", "..", "schema", `${name}.schema.json`)].find((f) => fs16.existsSync(f));
+  if (!file2) throw new Error(`schema/${name}.schema.json is missing from this installation`);
+  process.stdout.write(fs16.readFileSync(file2, "utf8"));
+  return EXIT.ok;
+}
 function commandRuns(flags) {
   const workspace = path22.resolve(String(flags.values["out"] ?? process.cwd()));
   for (const id of RunStore.list(workspace)) {
@@ -43646,6 +43696,8 @@ async function runCommand(cmd, flags) {
         return commandReview(flags);
       case "prompt":
         return commandPrompt(flags);
+      case "schema":
+        return commandSchema(flags);
       default:
         throw new UsageError(`Unknown command: ${cmd}`);
     }

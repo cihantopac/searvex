@@ -40,6 +40,12 @@ All notable changes to this project are documented here. The format follows
   contacts. Enforced on every request and redirect hop, in the connection-time DNS lookup, in the `--render`
   policy proxy and before `--check-external`. A denied target is policy-blocked (exit `2`); other denied URLs are
   skipped (`inventory.unfetched` reason `policy-blocked`).
+- Versioned output contract: `report.json` has `schemaVersion: "1.0"`; JSON Schemas (draft-07) for the report,
+  the progress events and the error object are generated from the TypeScript types, shipped in `schema/` and
+  printed by `searvex schema [report|events|error]`. Policy in `docs/schema.md`: additive change = minor schema
+  version, breaking change = major, independent of the package version.
+- `tool.rules`: the rule-file version of every rule that produced a finding (`tool.rulesVersion` stays the newest
+  of all files).
 - The crawl checkpoint is written at the start and every 25 pages or 10 seconds, so `--resume` works after an early
   kill; resuming no longer fetches pages stored after the last checkpoint again and still follows their links.
 - `--render`: Playwright no longer kills the browser on SIGINT/SIGTERM under pages that are still rendering;

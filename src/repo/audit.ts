@@ -1,5 +1,6 @@
 import path from 'node:path';
-import { computeScores, countAffected, notApplicableScores, type AuditReport } from '../analyze/audit.js';
+import { computeScores, countAffected, notApplicableScores, toolInfo, type AuditReport } from '../analyze/audit.js';
+import { SCHEMA_VERSION } from '../contract.js';
 
 const NOTHING_TO_AUDIT = 'No website found: the repository has no web framework, HTML pages or server templates that Searvex can audit (tests, fixtures, examples and benchmarks are ignored). Point Searvex at the folder of the site, or at its deployed URL.';
 import { buildContext } from '../analyze/context.js';
@@ -85,7 +86,8 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
   if (scan.skipped.truncated) limitations.push('File limit reached; repository scan is partial.');
 
   const report: AuditReport = {
-    tool: { name: 'searvex', version: SEARVEX_VERSION, rulesVersion: kb.version },
+    schemaVersion: SCHEMA_VERSION,
+    tool: toolInfo(kb, findings),
     mode: 'repository',
     target: path.resolve(root),
     runId: 'repository',

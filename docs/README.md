@@ -7,6 +7,8 @@
 | [architecture.md](architecture.md) | Modules, data flow, key decisions, extension points |
 | [knowledge-base.md](knowledge-base.md) | Rule schema, validation, update process, myth firewall |
 | [cli.md](cli.md) | Command and option reference |
+| [schema.md](schema.md) | Output contract: JSON Schemas, schema versioning, stable identifiers |
+| [design/proxy.md](design/proxy.md) | Design note: upstream proxy (awaiting approval) |
 | [quality.md](quality.md) | Quality criteria, test results, real-world validation, benchmarks |
 | [security.md](security.md) · [privacy.md](privacy.md) | Security model and data handling |
 | [limitations.md](limitations.md) | Known limits and unsupported scenarios |

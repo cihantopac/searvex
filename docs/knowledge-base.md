@@ -69,6 +69,13 @@ First run (2026-10-30): 14 sources redirected — Google moved its crawling docu
 hops, 429 handling, 15 MB fetch limit, Google-Extended not affecting Search) were re-verified on the new pages
 before the URLs were updated.
 
+## Versions in reports
+
+Each rule file has its own `version`. A report's `tool.rulesVersion` is the **newest** of the per-file versions,
+so it changes whenever any file changes. Since 1.3.0, `tool.rules` maps every rule that produced a finding to the
+`version` of its file: a consumer pinned to a rule set can see which definitions behind its findings changed,
+without re-reading the whole knowledge base.
+
 ## Updating the knowledge base
 
 1. Re-read each source (prioritise `excerpt` and `url-resolved` levels and anything older than 6 months).
