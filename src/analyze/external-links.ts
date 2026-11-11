@@ -1,5 +1,6 @@
 import { fetchRobots, type RobotsInfo } from '../crawl/robots.js';
 import { HostRateLimiter, safeFetch, type FetchOptions } from '../net/fetcher.js';
+import { assertUrlAllowed, DEFAULT_POLICY } from '../net/ssrf.js';
 import type { FindingSink } from '../rules/engine.js';
 import { factsOf, type SiteContext } from './context.js';
 
@@ -8,6 +9,8 @@ export interface ExternalLinkResult {
   broken: number;
   skippedByRobots: number;
   skippedOverLimit: number;
+  /** Links the network policy forbids (private address, --deny-host, --allow-host, --ports); not checked. */
+  skippedByPolicy?: number;
 }
 
 /**
@@ -26,6 +29,13 @@ export async function checkExternalLinks(ctx: SiteContext, sink: FindingSink, op
   const queue = urls.slice(0, limit);
   const worker = async () => {
     for (let u = queue.shift(); u; u = queue.shift()) {
+      // A link the network policy forbids (private address, --deny-host, --allow-host, --ports) is not checked.
+      try {
+        assertUrlAllowed(u, opts.policy ?? DEFAULT_POLICY);
+      } catch {
+        result.skippedByPolicy = (result.skippedByPolicy ?? 0) + 1;
+        continue;
+      }
       const origin = new URL(u).origin;
       let robots = robotsCache.get(origin);
       if (!robots) robotsCache.set(origin, (robots = await fetchRobots(origin, opts)));
@@ -39,6 +49,11 @@ export async function checkExternalLinks(ctx: SiteContext, sink: FindingSink, op
       if (res.error || res.status >= 400) {
         await limiter.wait(new URL(u).host);
         res = await safeFetch(u, { ...opts, maxBytes: 64 * 1024 });
+      }
+      if (res.error?.startsWith('Blocked: ')) {
+        // The host resolved to an address the policy forbids.
+        result.skippedByPolicy = (result.skippedByPolicy ?? 0) + 1;
+        continue;
       }
       result.checked++;
       // 401/403/429 often mean bot protection, not a broken link: do not report them as broken.

@@ -59,7 +59,8 @@ Searvex reports what it can observe and labels everything else. Known limits (v1
 - `--pre-launch` evaluates noindex pages as if they were indexable and moves tagged findings out of the score.
   Rules are tagged in the knowledge base (`environment`), not detected from the server, so on a production site
   the profile would hide real HTTPS, compression and noindex problems: use it only for builds that are not live.
-- Host allow/deny lists, a port list and an upstream proxy cannot be set from the CLI yet (planned).
+- There is no upstream (corporate) proxy support yet; the design is in [design/proxy.md](design/proxy.md) and awaits
+  approval.
 
 ## Repository mode
 

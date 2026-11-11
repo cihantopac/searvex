@@ -15,6 +15,29 @@ export interface NetPolicy {
   schemes: ReadonlyArray<string>;
   /** Allowed ports (empty = any). */
   ports: ReadonlyArray<number>;
+  /**
+   * Host globs (`--allow-host`): when non-empty, only matching hosts may be contacted. `*` matches any run of
+   * characters, dots included; matching ignores case and a trailing dot. `*.example.com` does not match
+   * `example.com` itself.
+   */
+  allowHosts?: ReadonlyArray<string>;
+  /** Host globs (`--deny-host`) that may never be contacted; they win over `allowHosts`. */
+  denyHosts?: ReadonlyArray<string>;
+}
+
+/** Whether `host` matches a host glob (see `NetPolicy.allowHosts`). */
+export function hostMatches(host: string, glob: string): boolean {
+  const norm = (s: string) => s.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+  const re = new RegExp(`^${norm(glob).split('*').map((p) => p.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`);
+  return re.test(norm(host));
+}
+
+/** Why the host/port lists of the policy forbid `host`, or null when they allow it. */
+export function hostPolicyViolation(host: string, policy: NetPolicy): string | null {
+  const deny = policy.denyHosts?.find((g) => hostMatches(host, g));
+  if (deny) return `Host denied by --deny-host ${deny}: ${host}`;
+  if (policy.allowHosts?.length && !policy.allowHosts.some((g) => hostMatches(host, g))) return `Host not in --allow-host: ${host}`;
+  return null;
 }
 
 export const DEFAULT_POLICY: NetPolicy = {
@@ -142,8 +165,10 @@ export function assertUrlAllowed(raw: string, policy: NetPolicy): URL {
   if (!policy.schemes.includes(u.protocol)) throw new BlockedUrlError(`Scheme not allowed: ${u.protocol}`, raw);
   if (u.username || u.password) throw new BlockedUrlError('URLs with embedded credentials are not allowed', raw);
   const port = u.port ? Number(u.port) : u.protocol === 'https:' ? 443 : 80;
-  if (policy.ports.length && !policy.ports.includes(port)) throw new BlockedUrlError(`Port not allowed: ${port}`, raw);
+  if (policy.ports.length && !policy.ports.includes(port)) throw new BlockedUrlError(`Port not allowed by --ports: ${port}`, raw);
   const host = u.hostname.replace(/^\[|\]$/g, '');
+  const violation = hostPolicyViolation(host, policy);
+  if (violation) throw new BlockedUrlError(violation, raw);
   if (isIP(host) && !isAddressAllowed(host, policy)) {
     throw new BlockedUrlError(`Address not allowed (${classifyAddress(host)}): ${host}`, raw);
   }

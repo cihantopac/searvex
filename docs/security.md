@@ -9,6 +9,7 @@ injection). Defaults are read-only and deny-by-default.
 | Threat | Control | Test |
 |---|---|---|
 | SSRF to internal services / cloud metadata | Scheme allowlist (http/https), no credentials in URLs, IP classification for v4, v6, IPv4-mapped, NAT64, 6to4, Teredo; loopback/private blocked unless `--allow-private`; **link-local (169.254.0.0/16, fe80::/10 — cloud metadata) always blocked**; `.local`, `.internal`, `localhost` names blocked (also with a trailing dot) | `test/unit/ssrf.test.ts` |
+| Scope of contacted hosts | `--allow-host` / `--deny-host` globs and `--ports` are checked statically on every URL and redirect hop, again in the connection-time lookup, in the `--render` policy proxy and before `--check-external`; a denied target is a usage error, other denied URLs are skipped (never reported as broken) | `test/integration/net-policy.test.ts` |
 | DNS rebinding | Address validated inside the socket `lookup` hook — the exact address connected to; any disallowed address in the answer set rejects the request; sockets are not reused (`agent: false`) | connection-time loopback test |
 | Redirect to internal address | Redirects followed manually; every hop re-validated; loops and >10 hops stopped | redirect tests |
 | Resource exhaustion | Response size cap (5 MB pages, 50 MB sitemaps, 500 KiB robots), timeouts, page/depth limits, sitemap count/URL caps | size/timeout tests |

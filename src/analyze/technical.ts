@@ -93,8 +93,9 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     }
     if (p.error) {
       const loop = p.error.includes('redirect') || p.error.includes('Redirect');
-      // A failing start URL is already reported once as http.start-url-error.
-      if (loop || p !== start) sink.emit(loop ? 'redirect.loop' : 'http.fetch-error', { url: p.url, observed: p.error });
+      // A failing start URL is already reported once as http.start-url-error; a URL the network policy
+      // forbids (--deny-host, --allow-host, --ports) was skipped on purpose, not broken.
+      if ((loop || p !== start) && !p.error.startsWith('Blocked: ')) sink.emit(loop ? 'redirect.loop' : 'http.fetch-error', { url: p.url, observed: p.error });
       continue;
     }
     if (p.status >= 500 || p.status === 429) sink.emit('http.server-error', { url: p.url, observed: `HTTP ${p.status}` });

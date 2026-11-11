@@ -4,7 +4,7 @@ import dns from 'node:dns';
 import zlib from 'node:zlib';
 import type { LookupFunction } from 'node:net';
 import type { FetchResult, RedirectHop } from '../core/types.js';
-import { assertUrlAllowed, BlockedUrlError, classifyAddress, DEFAULT_POLICY, isAddressAllowed, type NetPolicy } from './ssrf.js';
+import { assertUrlAllowed, BlockedUrlError, classifyAddress, DEFAULT_POLICY, hostPolicyViolation, isAddressAllowed, type NetPolicy } from './ssrf.js';
 
 export const SEARVEX_VERSION = '1.2.0';
 /** Honest crawler identification. robots.txt rules for "SearvexBot" (or "Searvex") apply. */
@@ -35,6 +35,9 @@ const DEFAULTS = {
  */
 export function guardedLookup(policy: NetPolicy): LookupFunction {
   return ((hostname: string, options: dns.LookupOptions, callback: (...args: unknown[]) => void) => {
+    // Host lists are also checked here, at connection time, for every connection whatever its origin.
+    const violation = hostPolicyViolation(hostname, policy);
+    if (violation) return callback(new BlockedUrlError(violation, hostname));
     dns.lookup(hostname, { ...options, all: true }, (err, addresses) => {
       if (err) return callback(err);
       const list = addresses as dns.LookupAddress[];

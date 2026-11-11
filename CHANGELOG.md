@@ -36,6 +36,10 @@ All notable changes to this project are documented here. The format follows
   action center builds, outside the browser, with the same redaction.
 - Package exports: `buildRepairPrompt`, `repairPromptInput`, `annotateReport`, `rootCauseGroups`, `remediationOf`,
   `findingRef`, `diffReports` and `prioritise`.
+- `--allow-host <glob>`, `--deny-host <glob>` (repeatable) and `--ports <list>`: limit which hosts and ports Searvex
+  contacts. Enforced on every request and redirect hop, in the connection-time DNS lookup, in the `--render`
+  policy proxy and before `--check-external`. A denied target is policy-blocked (exit `2`); other denied URLs are
+  skipped (`inventory.unfetched` reason `policy-blocked`).
 - The crawl checkpoint is written at the start and every 25 pages or 10 seconds, so `--resume` works after an early
   kill; resuming no longer fetches pages stored after the last checkpoint again and still follows their links.
 - `--render`: Playwright no longer kills the browser on SIGINT/SIGTERM under pages that are still rendering;
@@ -51,6 +55,8 @@ All notable changes to this project are documented here. The format follows
 - A runtime error (exit `3`) prints one `searvex: <message>` line and a `SEARVEX_DEBUG=1` hint instead of a stack
   trace with absolute install paths. Every usage error, also one raised inside a command, ends with
   `Run "searvex --help" for usage.`. `--fail-on` is validated before crawling.
+- `--check-external` no longer reports links the network policy forbids (for example a private address) as
+  broken; they are counted in `externalLinks.skippedByPolicy`.
 - `docs/cli.md` documents that a target blocked by the network policy (exit `2`) still writes `report.json`.
 
 ## [1.2.0] - 2026-11-03

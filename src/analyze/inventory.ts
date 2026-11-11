@@ -61,8 +61,9 @@ export interface UnfetchedUrl {
    * `robots-blocked`: not requested because robots.txt disallows it. `error`: no usable response (network,
    * TLS, timeout, redirect loop). `redirect`: answered with a redirect (the target is crawled as its own URL).
    * `non-200`: any other status than 200 (4xx, 5xx, …). `not-html`: 200 with a non-HTML body.
+   * `policy-blocked`: the network policy forbids it (private address, --deny-host, --allow-host, --ports).
    */
-  reason: 'robots-blocked' | 'error' | 'redirect' | 'non-200' | 'not-html';
+  reason: 'robots-blocked' | 'policy-blocked' | 'error' | 'redirect' | 'non-200' | 'not-html';
   /** Error message, or the redirect target. */
   detail?: string;
 }
@@ -71,7 +72,7 @@ export const UNFETCHED_CAP = 10000;
 
 function unfetchedReason(p: SiteContext['pages'][number]): UnfetchedUrl | null {
   if (p.blockedByRobots) return { url: p.url, status: 0, reason: 'robots-blocked' };
-  if (p.error) return { url: p.url, status: p.status, reason: 'error', detail: p.error };
+  if (p.error) return { url: p.url, status: p.status, reason: p.error.startsWith('Blocked: ') ? 'policy-blocked' : 'error', detail: p.error };
   if (p.redirects.length) return { url: p.url, status: p.redirects[0]!.status, reason: 'redirect', detail: p.finalUrl };
   if (p.status !== 200) return { url: p.url, status: p.status, reason: 'non-200' };
   return factsOf(p) ? null : { url: p.url, status: 200, reason: 'not-html' };
