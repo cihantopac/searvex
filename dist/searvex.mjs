@@ -35503,6 +35503,15 @@ var FindingSink = class {
     };
     this.byRule.set(ruleId, f);
   }
+  /**
+   * Record more affected URLs/files for a rule without adding evidence: one evidence item can stand for a group
+   * (all pages sharing a duplicate title), while `affected` must list every page of the group.
+   */
+  markAffected(ruleId, locations) {
+    const affected = this.affectedByRule.get(ruleId);
+    if (!affected) return;
+    for (const l of locations) if (affected.size < 1e5) affected.add(l);
+  }
   affected(ruleId) {
     return [...this.affectedByRule.get(ruleId) ?? []];
   }
@@ -36284,7 +36293,10 @@ function runContentChecks(ctx, sink) {
     else byHash.set(h, [p.url]);
   }
   const exactDuplicates = [...byHash.values()].filter((g) => g.length > 1);
-  for (const g of exactDuplicates) sink.emit("duplicate.content", { url: g[0], observed: `identical text on ${g.length} URLs: ${g.slice(0, 5).join(", ")}` });
+  for (const g of exactDuplicates) {
+    sink.emit("duplicate.content", { url: g[0], observed: `identical text on ${g.length} URLs: ${g.slice(0, 5).join(", ")}` });
+    sink.markAffected("duplicate.content", g);
+  }
   const allSh = /* @__PURE__ */ new Map();
   for (const { p, f } of pages) {
     const words2 = f.mainText.toLowerCase().split(/\s+/).filter(Boolean);
@@ -36401,7 +36413,10 @@ function runContentChecks(ctx, sink) {
     const common = [...sets[0]].filter((t) => sets.every((x) => x.has(t)));
     return { terms: (common.length ? common : [...sets[0]]).slice(0, 4), pages: g };
   });
-  for (const c of cannibalization) sink.emit("content.cannibalization", { url: c.pages[0], observed: `"${c.terms.join(" ")}" shared by ${c.pages.length} pages: ${c.pages.slice(0, 5).join(", ")}` });
+  for (const c of cannibalization) {
+    sink.emit("content.cannibalization", { url: c.pages[0], observed: `"${c.terms.join(" ")}" shared by ${c.pages.length} pages: ${c.pages.slice(0, 5).join(", ")}` });
+    sink.markAffected("content.cannibalization", c.pages);
+  }
   const clusterMap = /* @__PURE__ */ new Map();
   for (const { p } of pages) {
     const seg = new URL(p.finalUrl).pathname.split("/").filter(Boolean)[0] ?? "(root)";
@@ -36811,8 +36826,16 @@ function runTechnicalChecks(ctx, sink) {
     if (selfCanon && !noindex) checkHreflang(ctx, p.url, f, sink);
     checkStructuredData(p.url, f, sink, p === ctx.homepage, p === ctx.homepage ? personalSiteSignal(f.title, ctx.htmlPages.map((x) => x.url)) : void 0);
   }
-  for (const [title, urls] of titleMap) if (urls.length > 1) sink.emit("duplicate.title", { url: urls[0], observed: `"${title.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(", ")}` });
-  for (const [desc, urls] of descMap) if (urls.length > 1) sink.emit("duplicate.description", { url: urls[0], observed: `"${desc.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(", ")}` });
+  for (const [title, urls] of titleMap) {
+    if (urls.length < 2) continue;
+    sink.emit("duplicate.title", { url: urls[0], observed: `"${title.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(", ")}` });
+    sink.markAffected("duplicate.title", urls);
+  }
+  for (const [desc, urls] of descMap) {
+    if (urls.length < 2) continue;
+    sink.emit("duplicate.description", { url: urls[0], observed: `"${desc.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(", ")}` });
+    sink.markAffected("duplicate.description", urls);
+  }
   for (const [target, sources] of ctx.inlinks) {
     const rec = resolveRecord(ctx, target);
     if (new URL(target).pathname.startsWith("/cdn-cgi/")) continue;

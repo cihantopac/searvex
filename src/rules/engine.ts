@@ -241,6 +241,16 @@ export class FindingSink {
     this.byRule.set(ruleId, f);
   }
 
+  /**
+   * Record more affected URLs/files for a rule without adding evidence: one evidence item can stand for a group
+   * (all pages sharing a duplicate title), while `affected` must list every page of the group.
+   */
+  markAffected(ruleId: string, locations: string[]): void {
+    const affected = this.affectedByRule.get(ruleId);
+    if (!affected) return;
+    for (const l of locations) if (affected.size < 100000) affected.add(l);
+  }
+
   affected(ruleId: string): string[] {
     return [...(this.affectedByRule.get(ruleId) ?? [])];
   }

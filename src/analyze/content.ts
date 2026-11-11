@@ -157,7 +157,10 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
     else byHash.set(h, [p.url]);
   }
   const exactDuplicates = [...byHash.values()].filter((g) => g.length > 1);
-  for (const g of exactDuplicates) sink.emit('duplicate.content', { url: g[0], observed: `identical text on ${g.length} URLs: ${g.slice(0, 5).join(', ')}` });
+  for (const g of exactDuplicates) {
+    sink.emit('duplicate.content', { url: g[0], observed: `identical text on ${g.length} URLs: ${g.slice(0, 5).join(', ')}` });
+    sink.markAffected('duplicate.content', g);
+  }
 
   // Near-duplicates: MinHash + LSH banding (16 bands × 4 rows), then exact Jaccard on candidates.
   // Template (boilerplate) removal: shingles that recur on a large share of pages — sidebars, category
@@ -292,7 +295,10 @@ export function runContentChecks(ctx: SiteContext, sink: FindingSink): ContentRe
       const common = [...sets[0]!].filter((t) => sets.every((x) => x.has(t)));
       return { terms: (common.length ? common : [...sets[0]!]).slice(0, 4), pages: g };
     });
-  for (const c of cannibalization) sink.emit('content.cannibalization', { url: c.pages[0], observed: `"${c.terms.join(' ')}" shared by ${c.pages.length} pages: ${c.pages.slice(0, 5).join(', ')}` });
+  for (const c of cannibalization) {
+    sink.emit('content.cannibalization', { url: c.pages[0], observed: `"${c.terms.join(' ')}" shared by ${c.pages.length} pages: ${c.pages.slice(0, 5).join(', ')}` });
+    sink.markAffected('content.cannibalization', c.pages);
+  }
 
   // Topic clusters: first path segment groups, labelled with their dominant terms.
   const clusterMap = new Map<string, string[]>();

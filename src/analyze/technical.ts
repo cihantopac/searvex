@@ -234,8 +234,17 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     checkStructuredData(p.url, f, sink, p === ctx.homepage, p === ctx.homepage ? personalSiteSignal(f.title, ctx.htmlPages.map((x) => x.url)) : undefined);
   }
 
-  for (const [title, urls] of titleMap) if (urls.length > 1) sink.emit('duplicate.title', { url: urls[0], observed: `"${title.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(', ')}` });
-  for (const [desc, urls] of descMap) if (urls.length > 1) sink.emit('duplicate.description', { url: urls[0], observed: `"${desc.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(', ')}` });
+  // One evidence item per group; every page of the group is affected.
+  for (const [title, urls] of titleMap) {
+    if (urls.length < 2) continue;
+    sink.emit('duplicate.title', { url: urls[0], observed: `"${title.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(', ')}` });
+    sink.markAffected('duplicate.title', urls);
+  }
+  for (const [desc, urls] of descMap) {
+    if (urls.length < 2) continue;
+    sink.emit('duplicate.description', { url: urls[0], observed: `"${desc.slice(0, 100)}" on ${urls.length} pages: ${urls.slice(0, 5).join(', ')}` });
+    sink.markAffected('duplicate.description', urls);
+  }
 
   // Broken internal links: every link target we crawled that ended in 4xx.
   for (const [target, sources] of ctx.inlinks) {
