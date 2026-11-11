@@ -5,6 +5,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `crawl.status: "robots-blocked"`: when robots.txt blocks every queued URL (it answered 5xx/429, which RFC 9309
+  treats as a complete disallow, or it disallows them) no page is fetched, so the run is no longer reported as a
+  complete, scored run. It exits `4` like an unreachable target, keeps only the site finding to fix
+  (`robots.unreachable` or `robots.disallow-all`, in the launch checklist with `--pre-launch`) and says so in the
+  summary. A run with at least one fetched page is unchanged.
+- `crawl.fetched`: URLs for which an HTTP request was made. `crawl.crawled` keeps its meaning (URLs processed,
+  including robots-blocked ones). The CLI summary, progress lines and the Markdown/HTML KPIs show pages fetched
+  and, when not 0, how many robots.txt blocked.
+- `inventory.unfetched` / `inventory.unfetchedTotal`: every crawled URL that is not in `inventory.pages`, with its
+  status and reason (`robots-blocked`, `error`, `redirect`, `non-200`, `not-html`), capped at 10,000.
+- Exit code `4` always prints one `searvex: …` line on stderr, also with `--json` and `--quiet` (`audit`, `geo`,
+  `monitor`, `run`).
+
+### Changed
+- **`scores.overall` is `null`** whenever `scores.notApplicable` is set (unreachable or robots-blocked target,
+  repository without a website). It was `100`, which a consumer reading only `overall` took for a perfect site.
+  `monitor`'s `scoreAfter` and `ecosystem`'s per-site `score` can be `null` too.
+- A failing start URL is reported once, as `http.start-url-error`, instead of also as `http.fetch-error` with the
+  same evidence.
+- `/llms.txt` never counts as an affected URL, like `/robots.txt`.
+- `docs/cli.md` documents that a target blocked by the network policy (exit `2`) still writes `report.json`.
+
 ## [1.2.0] - 2026-11-03
 
 Trustworthy in pre-launch and embedded use. Release notes: [docs/release-notes-1.2.0.md](docs/release-notes-1.2.0.md).

@@ -39,16 +39,28 @@ export function hreflangProblem(code: string): { observed: string; severity?: 'l
 
 const SESSION_PARAM = /[?&](sid|sessionid|phpsessid|jsessionid|session_id|utm_[a-z]+|gclid|fbclid)=/i;
 
-export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
+/**
+ * Whether search crawlers may fetch the site at all: robots.txt unreachable (5xx/429/network, RFC 9309
+ * complete disallow) or the homepage disallowed for a major search crawler. These are also the only findings
+ * of a robots-blocked run (see `analyzeCrawl`).
+ */
+export function runRobotsAccessChecks(ctx: SiteContext, sink: FindingSink): void {
   const { crawl } = ctx;
-
-  // ---- robots.txt ----
   if (crawl.robots.state === 'unreachable') sink.emit('robots.unreachable', { url: crawl.robots.url, observed: crawl.robots.error ?? `HTTP ${crawl.robots.status}` });
-  if (crawl.robots.sizeBytes > 500 * 1024) sink.emit('robots.too-large', { url: crawl.robots.url, observed: `${Math.round(crawl.robots.sizeBytes / 1024)} KiB` });
   if (crawl.robots.state === 'ok') {
     for (const bot of ['Googlebot', 'Bingbot', 'YandexBot']) {
       if (!crawl.robots.isAllowed(crawl.startUrl, bot)) sink.emit('robots.disallow-all', { url: crawl.robots.url, observed: `${bot} disallowed for ${crawl.startUrl}` });
     }
+  }
+}
+
+export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
+  const { crawl } = ctx;
+
+  // ---- robots.txt ----
+  runRobotsAccessChecks(ctx, sink);
+  if (crawl.robots.sizeBytes > 500 * 1024) sink.emit('robots.too-large', { url: crawl.robots.url, observed: `${Math.round(crawl.robots.sizeBytes / 1024)} KiB` });
+  if (crawl.robots.state === 'ok') {
     if (/^\s*crawl-delay\s*:/im.test(crawl.robots.raw)) sink.emit('robots.crawl-delay-ignored', { url: crawl.robots.url, observed: (/^\s*crawl-delay\s*:.*$/im.exec(crawl.robots.raw) ?? [''])[0].trim() });
   }
   // A declared sitemap that cannot be fetched is not a missing sitemap. Declared URLs on the --site-url origin
@@ -80,7 +92,9 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
       continue;
     }
     if (p.error) {
-      sink.emit(p.error.includes('redirect') || p.error.includes('Redirect') ? 'redirect.loop' : 'http.fetch-error', { url: p.url, observed: p.error });
+      const loop = p.error.includes('redirect') || p.error.includes('Redirect');
+      // A failing start URL is already reported once as http.start-url-error.
+      if (loop || p !== start) sink.emit(loop ? 'redirect.loop' : 'http.fetch-error', { url: p.url, observed: p.error });
       continue;
     }
     if (p.status >= 500 || p.status === 429) sink.emit('http.server-error', { url: p.url, observed: `HTTP ${p.status}` });

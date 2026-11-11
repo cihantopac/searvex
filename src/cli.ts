@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { auditWebsite, countsTowardScore, indexableSummary, scoreLabel, type AuditReport } from './analyze/audit.js';
+import { auditWebsite, countsTowardScore, indexableSummary, notAnalysed, notAnalysedReason, scoreLabel, type AuditReport } from './analyze/audit.js';
 import type { Severity } from './core/types.js';
 import { RunStore } from './crawl/store.js';
 import { SEARVEX_VERSION } from './net/fetcher.js';
@@ -114,8 +114,9 @@ Environment (all optional, read-only integrations)
 
 Exit codes
   0 completed · 1 --fail-on threshold reached (also optimize verification failed, rollback conflict, or
-  an integration status that is not working) · 2 usage error · 3 runtime error · 4 target unreachable
-  (reports written, no site findings) · 5 reserved for interrupted runs (not used yet)
+  an integration status that is not working) · 2 usage error · 3 runtime error · 4 target unreachable or
+  robots.txt blocks every URL (reports written, no page findings) · 5 reserved for interrupted runs (not used
+  yet)
 
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
 `;
@@ -201,7 +202,10 @@ export const EXIT = {
   failOn: 1,
   usage: 2,
   runtime: 3,
-  /** The start URL failed at the network level; reports were written but contain no site findings. */
+  /**
+   * Target not analysable: the start URL failed at the network level, or robots.txt blocked every URL
+   * (`crawl.status` tells them apart). Reports were written but contain no findings about the pages.
+   */
   unreachable: 4,
   /** Reserved: interrupted run with a partial report (signal / --max-duration handling is planned, not used yet). */
   interrupted: 5,
@@ -216,9 +220,17 @@ export function assertTargetAllowed(report: AuditReport): void {
   if (err?.startsWith('Blocked: ')) throw new UsageError(`${report.target} is blocked by the network policy (${err.slice(9)}). Use --allow-private for a local or private development server.`);
 }
 
-/** Exit code for a finished website audit: unreachable target, else the --fail-on result. */
+/** Exit code for a finished website audit: target not analysable (unreachable, robots-blocked), else the --fail-on result. */
 export function auditExit(report: AuditReport, failOn: unknown): number {
-  return report.crawl.status === 'unreachable' ? EXIT.unreachable : failOnExit(report, failOn);
+  return notAnalysed(report) ? EXIT.unreachable : failOnExit(report, failOn);
+}
+
+/**
+ * The one stderr line of a run that analysed nothing (exit 4). It is printed also with --json and --quiet,
+ * so a caller that reads only stderr learns why.
+ */
+export function reportNotAnalysed(report: AuditReport): void {
+  if (notAnalysed(report)) console.error(`searvex: ${notAnalysedReason(report)}`);
 }
 
 export function crawlOptionsFrom(v: GlobalFlags['values']) {
@@ -311,8 +323,17 @@ export function summaryText(report: AuditReport, files: string[], autoRules: str
     L.push('Check the URL, DNS, the network or the server, then run the audit again.');
     return withReportFiles(L, files);
   }
+  if (report.crawl.status === 'robots-blocked') {
+    L.push(`robots.txt blocks every URL (${report.crawl.blocked} skipped): ${report.crawl.error ?? 'robots.txt disallows crawling'}. No page was fetched, so there is no score.`);
+    const launch = report.findings.filter((f) => f.context === 'launch-checklist');
+    if (launch.length) L.push(`Launch checklist: ${launch.map((f) => f.title).join('; ')} — this staging build blocks all crawlers; change it before going live.`);
+    for (const f of report.findings.filter((x) => !x.context)) L.push(`Fix first: [${f.severity}] ${f.title}`);
+    const fix = /no findings about the pages\. (.*)$/.exec(report.limitations[0] ?? '')?.[1];
+    if (fix) L.push(fix);
+    return withReportFiles(L, files);
+  }
   if (report.crawl.siteUrl) L.push(`Audited ${new URL(report.crawl.startUrl).origin} as ${report.crawl.siteUrl} (--site-url)`);
-  L.push(`Health score ${scoreLabel(report.scores)} (Searvex metric, not a search engine score) · ${report.crawl.crawled} ${report.mode === 'website' ? 'pages crawled' : `routes/pages, ${indexableSummary(report)}`} · ${issues.length} issue types, ${report.affectedUrls ?? 0} affected ${unit}`);
+  L.push(`Health score ${scoreLabel(report.scores)} (Searvex metric, not a search engine score) · ${report.mode === 'website' ? pagesLabel(report) : `${report.crawl.crawled} routes/pages, ${indexableSummary(report)}`} · ${issues.length} issue types, ${report.affectedUrls ?? 0} affected ${unit}`);
   if (top.length) {
     L.push('Top priorities:');
     top.forEach((f, i) => L.push(`  ${i + 1}. [${f.severity}] ${f.title} — ${f.count} ${f.count === 1 ? unit.replace(/s$/, '') : unit}${f.confidence === 'heuristic' ? ' (heuristic)' : ''}${remediationOf(f.ruleId, plan) === 'auto' ? ' · automatic fix' : ''}`));
@@ -332,6 +353,12 @@ export function summaryText(report: AuditReport, files: string[], autoRules: str
   }
   if (limits.length) L.push(`Limits: ${limits.join(' · ')}`);
   return withReportFiles(L, files);
+}
+
+/** "12 pages fetched" or "12 pages fetched, 3 blocked by robots.txt" (website mode). */
+export function pagesLabel(report: AuditReport): string {
+  const fetched = report.crawl.fetched ?? report.crawl.crawled - report.crawl.blocked;
+  return `${fetched} pages fetched${report.crawl.blocked ? `, ${report.crawl.blocked} blocked by robots.txt` : ''}`;
 }
 
 function withReportFiles(L: string[], files: string[]): string {
@@ -373,9 +400,9 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
         ...opts,
         render: render?.render,
         onProgress: (p) => {
-          if (p.crawled - last >= 10 || p.crawled === 1) {
-            last = p.crawled;
-            log(v, `  ${p.crawled} pages · ${p.queued} queued · ${p.status} ${p.url}`);
+          if (p.fetched - last >= 10 || p.fetched === 1) {
+            last = p.fetched;
+            log(v, `  ${p.fetched} pages fetched · ${p.queued} queued · ${p.status} ${p.url}`);
           }
         },
       },
@@ -389,6 +416,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
     assertTargetAllowed(report);
     const files = writeReports(store, report, kb, String(v['format'] ?? 'md,html,json').split(','));
     printSummary(report, files, v);
+    reportNotAnalysed(report);
     return auditExit(report, v['fail-on']);
   } finally {
     await render?.close();
@@ -406,13 +434,14 @@ async function commandGeo(flags: GlobalFlags): Promise<number> {
   const { report, store } = await auditWebsite(target, { workspace: path.resolve(String(v['out'] ?? process.cwd())), kb, crawl: opts, preLaunch: !!v['pre-launch'] });
   assertTargetAllowed(report);
   const files = writeReports(store, report, kb, String(v['format'] ?? 'md,html,json').split(','));
-  const unreachable = report.crawl.status === 'unreachable';
+  const unreachable = notAnalysed(report);
+  if (unreachable) console.error(`searvex: ${notAnalysedReason(report)} — no GEO checks were run.`);
   if (v['json']) {
     process.stdout.write(JSON.stringify({ target: report.target, ...(unreachable ? { crawl: { status: report.crawl.status, error: report.crawl.error } } : {}), geo: report.geo, findings: report.findings.filter((f) => f.category === 'geo' || f.ruleId.startsWith('sd.')) }, null, 2) + '\n');
     return unreachable ? EXIT.unreachable : EXIT.ok;
   }
   if (unreachable) {
-    console.error(`searvex: target unreachable: ${report.crawl.error ?? 'network error'} — no GEO checks were run.\nReports:\n${files.map((f) => '  ' + f).join('\n')}`);
+    console.error(`Reports:\n${files.map((f) => '  ' + f).join('\n')}`);
     return EXIT.unreachable;
   }
   console.log(`\nGEO / AI search readiness — ${report.target}\n`);

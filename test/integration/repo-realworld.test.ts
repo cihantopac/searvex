@@ -46,6 +46,7 @@ describe('repository without a website (CLI tool with HTML test data)', () => {
     expect(report.inventory.pages).toEqual([]);
     expect(report.findings.filter((f) => f.severity !== 'info')).toEqual([]);
     expect(report.scores.notApplicable).toMatch(/No website found/);
+    expect(report.scores.overall).toBeNull();
     expect(report.limitations[0]).toMatch(/No website found/);
   });
 });

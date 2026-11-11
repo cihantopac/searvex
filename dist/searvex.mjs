@@ -35021,7 +35021,7 @@ async function crawl(startUrl, partial = {}, store2) {
         pages: [],
         startedAt,
         finishedAt: (/* @__PURE__ */ new Date()).toISOString(),
-        stats: { crawled: 0, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: Date.now() - t0, avgResponseMs: 0 },
+        stats: { crawled: 0, fetched: 0, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: Date.now() - t0, avgResponseMs: 0 },
         truncated: false,
         unreachable
       };
@@ -35053,6 +35053,7 @@ async function crawl(startUrl, partial = {}, store2) {
   }
   store2?.writeJson("meta.json", { runId: store2.runId, kind: "crawl", startUrl: start, startedAt, options: { ...opts, policy: void 0, render: !!opts.render, onProgress: void 0 } });
   let crawledThisRun = 0;
+  let fetchedCount = existing.filter((p) => !p.blockedByRobots).length;
   const persist = () => store2?.writeJson("checkpoint.json", { queue, seen: [...seen] });
   const processItem = async (item) => {
     const host = new URL(item.url).host;
@@ -35133,7 +35134,8 @@ async function crawl(startUrl, partial = {}, store2) {
     pages.push(rec);
     store2?.append("pages.jsonl", rec);
     crawledThisRun++;
-    opts.onProgress?.({ crawled: pages.length, queued: queue.length, url: item.url, status: res.status });
+    fetchedCount++;
+    opts.onProgress?.({ crawled: pages.length, fetched: fetchedCount, queued: queue.length, url: item.url, status: res.status });
     if (crawledThisRun % opts.checkpointEvery === 0) persist();
   };
   const workers = [];
@@ -35158,7 +35160,8 @@ async function crawl(startUrl, partial = {}, store2) {
   for (let i = 0; i < Math.max(1, opts.concurrency); i++) workers.push(next2());
   await Promise.all(workers);
   persist();
-  const fetched = pages.filter((p) => !p.blockedByRobots && p.status > 0);
+  const requested = pages.filter((p) => !p.blockedByRobots);
+  const fetched = requested.filter((p) => p.status > 0);
   const result = {
     runId: store2?.runId ?? "ephemeral",
     startUrl: start,
@@ -35170,6 +35173,7 @@ async function crawl(startUrl, partial = {}, store2) {
     finishedAt: (/* @__PURE__ */ new Date()).toISOString(),
     stats: {
       crawled: pages.length,
+      fetched: requested.length,
       queuedRemaining: queue.length,
       blocked: pages.filter((p) => p.blockedByRobots).length,
       errors: pages.filter((p) => p.error).length,
@@ -35900,6 +35904,14 @@ function brandTermsFrom(site) {
 }
 
 // src/analyze/inventory.ts
+var UNFETCHED_CAP = 1e4;
+function unfetchedReason(p) {
+  if (p.blockedByRobots) return { url: p.url, status: 0, reason: "robots-blocked" };
+  if (p.error) return { url: p.url, status: p.status, reason: "error", detail: p.error };
+  if (p.redirects.length) return { url: p.url, status: p.redirects[0].status, reason: "redirect", detail: p.finalUrl };
+  if (p.status !== 200) return { url: p.url, status: p.status, reason: "non-200" };
+  return factsOf(p) ? null : { url: p.url, status: 200, reason: "not-html" };
+}
 function pageSchemaTypes(f) {
   const out = /* @__PURE__ */ new Map();
   const add2 = (t, fmt) => {
@@ -35943,9 +35955,16 @@ function schemaType(types) {
 function buildInventory(ctx) {
   const pages = [];
   const statusCodes = {};
+  const unfetched = [];
+  let unfetchedTotal = 0;
   for (const p of ctx.pages) {
     const key = p.blockedByRobots ? "robots-blocked" : p.error ? "error" : String(p.status);
     statusCodes[key] = (statusCodes[key] ?? 0) + 1;
+    const u = unfetchedReason(p);
+    if (u) {
+      unfetchedTotal++;
+      if (unfetched.length < UNFETCHED_CAP) unfetched.push(u);
+    }
     const f = factsOf(p);
     if (!f || p.status !== 200 || p.redirects.length) continue;
     const types = /* @__PURE__ */ new Set();
@@ -36024,6 +36043,8 @@ function buildInventory(ctx) {
     languages,
     hreflangLanguages,
     statusCodes,
+    unfetched,
+    unfetchedTotal,
     businessModel: { ...businessModel, label, evidence },
     offerings,
     relations,
@@ -36588,14 +36609,20 @@ function hreflangProblem(code) {
   return { observed: code };
 }
 var SESSION_PARAM = /[?&](sid|sessionid|phpsessid|jsessionid|session_id|utm_[a-z]+|gclid|fbclid)=/i;
-function runTechnicalChecks(ctx, sink) {
+function runRobotsAccessChecks(ctx, sink) {
   const { crawl: crawl2 } = ctx;
   if (crawl2.robots.state === "unreachable") sink.emit("robots.unreachable", { url: crawl2.robots.url, observed: crawl2.robots.error ?? `HTTP ${crawl2.robots.status}` });
-  if (crawl2.robots.sizeBytes > 500 * 1024) sink.emit("robots.too-large", { url: crawl2.robots.url, observed: `${Math.round(crawl2.robots.sizeBytes / 1024)} KiB` });
   if (crawl2.robots.state === "ok") {
     for (const bot of ["Googlebot", "Bingbot", "YandexBot"]) {
       if (!crawl2.robots.isAllowed(crawl2.startUrl, bot)) sink.emit("robots.disallow-all", { url: crawl2.robots.url, observed: `${bot} disallowed for ${crawl2.startUrl}` });
     }
+  }
+}
+function runTechnicalChecks(ctx, sink) {
+  const { crawl: crawl2 } = ctx;
+  runRobotsAccessChecks(ctx, sink);
+  if (crawl2.robots.sizeBytes > 500 * 1024) sink.emit("robots.too-large", { url: crawl2.robots.url, observed: `${Math.round(crawl2.robots.sizeBytes / 1024)} KiB` });
+  if (crawl2.robots.state === "ok") {
     if (/^\s*crawl-delay\s*:/im.test(crawl2.robots.raw)) sink.emit("robots.crawl-delay-ignored", { url: crawl2.robots.url, observed: (/^\s*crawl-delay\s*:.*$/im.exec(crawl2.robots.raw) ?? [""])[0].trim() });
   }
   const smMap = originMap(crawl2.siteUrl, crawl2.origin);
@@ -36621,7 +36648,8 @@ function runTechnicalChecks(ctx, sink) {
       continue;
     }
     if (p.error) {
-      sink.emit(p.error.includes("redirect") || p.error.includes("Redirect") ? "redirect.loop" : "http.fetch-error", { url: p.url, observed: p.error });
+      const loop = p.error.includes("redirect") || p.error.includes("Redirect");
+      if (loop || p !== start) sink.emit(loop ? "redirect.loop" : "http.fetch-error", { url: p.url, observed: p.error });
       continue;
     }
     if (p.status >= 500 || p.status === 429) sink.emit("http.server-error", { url: p.url, observed: `HTTP ${p.status}` });
@@ -37031,13 +37059,20 @@ function failingMetrics(m) {
 }
 
 // src/analyze/audit.ts
+function notAnalysed(r) {
+  return r.crawl.status === "unreachable" || r.crawl.status === "robots-blocked";
+}
+function notAnalysedReason(r) {
+  if (r.crawl.status === "robots-blocked") return `robots.txt blocks every URL: ${r.crawl.error ?? "robots.txt disallows crawling"}`;
+  return `target unreachable: ${r.crawl.error ?? "network error"}`;
+}
 function countsTowardScore(f) {
   return f.confidence !== "unmeasurable" && !f.context;
 }
 function countAffected(findings, affected) {
   const all2 = /* @__PURE__ */ new Set();
   for (const f of findings) if (f.severity !== "info" && countsTowardScore(f)) {
-    for (const u of affected(f.ruleId)) if (!/\/robots\.txt$/.test(u)) all2.add(u);
+    for (const u of affected(f.ruleId)) if (!/\/(robots|llms)\.txt$/.test(u)) all2.add(u);
   }
   return all2.size;
 }
@@ -37066,6 +37101,9 @@ function computeScores(findings, pageCount) {
     byCategory,
     method: "Searvex health score = 100 \u2212 \u03A3(severity weight \xD7 share of affected pages); heuristic findings weigh 50%; unmeasurable findings are excluded. It summarises Searvex findings and is not a search engine metric."
   };
+}
+function notApplicableScores(reason) {
+  return { ...computeScores([], 1), overall: null, notApplicable: reason };
 }
 async function probeLlmsTxt(origin, opts) {
   const url = new URL("/llms.txt", origin).toString();
@@ -37098,11 +37136,21 @@ async function probeHostVariants(startUrl, opts, sink) {
   const res = await safeFetch(alt.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
   if (!res.error && res.status === 200) sink.emit("canonical.www-duplicate", { url: alt.toString(), observed: `${alt.host} and ${u.host} both return 200` });
 }
-function crawlSummary(result) {
+function robotsBlockedAll(result) {
+  return !result.unreachable && result.pages.length > 0 && result.pages.every((p) => p.blockedByRobots);
+}
+function robotsBlockReason(result, robotsAgent) {
+  const r = result.robots;
+  return r.state === "unreachable" ? `robots.txt could not be read (${r.error ?? `HTTP ${r.status}`}); RFC 9309 requires treating that as a complete disallow` : `robots.txt disallows every queued URL for ${robotsAgent}`;
+}
+function crawlSummary(result, robotsAgent = DEFAULT_CRAWL.robotsAgent) {
+  const blocked = robotsBlockedAll(result);
   return {
     ...result.stats,
-    status: result.unreachable ? "unreachable" : "complete",
-    ...result.unreachable ? { error: result.unreachable.error } : {},
+    // Reports of runs before 1.3.0 have no `fetched`.
+    fetched: result.stats.fetched ?? result.pages.filter((p) => !p.blockedByRobots).length,
+    status: result.unreachable ? "unreachable" : blocked ? "robots-blocked" : "complete",
+    ...result.unreachable ? { error: result.unreachable.error } : blocked ? { error: robotsBlockReason(result, robotsAgent) } : {},
     ...result.siteUrl ? { siteUrl: result.siteUrl } : {},
     truncated: result.truncated,
     startUrl: result.startUrl,
@@ -37127,25 +37175,38 @@ async function analyzeCrawl(result, kb, opts = {}) {
   const ctx = buildContext(result);
   const netOpts = { policy: opts.policy ?? DEFAULT_POLICY, timeoutMs: opts.timeoutMs ?? 15e3, userAgent: opts.userAgent ?? DEFAULT_USER_AGENT };
   const unreachable = result.unreachable;
+  const robotsAgent = opts.robotsAgent ?? DEFAULT_CRAWL.robotsAgent;
   let llms;
-  if (unreachable) {
+  if (unreachable || robotsBlockedAll(result)) {
     const none = new FindingSink(kb);
-    const geo2 = { ...runGeoChecks(ctx, none), bots: [] };
+    const geo2 = runGeoChecks(ctx, none);
     const content2 = runContentChecks(ctx, none);
+    const sink2 = new FindingSink(kb);
+    if (!unreachable) runRobotsAccessChecks(ctx, sink2);
+    const findings2 = sink2.findings();
+    prioritise(findings2, (id) => sink2.affected(id), ctx);
+    if (opts.preLaunch) applyPreLaunch(findings2, kb);
+    const why = unreachable ? `target unreachable (${unreachable.error})` : robotsBlockReason(result, robotsAgent);
+    const limitation = unreachable ? `The start URL could not be reached (${unreachable.error}); no page was fetched, so this report contains no findings about the site. Check the URL, DNS, the network or the server, then run the audit again.` : `No page was fetched: ${why}, so all ${result.pages.length} queued URL(s) were skipped and this report contains no findings about the pages. ${result.robots.state === "unreachable" ? "Make /robots.txt return 200 (with rules) or 404 (no rules), then run the audit again." : `To audit the site, allow the ${robotsAgent} user agent in robots.txt (on a staging build, for the test only), then run the audit again.`}`;
     return {
       tool: { name: "searvex", version: SEARVEX_VERSION, rulesVersion: kb.version },
       mode: "website",
       target: result.startUrl,
       runId: result.runId,
       generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      crawl: crawlSummary(result),
+      crawl: crawlSummary(result, robotsAgent),
       inventory: buildInventory(ctx),
-      findings: [],
-      geo: geo2,
+      findings: findings2,
+      // robots.txt was never read for an unreachable target, so no crawler access can be stated.
+      geo: unreachable ? { ...geo2, bots: [] } : geo2,
       content: content2,
-      scores: { ...computeScores([], 1), notApplicable: `target unreachable (${unreachable.error})` },
-      measurement: { verified: 0, heuristic: 0, unmeasurable: 0 },
-      limitations: [`The start URL could not be reached (${unreachable.error}); no page was fetched, so this report contains no findings about the site. Check the URL, DNS, the network or the server, then run the audit again.`],
+      scores: { ...notApplicableScores(why), ...opts.preLaunch ? { profile: "pre-launch" } : {} },
+      measurement: {
+        verified: findings2.filter((f) => f.confidence === "verified").length,
+        heuristic: findings2.filter((f) => f.confidence === "heuristic").length,
+        unmeasurable: findings2.filter((f) => f.confidence === "unmeasurable").length
+      },
+      limitations: [limitation],
       affectedUrls: 0,
       rendered: false
     };
@@ -37190,7 +37251,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
     target: result.startUrl,
     runId: result.runId,
     generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    crawl: crawlSummary(result),
+    crawl: crawlSummary(result, robotsAgent),
     inventory,
     findings,
     geo,
@@ -37270,11 +37331,11 @@ if(!D.search&&R.mode==='website')lim.push([T('lim.search'),T('sp.notConnected')]
 if(R.mode==='website'&&!R.rendered)lim.push([T('lim.render'),T('warn.noRender')]);
 var groups=0;issues.forEach(function(f){groups+=groupsOf(f).length});
 var auto=issues.filter(function(f){return D.rem[f.ruleId]==='auto'}),optOnly=issues.filter(function(f){return D.rem[f.ruleId]!=='auto'&&D.opt[f.ruleId]});
-var ch=null;if(D.diff){var dd=D.diff.scoreBefore===null?null:D.diff.scoreAfter-D.diff.scoreBefore;ch=card(T('kpi.change'),dd===null?'—':(dd>=0?'+':'')+dd,'+'+D.diff.newFindings.length+' / −'+D.diff.resolved.length)}
+var ch=null;if(D.diff){var dd=D.diff.scoreBefore===null||D.diff.scoreAfter===null?null:D.diff.scoreAfter-D.diff.scoreBefore;ch=card(T('kpi.change'),dd===null?'—':(dd>=0?'+':'')+dd,'+'+D.diff.newFindings.length+' / −'+D.diff.resolved.length)}
 var score=R.scores.notApplicable?'n/a':R.scores.overall;
 P.appendChild(el('div',{class:'cards kpis'},[card(T('kpi.score'),score+(R.scores.notApplicable?'':'/100'),T('kpi.scoreNote')+(R.scores.profile==='pre-launch'?' · '+T('kpi.preLaunch'):''),gauge(R.scores.notApplicable?null:R.scores.overall),'score'),
 card(T('kpi.groups'),fmt(groups),T('kpi.types',{n:fmt(issues.length)})),
-card(T(R.mode==='website'?'kpi.affected':'kpi.affectedFiles'),fmt(R.affectedUrls!==undefined?R.affectedUrls:0),(R.mode==='website'?T('kpi.pages'):T('kpi.routes'))+': '+fmt(R.crawl.crawled)),
+card(T(R.mode==='website'?'kpi.affected':'kpi.affectedFiles'),fmt(R.affectedUrls!==undefined?R.affectedUrls:0),(R.mode==='website'?T('kpi.pages')+': '+fmt(R.crawl.fetched!==undefined?R.crawl.fetched:R.crawl.crawled-R.crawl.blocked)+(R.crawl.blocked?' · '+T('kpi.blocked',{n:fmt(R.crawl.blocked)}):''):T('kpi.routes')+': '+fmt(R.crawl.crawled))),
 card(T('kpi.critical'),fmt(issues.filter(function(f){return f.severity==='critical'||f.severity==='high'}).length),null,null,issues.some(function(f){return f.severity==='critical'})?'alert':''),
 card(T('kpi.auto'),fmt(auto.length),auto.length?null:optOnly.length?T('kpi.autoRepo')+' ('+optOnly.length+')':T('kpi.autoNone')),ch||card(T('kpi.change'),'—',T('kpi.noBaseline'))]));
 if(lim.length)P.appendChild(el('div',{class:'limits',role:'note'},[el('b',{text:T('ov.limits')}),el('span',{class:'lim',text:lim.map(function(l){return l[0]}).join(' · ')}),el('details',{},[el('summary',{text:T('ov.limitsMore')}),el('ul',{},lim.map(function(l){return el('li',{text:l[1]})}))])]));
@@ -37377,8 +37438,8 @@ if(R.inventory.pages.length){P.appendChild(el('details',{class:'more'},[el('summ
 if(R.content&&R.content.clusters.length){P.appendChild(el('details',{class:'more'},[el('summary',{text:T('ev.content')}),table([T('ev.section'),T('ch.pages'),T('ev.terms')],R.content.clusters.slice(0,30).map(function(c){return['/'+c.key,c.pages.length,c.terms.join(', ')]}))]))}
 P.appendChild(el('p',{class:'muted small',text:T('ev.promise')}))}
 `;
-var DIFF_VIEW = String.raw`function diffView(P,M){var delta=M.scoreBefore===null?null:M.scoreAfter-M.scoreBefore;
-P.appendChild(el('div',{class:'cards'},[card(T('ch.score'),(M.scoreBefore===null?'':M.scoreBefore+' → ')+M.scoreAfter,delta===null?null:(delta>=0?'+':'')+delta),card(T('ch.pages'),(M.pagesBefore===null?'':fmt(M.pagesBefore)+' → ')+fmt(M.pagesAfter)),card(T('ch.new'),M.newFindings.length,null,null,M.newFindings.length?'alert':''),card(T('ch.resolved'),M.resolved.length),card(T('ch.worse')+' / '+T('ch.better'),M.worsened.length+' / '+M.improved.length),card(T('ch.regression'),T(M.regression?'ch.yes':'ch.no'),null,null,M.regression?'alert':'')]));
+var DIFF_VIEW = String.raw`function diffView(P,M){var delta=M.scoreBefore===null||M.scoreAfter===null?null:M.scoreAfter-M.scoreBefore;
+P.appendChild(el('div',{class:'cards'},[card(T('ch.score'),(M.scoreBefore===null?'':M.scoreBefore+' → ')+(M.scoreAfter===null?'n/a':M.scoreAfter),delta===null?null:(delta>=0?'+':'')+delta),card(T('ch.pages'),(M.pagesBefore===null?'':fmt(M.pagesBefore)+' → ')+fmt(M.pagesAfter)),card(T('ch.new'),M.newFindings.length,null,null,M.newFindings.length?'alert':''),card(T('ch.resolved'),M.resolved.length),card(T('ch.worse')+' / '+T('ch.better'),M.worsened.length+' / '+M.improved.length),card(T('ch.regression'),T(M.regression?'ch.yes':'ch.no'),null,null,M.regression?'alert':'')]));
 var changed=M.newFindings.concat(M.worsened,M.improved,M.resolved),mx=Math.max.apply(null,changed.map(function(x){return Math.max(x.before,x.after)}).concat([1]));
 if(changed.length){var c=el('div',{class:'charts'});c.appendChild(bars(T('ch.before'),changed.slice(0,10).map(function(x){return[rtitle(x),x.before,x.severity]}),{max:mx}));c.appendChild(bars(T('ch.after'),changed.slice(0,10).map(function(x){return[rtitle(x),x.after,x.severity]}),{max:mx}));P.appendChild(c)}
 [['ch.new',M.newFindings],['ch.worse',M.worsened],['ch.better',M.improved],['ch.resolved',M.resolved]].forEach(function(g){P.appendChild(h2(T(g[0])+' ('+g[1].length+')'));P.appendChild(g[1].length?table([T('ch.issue'),T('iss.filterSev'),T('ch.before'),T('ch.after'),T('ch.delta')],g[1].map(function(x){return[rtitle(x)+' ('+x.ruleId+')',T('sev.'+x.severity),x.before,x.after,deltaSpan(x.after-x.before)]})):el('p',{class:'muted',text:T('ch.nothing')}))});
@@ -37392,7 +37453,7 @@ var P=panel('changes');diffView(P,X);if(!X.baselineRun)P.insertBefore(el('p',{cl
 var ECOSYSTEM_SCRIPT = String.raw`function render(){var M=document.getElementById('main');M.textContent='';var E=D.eco;
 document.getElementById('kicker').textContent=T('title.ecosystem');document.getElementById('t').textContent=E.sites.length+' sites';document.getElementById('meta').textContent=E.sites.map(function(s){return s.host}).join(' · ');
 var B=panel('overview');var ch=el('div',{class:'charts'});
-ch.appendChild(bars(T('eco.scoreBySite'),E.sites.map(function(s){return[s.host,s.score,s.score>=90?'good':s.score>=70?'medium':'critical']}),{max:100,note:T('kpi.scoreNote')}));
+ch.appendChild(bars(T('eco.scoreBySite'),E.sites.filter(function(s){return s.score!==null}).map(function(s){return[s.host,s.score,s.score>=90?'good':s.score>=70?'medium':'critical']}),{max:100,note:T('kpi.scoreNote')}));
 ch.appendChild(bars(T('eco.shared'),E.sharedIssues.slice(0,10).map(function(i){return[i.title,i.sites,i.severity]}),{max:E.sites.length}));B.appendChild(ch);
 B.appendChild(h2(T('eco.sites')));B.appendChild(table(['Site','Site name','Organization','Parent','Children','Model ~','Languages',T('ch.pages')],E.sites.map(function(s){return[s.host,s.siteName,s.organization,s.parent,s.children.join(', ')||'—',s.model,s.languages.join(', '),s.pages]})));
 B.appendChild(h2(T('eco.links')));var H=E.sites.map(function(s){return s.host});
@@ -37431,7 +37492,8 @@ var UI = {
     "kpi.affectedFiles": "Affected locations",
     "kpi.critical": "Critical + high",
     "kpi.auto": "Automatic fixes",
-    "kpi.pages": "Pages crawled",
+    "kpi.pages": "Pages fetched",
+    "kpi.blocked": "{n} blocked by robots.txt",
     "kpi.routes": "Routes / pages",
     "kpi.change": "Since last run",
     "kpi.noBaseline": "first run",
@@ -37685,7 +37747,8 @@ var UI = {
     "kpi.affectedFiles": "Etkilenen konumlar",
     "kpi.critical": "Kritik + y\xFCksek",
     "kpi.auto": "Otomatik d\xFCzeltmeler",
-    "kpi.pages": "Taranan sayfa",
+    "kpi.pages": "Getirilen sayfa",
+    "kpi.blocked": "robots.txt taraf\u0131ndan engellenen: {n}",
     "kpi.routes": "Rota / sayfa",
     "kpi.change": "\xD6nceki analizden beri",
     "kpi.noBaseline": "ilk analiz",
@@ -38857,10 +38920,14 @@ function renderMarkdown(r, opts = {}) {
   if (r.crawl.siteUrl) L.push(`Audited \`${md(new URL(r.crawl.startUrl).origin)}\` as \`${md(r.crawl.siteUrl)}\` (--site-url)`, "");
   L.push(`Generated ${r.generatedAt} \xB7 Searvex ${r.tool.version} \xB7 rules ${r.tool.rulesVersion} \xB7 run \`${r.runId}\``, "");
   if (r.crawl.status === "unreachable") L.push(`> **Target unreachable:** ${md(r.crawl.error ?? "network error")}. No page was fetched, so this report contains no findings about the site.`, "");
+  if (r.crawl.status === "robots-blocked") L.push(`> **robots.txt blocks every URL:** ${md(r.crawl.error ?? "robots.txt disallows crawling")}. No page was fetched, so this report contains no findings about the pages.`, "");
   L.push("## Summary", "");
   L.push(`| Metric | Value |`, `|---|---|`);
   L.push(`| Searvex health score\xB9 | **${scoreLabel(r.scores)}** |`);
-  L.push(`| Pages crawled | ${r.crawl.crawled}${r.crawl.truncated ? ` (limit reached, ${r.crawl.queuedRemaining} queued)` : ""} |`);
+  if (r.mode === "website") {
+    L.push(`| Pages fetched | ${r.crawl.fetched ?? r.crawl.crawled - r.crawl.blocked}${r.crawl.truncated ? ` (limit reached, ${r.crawl.queuedRemaining} queued)` : ""} |`);
+    if (r.crawl.blocked) L.push(`| Blocked by robots.txt | ${r.crawl.blocked} |`);
+  } else L.push(`| Routes/pages | ${r.crawl.crawled}${r.crawl.truncated ? " (file limit reached)" : ""} |`);
   L.push(`| Indexable HTML pages | ${indexableSummary(r).replace(/ indexable/, "")} |`);
   L.push(`| Likely site type (heuristic) | ${md(r.inventory.businessModel.label)} |`);
   L.push(`| Findings | ${r.findings.filter((f) => f.severity !== "info").length} issues + ${r.findings.filter((f) => f.severity === "info").length} informational |`);
@@ -39794,7 +39861,7 @@ function diffReports(before2, after2, baselineRun) {
 function renderDiffMarkdown(d, gsc) {
   const L = [`# Searvex monitor \u2014 ${md(d.target)}`, ""];
   if (!d.baselineRun) L.push("_No previous run for this target: this run is the new baseline._", "");
-  else L.push(`Baseline \`${d.baselineRun}\` \u2192 current \`${d.currentRun}\``, "", `Health score: ${d.scoreBefore} \u2192 **${d.scoreAfter}** \xB7 pages: ${d.pagesBefore} \u2192 ${d.pagesAfter}`, "");
+  else L.push(`Baseline \`${d.baselineRun}\` \u2192 current \`${d.currentRun}\``, "", `Health score: ${d.scoreBefore ?? "n/a"} \u2192 **${d.scoreAfter ?? "n/a"}** \xB7 pages: ${d.pagesBefore} \u2192 ${d.pagesAfter}`, "");
   const sec = (title, xs) => {
     if (!xs.length) return;
     L.push(`## ${title}`, "", ...xs.map((x) => `- [${x.severity}] ${md(x.title)} (\`${x.ruleId}\`): ${x.before} \u2192 ${x.after}${x.context ? ` \xB7 ${x.context === "environment" ? "environment-dependent" : "launch checklist"}, not a regression` : ""}`), "");
@@ -39820,7 +39887,7 @@ function findBaseline(workspace, target, exclude) {
   const runs = RunStore.list(workspace).filter((id) => id !== exclude).reverse();
   for (const id of runs) {
     const r = new RunStore(workspace, id).readJson("report.json");
-    if (r && r.target === target && r.mode === "website" && r.crawl.status !== "unreachable") return { id, report: r };
+    if (r && r.target === target && r.mode === "website" && !notAnalysed(r)) return { id, report: r };
   }
   return null;
 }
@@ -39869,11 +39936,11 @@ async function commandMonitor(flags) {
   const { report, store: store2 } = await auditWebsite(target, { workspace, kb, crawl: crawlOptionsFrom(v), preLaunch: !!v["pre-launch"] });
   assertTargetAllowed(report);
   writeReports(store2, report, kb, ["json", "md", "html"]);
-  if (report.crawl.status === "unreachable") {
-    const note = `Target unreachable (${report.crawl.error ?? "network error"}): no comparison with the previous run.`;
+  if (notAnalysed(report)) {
+    const note = `${notAnalysedReason(report)}; no comparison with the previous run.`;
     store2.writeJson("monitor.json", { diff: null, notes: [note] });
     if (v["json"]) process.stdout.write(JSON.stringify({ diff: null, notes: [note] }, null, 2) + "\n");
-    else console.error(`searvex: ${note}`);
+    console.error(`searvex: ${note}`);
     return EXIT.unreachable;
   }
   const explicit = v["baseline"];
@@ -40835,7 +40902,7 @@ function staticCrawl(htmlFiles, dirBase, read, scan, files, siteOrigin) {
     pages,
     startedAt: (/* @__PURE__ */ new Date()).toISOString(),
     finishedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    stats: { crawled: pages.length, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: 0, avgResponseMs: 0 },
+    stats: { crawled: pages.length, fetched: pages.length, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: 0, avgResponseMs: 0 },
     truncated: false
   };
 }
@@ -41092,6 +41159,7 @@ function auditRepository(root2, opts = {}) {
     generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
     crawl: {
       crawled: scan.routes.length,
+      fetched: scan.routes.length,
       queuedRemaining: 0,
       blocked: 0,
       errors: 0,
@@ -41108,7 +41176,7 @@ function auditRepository(root2, opts = {}) {
     findings,
     geo,
     content,
-    scores: nothingToAudit ? { ...computeScores(findings, 1), notApplicable: NOTHING_TO_AUDIT } : computeScores(findings, Math.max(1, scan.routes.length)),
+    scores: nothingToAudit ? notApplicableScores(NOTHING_TO_AUDIT) : computeScores(findings, Math.max(1, scan.routes.length)),
     measurement: {
       verified: findings.filter((f) => f.confidence === "verified").length,
       heuristic: findings.filter((f) => f.confidence === "heuristic").length,
@@ -41463,7 +41531,7 @@ Verification failed (${introduced.length ? "new issues: " + introduced.join(", "
   manifest.status = "verified";
   writeManifest(root2, manifest);
   console.log(`
-Verified. Health score ${before2.report.scores.overall} \u2192 ${after2.report.scores.overall}.`);
+Verified. Health score ${scoreLabel(before2.report.scores)} \u2192 ${scoreLabel(after2.report.scores)}.`);
   console.log(`Undo with: searvex rollback ${manifest.changeId} ${target}`);
   return 0;
 }
@@ -42316,12 +42384,12 @@ function renderRunSummary(s) {
   L.push("| Step | Status | Note |", "|---|---|---|");
   for (const st of s.steps) L.push(`| ${st.step}. ${st.name} | ${st.status === "done" ? "\u2705" : "\u23ED\uFE0F skipped"} | ${md(st.note)} |`);
   L.push("");
-  if (s.website?.report.crawl.status === "unreachable") {
+  if (s.website && notAnalysed(s.website.report)) {
     const r = s.website.report;
-    L.push("## 1. Website audit", "", `${md(r.target)} \u2014 **target unreachable** (${md(r.crawl.error ?? "network error")}). No page was fetched, so there are no findings and no score; steps 2\u20134 were skipped.`, "");
+    L.push("## 1. Website audit", "", `${md(r.target)} \u2014 **${md(notAnalysedReason(r))}**. No page was fetched, so there are no findings about the pages and no score; steps 2\u20134 were skipped.`, "");
   } else if (s.website) {
     const r = s.website.report;
-    L.push("## 1. Website audit", "", `${md(r.target)} \u2014 health score **${scoreLabel(r.scores)}**, ${r.crawl.crawled} pages${r.crawl.truncated ? " (page limit reached)" : ""}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, "");
+    L.push("## 1. Website audit", "", `${md(r.target)} \u2014 health score **${scoreLabel(r.scores)}**, ${r.crawl.fetched ?? r.crawl.crawled} pages fetched${r.crawl.truncated ? " (page limit reached)" : ""}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, "");
     for (const f of top(r)) L.push(`- [${f.severity}] ${md(f.title)} \u2014 ${f.count} \xD7 (\`${f.ruleId}\`)`);
     L.push("", `Interactive report: \`.searvex/runs/${s.website.runId}/report.html\` (details: \`report.md\`)`, "");
     L.push("## 2. GEO / AI search readiness", "");
@@ -42383,14 +42451,14 @@ async function commandRun(flags) {
     const files = writeReports(store3, report, kb, ["json", "md", "html"]);
     summary.website = { report, runId: store3.runId, files };
     summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!getCredential("gsc") || !!process.env["SEARVEX_GSC_TOKEN"] };
-    if (report.crawl.status === "unreachable") {
-      const why = `target unreachable (${report.crawl.error ?? "network error"})`;
+    if (notAnalysed(report)) {
+      const why = notAnalysedReason(report);
       step(1, "Website audit", "skipped", `${why}; reports written without findings`);
       step(2, "GEO / AI search", "skipped", why);
       step(3, "Change since previous run", "skipped", why);
       step(4, "Competitor research", "skipped", why);
     } else {
-      step(1, "Website audit", "done", `${report.crawl.crawled} pages, score ${scoreLabel(report.scores)}`);
+      step(1, "Website audit", "done", `${report.crawl.fetched} pages fetched, score ${scoreLabel(report.scores)}`);
       step(2, "GEO / AI search", "done", `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
       const base = findBaseline(workspace, report.target, store3.runId);
       if (base) {
@@ -42471,7 +42539,10 @@ Fix plan (dry run, nothing changed): ${summary.plan.fixes.length} automatic fix(
     const html3 = summary.website?.files.find((f) => f.endsWith(".html")) ?? summary.repositoryHtml;
     if (html3) openFile(html3);
   }
-  if (summary.website?.report.crawl.status === "unreachable") return EXIT.unreachable;
+  if (summary.website && notAnalysed(summary.website.report)) {
+    reportNotAnalysed(summary.website.report);
+    return EXIT.unreachable;
+  }
   const codes = [summary.website && failOnExit(summary.website.report, v["fail-on"]), summary.repository && failOnExit(summary.repository.report, v["fail-on"])];
   return codes.some((c) => c === EXIT.failOn) ? EXIT.failOn : EXIT.ok;
 }
@@ -42629,7 +42700,7 @@ function analyzeEcosystem(snaps) {
 function renderEcosystemMarkdown(r) {
   const L = ["# Searvex ecosystem analysis", ""];
   L.push("## Sites", "", "| Site | Site name | Organization | Parent | Declares children | Model (heuristic) | Languages | Pages | Score |", "|---|---|---|---|---|---|---|---|---|");
-  for (const s of r.sites) L.push(`| ${md(s.host)} | ${md(s.siteName)} | ${md(s.organization)} | ${md(s.parent)} | ${s.children.map(md).join(", ") || "\u2014"} | ${md(s.model)} | ${s.languages.map(md).join(", ")} | ${s.pages} | ${s.score} |`);
+  for (const s of r.sites) L.push(`| ${md(s.host)} | ${md(s.siteName)} | ${md(s.organization)} | ${md(s.parent)} | ${s.children.map(md).join(", ") || "\u2014"} | ${md(s.model)} | ${s.languages.map(md).join(", ")} | ${s.pages} | ${s.score ?? "n/a"} |`);
   L.push("", "## Cross-links (links from row site to column site, crawled pages)", "");
   const hosts = r.sites.map((s) => s.host);
   L.push(`| from \\ to | ${hosts.map(md).join(" | ")} |`, `|---|${hosts.map(() => "---").join("|")}|`);
@@ -42796,8 +42867,9 @@ Environment (all optional, read-only integrations)
 
 Exit codes
   0 completed \xB7 1 --fail-on threshold reached (also optimize verification failed, rollback conflict, or
-  an integration status that is not working) \xB7 2 usage error \xB7 3 runtime error \xB7 4 target unreachable
-  (reports written, no site findings) \xB7 5 reserved for interrupted runs (not used yet)
+  an integration status that is not working) \xB7 2 usage error \xB7 3 runtime error \xB7 4 target unreachable or
+  robots.txt blocks every URL (reports written, no page findings) \xB7 5 reserved for interrupted runs (not used
+  yet)
 
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
 `;
@@ -42870,7 +42942,10 @@ var EXIT = {
   failOn: 1,
   usage: 2,
   runtime: 3,
-  /** The start URL failed at the network level; reports were written but contain no site findings. */
+  /**
+   * Target not analysable: the start URL failed at the network level, or robots.txt blocked every URL
+   * (`crawl.status` tells them apart). Reports were written but contain no findings about the pages.
+   */
   unreachable: 4,
   /** Reserved: interrupted run with a partial report (signal / --max-duration handling is planned, not used yet). */
   interrupted: 5
@@ -42880,7 +42955,10 @@ function assertTargetAllowed(report) {
   if (err?.startsWith("Blocked: ")) throw new UsageError(`${report.target} is blocked by the network policy (${err.slice(9)}). Use --allow-private for a local or private development server.`);
 }
 function auditExit(report, failOn) {
-  return report.crawl.status === "unreachable" ? EXIT.unreachable : failOnExit(report, failOn);
+  return notAnalysed(report) ? EXIT.unreachable : failOnExit(report, failOn);
+}
+function reportNotAnalysed(report) {
+  if (notAnalysed(report)) console.error(`searvex: ${notAnalysedReason(report)}`);
 }
 function crawlOptionsFrom(v) {
   return {
@@ -42958,8 +43036,17 @@ Searvex \u2014 ${report.target}`];
     L.push("Check the URL, DNS, the network or the server, then run the audit again.");
     return withReportFiles(L, files);
   }
+  if (report.crawl.status === "robots-blocked") {
+    L.push(`robots.txt blocks every URL (${report.crawl.blocked} skipped): ${report.crawl.error ?? "robots.txt disallows crawling"}. No page was fetched, so there is no score.`);
+    const launch3 = report.findings.filter((f) => f.context === "launch-checklist");
+    if (launch3.length) L.push(`Launch checklist: ${launch3.map((f) => f.title).join("; ")} \u2014 this staging build blocks all crawlers; change it before going live.`);
+    for (const f of report.findings.filter((x) => !x.context)) L.push(`Fix first: [${f.severity}] ${f.title}`);
+    const fix = /no findings about the pages\. (.*)$/.exec(report.limitations[0] ?? "")?.[1];
+    if (fix) L.push(fix);
+    return withReportFiles(L, files);
+  }
   if (report.crawl.siteUrl) L.push(`Audited ${new URL(report.crawl.startUrl).origin} as ${report.crawl.siteUrl} (--site-url)`);
-  L.push(`Health score ${scoreLabel(report.scores)} (Searvex metric, not a search engine score) \xB7 ${report.crawl.crawled} ${report.mode === "website" ? "pages crawled" : `routes/pages, ${indexableSummary(report)}`} \xB7 ${issues.length} issue types, ${report.affectedUrls ?? 0} affected ${unit}`);
+  L.push(`Health score ${scoreLabel(report.scores)} (Searvex metric, not a search engine score) \xB7 ${report.mode === "website" ? pagesLabel(report) : `${report.crawl.crawled} routes/pages, ${indexableSummary(report)}`} \xB7 ${issues.length} issue types, ${report.affectedUrls ?? 0} affected ${unit}`);
   if (top2.length) {
     L.push("Top priorities:");
     top2.forEach((f, i) => L.push(`  ${i + 1}. [${f.severity}] ${f.title} \u2014 ${f.count} ${f.count === 1 ? unit.replace(/s$/, "") : unit}${f.confidence === "heuristic" ? " (heuristic)" : ""}${remediationOf(f.ruleId, plan) === "auto" ? " \xB7 automatic fix" : ""}`));
@@ -42979,6 +43066,10 @@ Searvex \u2014 ${report.target}`];
   }
   if (limits.length) L.push(`Limits: ${limits.join(" \xB7 ")}`);
   return withReportFiles(L, files);
+}
+function pagesLabel(report) {
+  const fetched = report.crawl.fetched ?? report.crawl.crawled - report.crawl.blocked;
+  return `${fetched} pages fetched${report.crawl.blocked ? `, ${report.crawl.blocked} blocked by robots.txt` : ""}`;
 }
 function withReportFiles(L, files) {
   const html3 = files.find((f) => f.endsWith(".html"));
@@ -43019,9 +43110,9 @@ async function commandAudit(flags) {
         ...opts,
         render: render3?.render,
         onProgress: (p) => {
-          if (p.crawled - last2 >= 10 || p.crawled === 1) {
-            last2 = p.crawled;
-            log(v, `  ${p.crawled} pages \xB7 ${p.queued} queued \xB7 ${p.status} ${p.url}`);
+          if (p.fetched - last2 >= 10 || p.fetched === 1) {
+            last2 = p.fetched;
+            log(v, `  ${p.fetched} pages fetched \xB7 ${p.queued} queued \xB7 ${p.status} ${p.url}`);
           }
         }
       }
@@ -43035,6 +43126,7 @@ async function commandAudit(flags) {
     assertTargetAllowed(report);
     const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
     printSummary(report, files, v);
+    reportNotAnalysed(report);
     return auditExit(report, v["fail-on"]);
   } finally {
     await render3?.close();
@@ -43051,14 +43143,14 @@ async function commandGeo(flags) {
   const { report, store: store2 } = await auditWebsite(target, { workspace: path22.resolve(String(v["out"] ?? process.cwd())), kb, crawl: opts, preLaunch: !!v["pre-launch"] });
   assertTargetAllowed(report);
   const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
-  const unreachable = report.crawl.status === "unreachable";
+  const unreachable = notAnalysed(report);
+  if (unreachable) console.error(`searvex: ${notAnalysedReason(report)} \u2014 no GEO checks were run.`);
   if (v["json"]) {
     process.stdout.write(JSON.stringify({ target: report.target, ...unreachable ? { crawl: { status: report.crawl.status, error: report.crawl.error } } : {}, geo: report.geo, findings: report.findings.filter((f) => f.category === "geo" || f.ruleId.startsWith("sd.")) }, null, 2) + "\n");
     return unreachable ? EXIT.unreachable : EXIT.ok;
   }
   if (unreachable) {
-    console.error(`searvex: target unreachable: ${report.crawl.error ?? "network error"} \u2014 no GEO checks were run.
-Reports:
+    console.error(`Reports:
 ${files.map((f) => "  " + f).join("\n")}`);
     return EXIT.unreachable;
   }
@@ -43250,7 +43342,9 @@ export {
   log,
   main,
   num,
+  pagesLabel,
   printSummary,
+  reportNotAnalysed,
   suggestPreLaunch,
   summaryText,
   writeReports

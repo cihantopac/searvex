@@ -30,6 +30,13 @@ export interface SiteInventory {
   languages: Record<string, number>;
   hreflangLanguages: string[];
   statusCodes: Record<string, number>;
+  /**
+   * Every crawled URL that is not in `pages` (which lists only HTML pages that answered 200 without a
+   * redirect), in crawl order, so a consumer can account for every URL the crawl touched. Capped at
+   * `UNFETCHED_CAP`; `unfetchedTotal` is the full count. Absent in reports written before 1.3.0.
+   */
+  unfetched?: UnfetchedUrl[];
+  unfetchedTotal?: number;
   /** Likely business model inferred from page types and schema. Heuristic. */
   /** Heuristic classification with the signals that produced it and runner-up labels. */
   businessModel: { label: string; evidence: string[]; confidence?: 'high' | 'medium' | 'low'; alternatives?: Array<{ label: string; score: number }> };
@@ -44,6 +51,30 @@ export interface SiteInventory {
     pagesWithStructuredData: number;
     invalidJsonLdPages: number;
   };
+}
+
+export interface UnfetchedUrl {
+  url: string;
+  /** HTTP status; 0 when no response was received (robots.txt block or network error). */
+  status: number;
+  /**
+   * `robots-blocked`: not requested because robots.txt disallows it. `error`: no usable response (network,
+   * TLS, timeout, redirect loop). `redirect`: answered with a redirect (the target is crawled as its own URL).
+   * `non-200`: any other status than 200 (4xx, 5xx, …). `not-html`: 200 with a non-HTML body.
+   */
+  reason: 'robots-blocked' | 'error' | 'redirect' | 'non-200' | 'not-html';
+  /** Error message, or the redirect target. */
+  detail?: string;
+}
+
+export const UNFETCHED_CAP = 10000;
+
+function unfetchedReason(p: SiteContext['pages'][number]): UnfetchedUrl | null {
+  if (p.blockedByRobots) return { url: p.url, status: 0, reason: 'robots-blocked' };
+  if (p.error) return { url: p.url, status: p.status, reason: 'error', detail: p.error };
+  if (p.redirects.length) return { url: p.url, status: p.redirects[0]!.status, reason: 'redirect', detail: p.finalUrl };
+  if (p.status !== 200) return { url: p.url, status: p.status, reason: 'non-200' };
+  return factsOf(p) ? null : { url: p.url, status: 200, reason: 'not-html' };
 }
 
 /** All schema.org types on a page with the syntax they were found in. */
@@ -93,9 +124,16 @@ function schemaType(types: Set<string>): PageType | null {
 export function buildInventory(ctx: SiteContext): SiteInventory {
   const pages: InventoryPage[] = [];
   const statusCodes: Record<string, number> = {};
+  const unfetched: UnfetchedUrl[] = [];
+  let unfetchedTotal = 0;
   for (const p of ctx.pages) {
     const key = p.blockedByRobots ? 'robots-blocked' : p.error ? 'error' : String(p.status);
     statusCodes[key] = (statusCodes[key] ?? 0) + 1;
+    const u = unfetchedReason(p);
+    if (u) {
+      unfetchedTotal++;
+      if (unfetched.length < UNFETCHED_CAP) unfetched.push(u);
+    }
     const f = factsOf(p);
     if (!f || p.status !== 200 || p.redirects.length) continue;
     const types = new Set<string>();
@@ -165,6 +203,8 @@ export function buildInventory(ctx: SiteContext): SiteInventory {
     languages,
     hreflangLanguages,
     statusCodes,
+    unfetched,
+    unfetchedTotal,
     businessModel: { ...businessModel, label, evidence },
     offerings,
     relations,

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { computeScores, countAffected, type AuditReport } from '../analyze/audit.js';
+import { computeScores, countAffected, notApplicableScores, type AuditReport } from '../analyze/audit.js';
 
 const NOTHING_TO_AUDIT = 'No website found: the repository has no web framework, HTML pages or server templates that Searvex can audit (tests, fixtures, examples and benchmarks are ignored). Point Searvex at the folder of the site, or at its deployed URL.';
 import { buildContext } from '../analyze/context.js';
@@ -91,7 +91,7 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
     runId: 'repository',
     generatedAt: new Date().toISOString(),
     crawl: {
-      crawled: scan.routes.length, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: 0, avgResponseMs: 0, truncated: scan.skipped.truncated,
+      crawled: scan.routes.length, fetched: scan.routes.length, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: 0, avgResponseMs: 0, truncated: scan.skipped.truncated,
       startUrl: opts.siteUrl ?? '', robots: { url: scan.apps[0]?.locations.robotsFile ?? '', state: scan.apps[0]?.locations.robotsFile ? 'ok' : 'missing', status: 0, sitemaps: [] },
       sitemaps: scan.apps.flatMap((a) => a.locations.sitemapFiles), sitemapUrls: scan.apps.reduce((n, a) => n + (a.staticSite?.sitemap.urls.length ?? 0), 0), sitemapIssues: [],
     },
@@ -99,7 +99,7 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
     findings,
     geo,
     content,
-    scores: nothingToAudit ? { ...computeScores(findings, 1), notApplicable: NOTHING_TO_AUDIT } : computeScores(findings, Math.max(1, scan.routes.length)),
+    scores: nothingToAudit ? notApplicableScores(NOTHING_TO_AUDIT) : computeScores(findings, Math.max(1, scan.routes.length)),
     measurement: {
       verified: findings.filter((f) => f.confidence === 'verified').length,
       heuristic: findings.filter((f) => f.confidence === 'heuristic').length,

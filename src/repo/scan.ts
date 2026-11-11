@@ -330,7 +330,7 @@ function staticCrawl(htmlFiles: string[], dirBase: string, read: (f: string) => 
   return {
     runId: 'repository', startUrl: new URL('/', siteOrigin).toString(), origin: siteOrigin, robots,
     sitemap: { sitemaps: sitemapFiles, urls: smUrls, issues: [] }, pages, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(),
-    stats: { crawled: pages.length, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: 0, avgResponseMs: 0 }, truncated: false,
+    stats: { crawled: pages.length, fetched: pages.length, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: 0, avgResponseMs: 0 }, truncated: false,
   };
 }
 
