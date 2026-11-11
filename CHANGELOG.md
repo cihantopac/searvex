@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Repository mode parses Vue SFCs, Astro pages and Blade views instead of matching regexes: `<script setup>` head
+  calls (`useHead`, `useSeoMeta`, `definePageMeta`) and Astro frontmatter through the Babel AST, Astro templates
+  through parse5, Blade through a tokenizer that drops comments, `@verbatim` and `@php`. A commented-out
+  `useHead`, a help string mentioning it, or an `<a title>` no longer counts as a page title; a computed head object
+  or a spread into a layout is reported as unknown instead of present or missing. No new dependency.
+
 ### Added
 - Upstream proxy support, as designed in `docs/design/proxy.md`: `--proxy <url|none>` and `HTTPS_PROXY` /
   `HTTP_PROXY` / `NO_PROXY`, `CONNECT` only with TLS end to end and Basic authentication. Private, loopback and

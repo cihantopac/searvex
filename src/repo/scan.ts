@@ -7,6 +7,7 @@ import { extractPage } from '../extract/html.js';
 import type { FindingSink } from '../rules/engine.js';
 import { detect, type Detection, type Framework } from './detect.js';
 import { lineOf, readText, walk, type WalkedFile } from './fs-safe.js';
+import { astroPageMeta, bladeMarkup, vuePageMeta } from './sfc.js';
 import { attrString, isJsSource, jsxAnchorsWithoutHref, jsxImagesWithoutAlt, jsxTags, nextMetadata, parseSource, type NextMetadata } from './ast.js';
 
 export interface RouteInfo {
@@ -419,11 +420,10 @@ function scanApp(root: string, appRoot: string, framework: Framework, files: Wal
       scanLayouts(layouts.length ? layouts : find(appFiles, /\.astro$/).map((f) => f.rel).filter((f) => /<head/i.test(read(f))), read, sink, scan, { titleRe: /<title\b/i, langRe: /\blang\s*=/ });
       for (const p of find(appFiles, /src\/pages\/.+\.(astro|md|mdx)$/)) {
         const route = '/' + p.rel.replace(/^.*src\/pages\//, '').replace(/\.(astro|mdx?)$/, '').replace(/(^|\/)index$/, '');
-        const src = read(p.rel);
-        // Props spread into a layout (<Layout {...post.data}>) usually carry the title: unknown, not missing.
-        const spread = /<[A-Z]\w*\s+[^>]*\{\s*\.\.\.[^}]+\}/.test(src);
-        const hasTitle = /<title\b/i.test(src) || /\btitle\s*=\s*[{"']/.test(src) || /^---[\s\S]*?\ntitle\s*:/m.test(src) ? true : spread ? null : false;
-        scan.routes.push({ route, file: p.rel, framework: 'astro', dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: /description\s*[=:]/.test(src), noindex: /noindex/.test(src) });
+        // Frontmatter and template parsed (see sfc.ts): a title on a component, not on an <a>, counts.
+        const meta = astroPageMeta(read(p.rel), p.rel);
+        const hasTitle = meta.hasTitle;
+        scan.routes.push({ route, file: p.rel, framework: 'astro', dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: meta.hasDescription, noindex: meta.noindex });
         if (hasTitle === false) sink.emit('title.missing', { file: p.rel, observed: `route ${route}: no title passed to layout and no <title>` });
       }
       const cfg = appFiles.find((f) => /astro\.config\.\w+$/.test(f.rel));
@@ -438,15 +438,19 @@ function scanApp(root: string, appRoot: string, framework: Framework, files: Wal
       for (const p of find(appFiles, /(^|\/)pages\/.+\.vue$/)) {
         const src = read(p.rel);
         const route = '/' + p.rel.replace(/^.*pages\//, '').replace(/\.vue$/, '').replace(/(^|\/)index$/, '');
-        const hasTitle = /useHead|useSeoMeta|definePageMeta\s*\(\s*\{[^}]*title/s.test(src) || /title\s*:/.test(cfgSrc);
-        scan.routes.push({ route, file: p.rel, framework: 'nuxt', dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: /description/.test(src), noindex: /noindex/.test(src) });
-        if (!hasTitle) sink.emit('title.missing', { file: p.rel, observed: `route ${route}: no useHead/useSeoMeta title` });
+        // <script setup> parsed into an AST: useHead/useSeoMeta/definePageMeta arguments, <Title> in the template.
+        const meta = vuePageMeta(src);
+        const hasTitle = meta.hasTitle === false && /title\s*:/.test(cfgSrc) ? true : meta.hasTitle;
+        scan.routes.push({ route, file: p.rel, framework: 'nuxt', dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: meta.hasDescription, noindex: meta.noindex });
+        if (hasTitle === false) sink.emit('title.missing', { file: p.rel, observed: `route ${route}: no useHead/useSeoMeta title` });
       }
       break;
     }
     case 'laravel': {
-      const layouts = find(appFiles, /resources\/views\/.*\.blade\.php$/).map((f) => f.rel).filter((f) => !ADMIN_VIEWS.test(f) && /<head\b/i.test(read(f)));
-      scanLayouts(layouts, read, sink, scan, { titleRe: /<title\b/i, langRe: /\blang\s*=/ });
+      // Blade comments, @verbatim and @php blocks are not markup (see sfc.ts).
+      const blade = (f: string) => bladeMarkup(read(f));
+      const layouts = find(appFiles, /resources\/views\/.*\.blade\.php$/).map((f) => f.rel).filter((f) => !ADMIN_VIEWS.test(f) && /<head\b/i.test(blade(f)));
+      scanLayouts(layouts, blade, sink, scan, { titleRe: /<title\b/i, langRe: /\blang\s*=/ });
       // Page routes live in routes/web.php and in any extra route file the app registers (routes/public.php,
       // routes/marketing.php …); api, console and broadcast channel routes are not pages.
       const routeFiles = appFiles.filter((f) => f.rel.startsWith(rel(appRoot, 'routes') + '/') && /\.php$/.test(f.rel) && !/\/(api|console|channels)\.php$/.test(f.rel));
