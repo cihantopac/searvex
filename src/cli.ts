@@ -15,7 +15,7 @@ import { annotateReport, remediationOf } from './report/remediation.js';
 import { commandOpen, commandReview, openFile, resolveRun } from './commands/review.js';
 import { buildRepairPrompt } from './report/prompt.js';
 import { repairPromptInput } from './report/prompt-input.js';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { renderMarkdown } from './report/markdown.js';
 import { renderSarif } from './report/sarif.js';
 import { defaultKnowledgeDir, loadKnowledge, validateKnowledge, type KnowledgeBase } from './rules/engine.js';
@@ -69,6 +69,9 @@ Commands
                         Record an agent/human review of a finding next to the audit (evidence is kept)
   prompt <runId|latest>  Print the repair prompt the HTML report builds, for every issue or --rules a,b
                         (--lang en|tr, --format md|json); secrets are redacted the same way
+  schema [report|events|error]
+                        Print the JSON Schema of report.json, --progress ndjson events or the --json
+                        error object (default: report)
   runs                  List stored runs
 
 Common options
@@ -710,6 +713,17 @@ function commandPrompt(flags: GlobalFlags): number {
   return EXIT.ok;
 }
 
+/** searvex schema: print a published JSON Schema (shipped in the package's schema/ directory). */
+function commandSchema(flags: GlobalFlags): number {
+  const name = flags.positionals[1] ?? 'report';
+  if (!['report', 'events', 'error'].includes(name)) throw new UsageError(`Unknown schema: ${name} (report, events or error)`);
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const file = [path.resolve(here, '..', 'schema', `${name}.schema.json`), path.resolve(here, '..', '..', 'schema', `${name}.schema.json`)].find((f) => fs.existsSync(f));
+  if (!file) throw new Error(`schema/${name}.schema.json is missing from this installation`);
+  process.stdout.write(fs.readFileSync(file, 'utf8'));
+  return EXIT.ok;
+}
+
 function commandRuns(flags: GlobalFlags): number {
   const workspace = path.resolve(String(flags.values['out'] ?? process.cwd()));
   for (const id of RunStore.list(workspace)) {
@@ -788,6 +802,8 @@ async function runCommand(cmd: string, flags: GlobalFlags): Promise<number> {
         return commandReview(flags);
       case 'prompt':
         return commandPrompt(flags);
+      case 'schema':
+        return commandSchema(flags);
       default:
         throw new UsageError(`Unknown command: ${cmd}`);
     }

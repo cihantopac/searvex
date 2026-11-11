@@ -45,9 +45,12 @@ export interface RuleFile {
 }
 
 export interface KnowledgeBase {
+  /** Newest `version` of all rule files. */
   version: string;
   rules: Map<string, Rule>;
   files: string[];
+  /** `version` of the rule file that defines each rule id. */
+  ruleVersions?: Map<string, string>;
 }
 
 /** Domains accepted as official sources. Anything else fails validation. */
@@ -108,6 +111,7 @@ export function loadKnowledge(dir = defaultKnowledgeDir()): KnowledgeBase {
   const rulesDir = path.join(dir, 'rules');
   const files = fs.readdirSync(rulesDir).filter((f) => f.endsWith('.json')).sort();
   const rules = new Map<string, Rule>();
+  const ruleVersions = new Map<string, string>();
   let version = '0.0.0';
   for (const f of files) {
     const data = JSON.parse(fs.readFileSync(path.join(rulesDir, f), 'utf8')) as RuleFile;
@@ -115,9 +119,10 @@ export function loadKnowledge(dir = defaultKnowledgeDir()): KnowledgeBase {
     for (const r of data.rules) {
       if (rules.has(r.id)) throw new Error(`Duplicate rule id ${r.id} in ${f}`);
       rules.set(r.id, r);
+      ruleVersions.set(r.id, data.version);
     }
   }
-  return { version, rules, files };
+  return { version, rules, files, ruleVersions };
 }
 
 export interface ValidationIssue {

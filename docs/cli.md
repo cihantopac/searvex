@@ -55,6 +55,7 @@ With `--json`, the next stderr line is a JSON object:
 | `open [runId\|latest]` | Open a stored HTML report in the default browser (`open` / `xdg-open` / Explorer, no shell). |
 | `review <runId\|latest> <ref\|ruleId> <confirmed\|rejected\|fixed> [--note text]` | Record a review of a finding after an agent or person re-checked it. Stored in `reviews.json` next to the audit and shown separately in the HTML report; scanner evidence is never changed. `ref` is the stable occurrence reference shown in the report and in repair prompts (`ruleId#hash`). |
 | `prompt <runId\|latest>` | Print the repair prompt the HTML action center builds, outside the browser: every issue that counts toward the score, or `--rules a,b`. `--lang en\|tr` (default `en`), `--format md\|json` (default `md`; JSON: `{runId, rules, prompt}`). Evidence is redacted and bounded the same way as in the HTML. |
+| `schema [report\|events\|error]` | Print the published JSON Schema (draft-07) of `report.json`, of one `--progress ndjson` event, or of the `--json` error object (default `report`). The files ship in the package under `schema/`; see [schema.md](schema.md). |
 | `runs` | List stored runs. |
 
 ## Options
