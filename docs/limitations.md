@@ -48,7 +48,8 @@ Searvex reports what it can observe and labels everything else. Known limits (v1
   commercial pages); it does not know who owns the site.
 - An interrupted run (SIGINT/SIGTERM, `--max-duration`) is a partial report: site-level findings use the crawled
   subset and the extra probes are skipped. A process killed with SIGKILL writes no report; `--resume` continues
-  from the last checkpoint (at most 25 pages or 10 seconds old).
+  from the last checkpoint (at most 25 pages or 10 seconds old). On Windows, Ctrl+C (SIGINT) and `--max-duration`
+  stop gracefully, but a termination sent by another process cannot be caught and ends the run without a report.
 - `report.json` has no published schema or `schemaVersion` yet, and progress is plain text (planned).
 
 ## Local and staging builds

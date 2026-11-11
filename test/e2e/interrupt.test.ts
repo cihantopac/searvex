@@ -61,7 +61,8 @@ afterAll(async () => {
   fs.rmSync(cfg, { recursive: true, force: true });
 });
 
-describe.runIf(hasBundle)('B1: graceful interruption (bundled CLI)', () => {
+// Windows has no catchable SIGTERM: ChildProcess.kill() terminates the process at once.
+describe.runIf(hasBundle && process.platform !== 'win32')('B1: graceful interruption (bundled CLI)', () => {
   it('SIGTERM during a crawl writes a partial report and exits 5', async () => {
     const dir = fs.mkdtempSync(path.join(ws, 'term-'));
     let sent = false;
