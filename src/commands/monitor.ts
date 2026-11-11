@@ -9,7 +9,7 @@ import { querySearchConsole, type GscRow } from '../integrations/gsc.js';
 import { gscAccessToken } from '../integrations/google-oauth.js';
 import { GscImportError, importGscFiles, parseGscTable, type GscExport } from '../integrations/gsc-csv.js';
 import { assertAuditInProperty, matchAuditToProperty, parseProperty, propertyForExport, PropertyError, type SearchProperty } from '../integrations/property.js';
-import { assertTargetAllowed, crawlOptionsFrom, EXIT, log, reportNotAnalysed, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
+import { assertTargetAllowed, crawlOptionsFrom, EXIT, interrupter, log, reportInterrupted, reportNotAnalysed, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
 
 export interface FindingDelta {
   ruleId: string;
@@ -99,8 +99,8 @@ export function findBaseline(workspace: string, target: string, exclude: string)
   const runs = RunStore.list(workspace).filter((id) => id !== exclude).reverse();
   for (const id of runs) {
     const r = new RunStore(workspace, id).readJson<AuditReport>('report.json');
-    // An unreachable or robots-blocked run audited nothing and is never a baseline.
-    if (r && r.target === target && r.mode === 'website' && !notAnalysed(r)) return { id, report: r };
+    // An unreachable or robots-blocked run audited nothing, an interrupted one only part of the site: never a baseline.
+    if (r && r.target === target && r.mode === 'website' && !notAnalysed(r) && !r.crawl.interrupted) return { id, report: r };
   }
   return null;
 }
@@ -155,7 +155,8 @@ export async function commandMonitor(flags: GlobalFlags): Promise<number> {
 
   log(v, `Re-auditing ${target}…`);
   suggestPreLaunch(v, target);
-  const { report, store } = await auditWebsite(target, { workspace, kb, crawl: crawlOptionsFrom(v), preLaunch: !!v['pre-launch'] });
+  const stop = interrupter(v);
+  const { report, store } = await auditWebsite(target, { workspace, kb, crawl: { ...crawlOptionsFrom(v), stop: stop.signal }, preLaunch: !!v['pre-launch'] }).finally(stop.dispose);
   assertTargetAllowed(report);
   writeReports(store, report, kb, ['json', 'md', 'html']);
   if (notAnalysed(report)) {
@@ -165,6 +166,14 @@ export async function commandMonitor(flags: GlobalFlags): Promise<number> {
     if (v['json']) process.stdout.write(JSON.stringify({ diff: null, notes: [note] }, null, 2) + '\n');
     reportNotAnalysed(report, !!v['json'], '; no comparison with the previous run.');
     return EXIT.unreachable;
+  }
+  if (report.crawl.interrupted) {
+    // A partial crawl misses pages: diffing would report their findings as resolved.
+    const note = `Run interrupted (${report.crawl.interrupted}): partial report; no comparison with the previous run.`;
+    store.writeJson('monitor.json', { diff: null, notes: [note] });
+    if (v['json']) process.stdout.write(JSON.stringify({ diff: null, notes: [note] }, null, 2) + '\n');
+    reportInterrupted(report, !!v['json']);
+    return EXIT.interrupted;
   }
   const explicit = v['baseline'] as string | undefined;
   const base = explicit

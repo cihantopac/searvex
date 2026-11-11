@@ -947,12 +947,22 @@ var init_fetcher = __esm({
         this.custom.set(host, Math.max(delayMs, this.delayMs));
       }
       custom = /* @__PURE__ */ new Map();
-      async wait(host) {
+      /** Wait for the host's next slot; resolves early when `signal` aborts (the caller then checks it). */
+      async wait(host, signal) {
         const now = Date.now();
         const delay = this.custom.get(host) ?? this.delayMs;
         const at = Math.max(now, this.next.get(host) ?? 0);
         this.next.set(host, at + delay);
-        if (at > now) await new Promise((r) => setTimeout(r, at - now));
+        if (at <= now || signal?.aborted) return;
+        await new Promise((resolve) => {
+          const done = () => {
+            clearTimeout(timer);
+            signal?.removeEventListener("abort", done);
+            resolve();
+          };
+          const timer = setTimeout(done, at - now);
+          signal?.addEventListener("abort", done, { once: true });
+        });
       }
     };
   }
@@ -16068,7 +16078,7 @@ async function bounded(p, ms) {
   return ok;
 }
 async function launch(chromium, proxy) {
-  const base = { headless: true, args: BROWSER_ARGS, proxy: { server: proxy.server, username: proxy.username, password: proxy.password, bypass: "" } };
+  const base = { headless: true, handleSIGINT: false, handleSIGTERM: false, args: BROWSER_ARGS, proxy: { server: proxy.server, username: proxy.username, password: proxy.password, bypass: "" } };
   try {
     return { browser: await chromium.launch({ ...base, chromiumSandbox: true }), sandbox: true };
   } catch {
@@ -34960,8 +34970,13 @@ var DEFAULT_CRAWL = {
   policy: DEFAULT_POLICY,
   userAgent: DEFAULT_USER_AGENT,
   robotsAgent: "SearvexBot",
-  checkpointEvery: 25
+  checkpointEvery: 25,
+  checkpointMs: 1e4
 };
+function interruptionOf(signal) {
+  if (!signal?.aborted) return void 0;
+  return signal.reason === "max-duration" ? "max-duration" : "signal";
+}
 var KEPT_HEADERS = ["content-type", "x-robots-tag", "content-language", "last-modified", "cache-control", "link", "location", "retry-after", "strict-transport-security", "vary", "content-encoding"];
 function pickHeaders(h) {
   const out = {};
@@ -35040,21 +35055,43 @@ async function crawl(startUrl, partial = {}, store2) {
   const pages = [...existing];
   const seen = new Set(checkpoint?.seen ?? []);
   for (const p of existing) seen.add(p.url);
-  const queue = checkpoint?.queue ?? [];
+  const done = new Set(existing.map((p) => p.url));
+  const queue = (checkpoint?.queue ?? []).filter((i) => !done.has(i.url));
   const enqueue = (item) => {
     const n = normalizeUrl(item.url);
     if (!n || seen.has(n) || item.depth > opts.maxDepth || !inScope(n, rootHost, opts)) return;
     seen.add(n);
     queue.push({ ...item, url: n });
   };
+  const enqueueLinksOf = (rec, item) => {
+    const linkSource = rec.rendered ?? rec.data;
+    if (linkSource && rec.data) {
+      const follow = !rec.data.metaRobots.includes("nofollow") && !rec.data.metaRobots.includes("none");
+      if (follow && rec.finalUrl && new URL(rec.finalUrl).hostname.replace(/^www\./, "") === rootHost) {
+        for (const l of linkSource.links) {
+          if (l.url && l.internal && !l.rel.includes("nofollow")) enqueue({ url: l.url, depth: item.depth + 1, foundOn: item.url });
+        }
+      }
+      for (const target of [linkSource.canonical, ...linkSource.hreflang.map((h) => h.href)]) {
+        if (target) enqueue({ url: target, depth: item.depth + 1, foundOn: `${item.url} (canonical/hreflang)` });
+      }
+    }
+    if (rec.redirects.length && rec.finalUrl && rec.finalUrl !== item.url) enqueue({ url: rec.finalUrl, depth: item.depth, foundOn: item.url });
+  };
   if (!checkpoint) {
     enqueue({ url: start, depth: 0 });
     for (const u of sitemapSet) enqueue({ url: u, depth: Math.max(1, pathDepth(u)), foundOn: "sitemap" });
   }
-  store2?.writeJson("meta.json", { runId: store2.runId, kind: "crawl", startUrl: start, startedAt, options: { ...opts, policy: void 0, render: !!opts.render, onProgress: void 0 } });
+  store2?.writeJson("meta.json", { runId: store2.runId, kind: "crawl", startUrl: start, startedAt, options: { ...opts, policy: void 0, render: !!opts.render, onProgress: void 0, stop: void 0 } });
   let crawledThisRun = 0;
   let fetchedCount = existing.filter((p) => !p.blockedByRobots).length;
-  const persist = () => store2?.writeJson("checkpoint.json", { queue, seen: [...seen] });
+  let lastPersist = Date.now();
+  const persist = () => {
+    lastPersist = Date.now();
+    store2?.writeJson("checkpoint.json", { queue, seen: [...seen] });
+  };
+  if (checkpoint) for (const p of existing) enqueueLinksOf(p, { url: p.url, depth: p.depth });
+  persist();
   const processItem = async (item) => {
     const host = new URL(item.url).host;
     const blocked = !robots.isAllowed(item.url, opts.robotsAgent);
@@ -35080,7 +35117,11 @@ async function crawl(startUrl, partial = {}, store2) {
       store2?.append("pages.jsonl", rec2);
       return;
     }
-    await limiter.wait(host);
+    await limiter.wait(host, opts.stop);
+    if (opts.stop?.aborted) {
+      queue.unshift(item);
+      return;
+    }
     const res = await safeFetch(item.url, fetchOpts);
     if (res.status === 429 || res.status === 503) {
       const ra = Number(res.headers["retry-after"]);
@@ -35114,18 +35155,8 @@ async function crawl(startUrl, partial = {}, store2) {
         if (r.error) rec.renderError = r.error;
         else rec.rendered = mapPageData(extractPage(r.html, res.finalUrl), map2);
       }
-      const linkSource = rec.rendered ?? rec.data;
-      const follow = !rec.data.metaRobots.includes("nofollow") && !rec.data.metaRobots.includes("none");
-      if (follow && res.finalUrl && new URL(res.finalUrl).hostname.replace(/^www\./, "") === rootHost) {
-        for (const l of linkSource.links) {
-          if (l.url && l.internal && !l.rel.includes("nofollow")) enqueue({ url: l.url, depth: item.depth + 1, foundOn: item.url });
-        }
-      }
-      for (const target of [linkSource.canonical, ...linkSource.hreflang.map((h) => h.href)]) {
-        if (target) enqueue({ url: target, depth: item.depth + 1, foundOn: `${item.url} (canonical/hreflang)` });
-      }
     }
-    if (res.redirects.length && res.finalUrl !== item.url) enqueue({ url: res.finalUrl, depth: item.depth, foundOn: item.url });
+    enqueueLinksOf(rec, item);
     for (const d of [rec.data, rec.rendered]) {
       if (!d) continue;
       d.textContent = d.textContent.slice(0, 2e4);
@@ -35136,13 +35167,13 @@ async function crawl(startUrl, partial = {}, store2) {
     crawledThisRun++;
     fetchedCount++;
     opts.onProgress?.({ crawled: pages.length, fetched: fetchedCount, queued: queue.length, url: item.url, status: res.status });
-    if (crawledThisRun % opts.checkpointEvery === 0) persist();
+    if (crawledThisRun % opts.checkpointEvery === 0 || Date.now() - lastPersist >= opts.checkpointMs) persist();
   };
   const workers = [];
   let active = 0;
   const next2 = async () => {
     for (; ; ) {
-      if (pages.length + active >= opts.maxPages) return;
+      if (pages.length + active >= opts.maxPages || opts.stop?.aborted) return;
       const item = queue.shift();
       if (!item) {
         if (active === 0) return;
@@ -35181,7 +35212,8 @@ async function crawl(startUrl, partial = {}, store2) {
       avgResponseMs: fetched.length ? Math.round(fetched.reduce((a, p) => a + p.timingMs, 0) / fetched.length) : 0
     },
     truncated: queue.length > 0,
-    ...map2 ? { siteUrl: map2.from } : {}
+    ...map2 ? { siteUrl: map2.from } : {},
+    ...interruptionOf(opts.stop) ? { interrupted: interruptionOf(opts.stop) } : {}
   };
   store2?.writeJson("crawl-summary.json", {
     ...result,
@@ -37152,6 +37184,7 @@ function crawlSummary(result, robotsAgent = DEFAULT_CRAWL.robotsAgent) {
     status: result.unreachable ? "unreachable" : blocked ? "robots-blocked" : "complete",
     ...result.unreachable ? { error: result.unreachable.error } : blocked ? { error: robotsBlockReason(result, robotsAgent) } : {},
     ...result.siteUrl ? { siteUrl: result.siteUrl } : {},
+    ...result.interrupted ? { interrupted: result.interrupted } : {},
     truncated: result.truncated,
     startUrl: result.startUrl,
     robots: { url: result.robots.url, state: result.robots.state, status: result.robots.status, sitemaps: result.robots.sitemaps },
@@ -37211,7 +37244,8 @@ async function analyzeCrawl(result, kb, opts = {}) {
       rendered: false
     };
   }
-  if (opts.probes !== false) {
+  const interrupted = result.interrupted;
+  if (opts.probes !== false && !interrupted) {
     await probeHostVariants(result.startUrl, netOpts, sink);
     await probeLocaleAdaptive(result.startUrl, netOpts, sink);
     llms = await probeLlmsTxt(result.origin, netOpts);
@@ -37221,9 +37255,10 @@ async function analyzeCrawl(result, kb, opts = {}) {
   const geo = runGeoChecks(ctx, sink, llms);
   const content = runContentChecks(ctx, sink);
   let externalLinks;
-  if (opts.checkExternal) externalLinks = await checkExternalLinks(ctx, sink, { ...netOpts, robotsAgent: opts.robotsAgent });
+  if (opts.checkExternal && !interrupted) externalLinks = await checkExternalLinks(ctx, sink, { ...netOpts, robotsAgent: opts.robotsAgent });
   let fieldData;
-  if (opts.cruxApiKey) {
+  if (interrupted) sink.emit("perf.cwv-unmeasured", { observed: "Not queried: the run was interrupted" });
+  else if (opts.cruxApiKey) {
     fieldData = await queryCrux(result.origin, opts.cruxApiKey);
     if (fieldData.status === "ok") {
       for (const m of fieldData.metrics) {
@@ -37240,7 +37275,11 @@ async function analyzeCrawl(result, kb, opts = {}) {
     "Website mode sees only publicly reachable pages; it has no access to real traffic, rankings, Search Console or analytics data unless an integration is configured.",
     "Response times are single-location lab samples, not Core Web Vitals field data."
   ];
-  if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
+  if (interrupted)
+    limitations.unshift(
+      `The run was interrupted ${interrupted === "signal" ? "by a signal (SIGINT/SIGTERM)" : "at the --max-duration deadline"} after ${result.stats.fetched} fetched page(s), with ${result.stats.queuedRemaining} URL(s) still queued: this is a partial report. Site-level findings (duplicates, hreflang return links) use the crawled subset, orphan pages are not reported, and the host, locale and llms.txt probes${opts.checkExternal ? ", the outbound link check" : ""} and the CrUX query were skipped. Continue the crawl with --resume ${result.runId}.`
+    );
+  else if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
   if (launch2) limitations.push(`Pre-launch profile (--pre-launch): the site is audited as it will be once live. ${launch2.noindex.size ? `${launch2.noindex.size} noindex page(s) were evaluated as indexable; their noindex is in the launch checklist. ` : ""}Findings that depend on the test server (environment) or on a deliberate pre-launch state (launch checklist) are listed separately and excluded from the score and --fail-on.`);
   if (result.siteUrl) limitations.push(`Audited ${result.origin} as ${result.siteUrl} (--site-url): canonical, hreflang, sitemap and link URLs on ${result.siteUrl} were checked against the crawled pages at ${result.origin}; the public site itself was not fetched.`);
   if (!opts.checkExternal) limitations.push("Outbound links were not checked (use --check-external).");
@@ -37326,7 +37365,7 @@ overview(panel('overview'),issues);priorities(panel('priorities'),issues);issues
 mkTabs(tabs);actionbar()}
 function overview(P,issues){
 function TT(k,fb){var s=T(k);return s===k?fb:s}
-var lim=[];if(R.crawl.truncated)lim.push([T('lim.truncated'),T('warn.truncated',{n:fmt(R.crawl.queuedRemaining)})]);if(R.scores.notApplicable)lim.push([T('warn.notApplicable'),T('warn.notApplicable')+': '+R.scores.notApplicable]);
+var lim=[];if(R.crawl.interrupted)lim.push([T('lim.interrupted'),T('warn.interrupted',{n:fmt(R.crawl.queuedRemaining),run:R.runId})]);else if(R.crawl.truncated)lim.push([T('lim.truncated'),T('warn.truncated',{n:fmt(R.crawl.queuedRemaining)})]);if(R.scores.notApplicable)lim.push([T('warn.notApplicable'),T('warn.notApplicable')+': '+R.scores.notApplicable]);
 if(!D.search&&R.mode==='website')lim.push([T('lim.search'),T('sp.notConnected')]);R.findings.filter(function(f){return f.confidence==='unmeasurable'}).forEach(function(f){var t=rt(f.ruleId).title,o=f.evidence[0]&&f.evidence[0].observed;lim.push([TT('lim.'+f.ruleId,t),t+(o?' — '+TT('limd.'+f.ruleId,o):'')])});
 if(R.mode==='website'&&!R.rendered)lim.push([T('lim.render'),T('warn.noRender')]);
 var groups=0;issues.forEach(function(f){groups+=groupsOf(f).length});
@@ -37543,6 +37582,8 @@ var UI = {
     "lim.search": "Search Console data",
     "lim.render": "JavaScript rendering",
     "lim.truncated": "Partial crawl",
+    "lim.interrupted": "Interrupted run",
+    "warn.interrupted": "The run was interrupted with {n} URLs still queued: this is a partial report. Continue with --resume {run}.",
     "lim.geo.citations-unmeasured": "AI citations",
     "lim.perf.cwv-unmeasured": "Core Web Vitals",
     "limd.geo.citations-unmeasured": "no AI citation data source is configured",
@@ -37798,6 +37839,8 @@ var UI = {
     "lim.search": "Search Console verisi",
     "lim.render": "JavaScript i\u015Fleme",
     "lim.truncated": "K\u0131smi tarama",
+    "lim.interrupted": "Yar\u0131da kesilen \xE7al\u0131\u015Fma",
+    "warn.interrupted": "\xC7al\u0131\u015Fma, {n} URL h\xE2l\xE2 kuyruktayken yar\u0131da kesildi: bu k\u0131smi bir rapor. --resume {run} ile devam edin.",
     "lim.geo.citations-unmeasured": "Yapay zek\xE2 al\u0131nt\u0131lar\u0131",
     "lim.perf.cwv-unmeasured": "Core Web Vitals",
     "limd.geo.citations-unmeasured": "yapay zek\xE2 al\u0131nt\u0131 verisi i\xE7in kaynak yap\u0131land\u0131r\u0131lmad\u0131",
@@ -38920,12 +38963,13 @@ function renderMarkdown(r, opts = {}) {
   if (r.crawl.siteUrl) L.push(`Audited \`${md(new URL(r.crawl.startUrl).origin)}\` as \`${md(r.crawl.siteUrl)}\` (--site-url)`, "");
   L.push(`Generated ${r.generatedAt} \xB7 Searvex ${r.tool.version} \xB7 rules ${r.tool.rulesVersion} \xB7 run \`${r.runId}\``, "");
   if (r.crawl.status === "unreachable") L.push(`> **Target unreachable:** ${md(r.crawl.error ?? "network error")}. No page was fetched, so this report contains no findings about the site.`, "");
+  if (r.crawl.interrupted) L.push(`> **Partial report:** the run was interrupted ${r.crawl.interrupted === "signal" ? "by a signal (SIGINT/SIGTERM)" : "at --max-duration"} with ${r.crawl.queuedRemaining} URL(s) still queued. Continue with \`--resume ${md(r.runId)}\`.`, "");
   if (r.crawl.status === "robots-blocked") L.push(`> **robots.txt blocks every URL:** ${md(r.crawl.error ?? "robots.txt disallows crawling")}. No page was fetched, so this report contains no findings about the pages.`, "");
   L.push("## Summary", "");
   L.push(`| Metric | Value |`, `|---|---|`);
   L.push(`| Searvex health score\xB9 | **${scoreLabel(r.scores)}** |`);
   if (r.mode === "website") {
-    L.push(`| Pages fetched | ${r.crawl.fetched ?? r.crawl.crawled - r.crawl.blocked}${r.crawl.truncated ? ` (limit reached, ${r.crawl.queuedRemaining} queued)` : ""} |`);
+    L.push(`| Pages fetched | ${r.crawl.fetched ?? r.crawl.crawled - r.crawl.blocked}${r.crawl.interrupted ? ` (interrupted, ${r.crawl.queuedRemaining} queued)` : r.crawl.truncated ? ` (limit reached, ${r.crawl.queuedRemaining} queued)` : ""} |`);
     if (r.crawl.blocked) L.push(`| Blocked by robots.txt | ${r.crawl.blocked} |`);
   } else L.push(`| Routes/pages | ${r.crawl.crawled}${r.crawl.truncated ? " (file limit reached)" : ""} |`);
   L.push(`| Indexable HTML pages | ${indexableSummary(r).replace(/ indexable/, "")} |`);
@@ -39887,7 +39931,7 @@ function findBaseline(workspace, target, exclude) {
   const runs = RunStore.list(workspace).filter((id) => id !== exclude).reverse();
   for (const id of runs) {
     const r = new RunStore(workspace, id).readJson("report.json");
-    if (r && r.target === target && r.mode === "website" && !notAnalysed(r)) return { id, report: r };
+    if (r && r.target === target && r.mode === "website" && !notAnalysed(r) && !r.crawl.interrupted) return { id, report: r };
   }
   return null;
 }
@@ -39933,7 +39977,8 @@ async function commandMonitor(flags) {
   const apiProperty = site ? propertyOrUsage(() => parseProperty(site)) : void 0;
   log(v, `Re-auditing ${target}\u2026`);
   suggestPreLaunch(v, target);
-  const { report, store: store2 } = await auditWebsite(target, { workspace, kb, crawl: crawlOptionsFrom(v), preLaunch: !!v["pre-launch"] });
+  const stop = interrupter(v);
+  const { report, store: store2 } = await auditWebsite(target, { workspace, kb, crawl: { ...crawlOptionsFrom(v), stop: stop.signal }, preLaunch: !!v["pre-launch"] }).finally(stop.dispose);
   assertTargetAllowed(report);
   writeReports(store2, report, kb, ["json", "md", "html"]);
   if (notAnalysed(report)) {
@@ -39942,6 +39987,13 @@ async function commandMonitor(flags) {
     if (v["json"]) process.stdout.write(JSON.stringify({ diff: null, notes: [note] }, null, 2) + "\n");
     reportNotAnalysed(report, !!v["json"], "; no comparison with the previous run.");
     return EXIT.unreachable;
+  }
+  if (report.crawl.interrupted) {
+    const note = `Run interrupted (${report.crawl.interrupted}): partial report; no comparison with the previous run.`;
+    store2.writeJson("monitor.json", { diff: null, notes: [note] });
+    if (v["json"]) process.stdout.write(JSON.stringify({ diff: null, notes: [note] }, null, 2) + "\n");
+    reportInterrupted(report, !!v["json"]);
+    return EXIT.interrupted;
   }
   const explicit = v["baseline"];
   const base = explicit ? { id: explicit, report: new RunStore(workspace, explicit).readJson("report.json") } : findBaseline(workspace, report.target, store2.runId);
@@ -42389,7 +42441,7 @@ function renderRunSummary(s) {
     L.push("## 1. Website audit", "", `${md(r.target)} \u2014 **${md(notAnalysedReason(r))}**. No page was fetched, so there are no findings about the pages and no score; steps 2\u20134 were skipped.`, "");
   } else if (s.website) {
     const r = s.website.report;
-    L.push("## 1. Website audit", "", `${md(r.target)} \u2014 health score **${scoreLabel(r.scores)}**, ${r.crawl.fetched ?? r.crawl.crawled} pages fetched${r.crawl.truncated ? " (page limit reached)" : ""}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, "");
+    L.push("## 1. Website audit", "", `${md(r.target)} \u2014 health score **${scoreLabel(r.scores)}**, ${r.crawl.fetched ?? r.crawl.crawled} pages fetched${r.crawl.interrupted ? " (run interrupted: partial)" : r.crawl.truncated ? " (page limit reached)" : ""}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, "");
     for (const f of top(r)) L.push(`- [${f.severity}] ${md(f.title)} \u2014 ${f.count} \xD7 (\`${f.ruleId}\`)`);
     L.push("", `Interactive report: \`.searvex/runs/${s.website.runId}/report.html\` (details: \`report.md\`)`, "");
     L.push("## 2. GEO / AI search readiness", "");
@@ -42426,6 +42478,14 @@ function renderRunSummary(s) {
   return L.join("\n") + "\n";
 }
 async function commandRun(flags) {
+  const stop = interrupter(flags.values);
+  try {
+    return await runWorkflow(flags, stop.signal);
+  } finally {
+    stop.dispose();
+  }
+}
+async function runWorkflow(flags, stop) {
   const v = flags.values;
   const targets = flags.positionals.slice(1);
   const url = targets.find((t) => /^https?:\/\//i.test(t));
@@ -42447,14 +42507,15 @@ async function commandRun(flags) {
   if (url) {
     log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)\u2026`);
     suggestPreLaunch(v, url);
-    const { report, store: store3 } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v["check-external"], cruxApiKey: cruxKey()?.key, preLaunch: !!v["pre-launch"] });
+    const { report, store: store3 } = await auditWebsite(url, { workspace, kb, crawl: { ...opts, stop }, checkExternal: !!v["check-external"], cruxApiKey: cruxKey()?.key, preLaunch: !!v["pre-launch"] });
     assertTargetAllowed(report);
     const files = writeReports(store3, report, kb, ["json", "md", "html"]);
     summary.website = { report, runId: store3.runId, files };
     summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!getCredential("gsc") || !!process.env["SEARVEX_GSC_TOKEN"] };
-    if (notAnalysed(report)) {
-      const why = notAnalysedReason(report);
-      step(1, "Website audit", "skipped", `${why}; reports written without findings`);
+    if (notAnalysed(report) || report.crawl.interrupted) {
+      const why = notAnalysed(report) ? notAnalysedReason(report) : `run interrupted (${report.crawl.interrupted})`;
+      if (notAnalysed(report)) step(1, "Website audit", "skipped", `${why}; reports written without findings`);
+      else step(1, "Website audit", "done", `partial: ${report.crawl.fetched} pages fetched before the interruption, score ${scoreLabel(report.scores)}`);
       step(2, "GEO / AI search", "skipped", why);
       step(3, "Change since previous run", "skipped", why);
       step(4, "Competitor research", "skipped", why);
@@ -42471,7 +42532,7 @@ async function commandRun(flags) {
         const compReports = [];
         for (const c of competitors) {
           log(v, `4. Crawling competitor ${c} (max ${perSite} pages)\u2026`);
-          compReports.push(await analyzeCrawl(await crawl(c, { ...opts, siteUrl: void 0, maxPages: perSite }), kb, { ...opts, probes: false }));
+          compReports.push(await analyzeCrawl(await crawl(c, { ...opts, siteUrl: void 0, maxPages: perSite, stop }), kb, { ...opts, probes: false }));
         }
         const allTerms = new Set(report.content.pageTerms.flatMap((p) => p.terms).concat(report.content.topTerms.map((t) => t.term)));
         summary.research = {
@@ -42489,7 +42550,10 @@ async function commandRun(flags) {
     step(3, "Change since previous run", "skipped", "no URL given");
     step(4, "Competitor research", "skipped", "no URL given");
   }
-  if (repo) {
+  if (repo && stop.aborted) {
+    step(5, "Repository audit", "skipped", "run interrupted");
+    step(6, "Fix plan (dry run)", "skipped", "run interrupted");
+  } else if (repo) {
     const root2 = fs14.realpathSync(repo);
     const siteUrl = v["site-url"] ?? (url ? new URL(url).origin : void 0);
     log(v, `5. Auditing repository ${root2}\u2026`);
@@ -42543,6 +42607,11 @@ Fix plan (dry run, nothing changed): ${summary.plan.fixes.length} automatic fix(
   if (summary.website && notAnalysed(summary.website.report)) {
     reportNotAnalysed(summary.website.report, !!v["json"]);
     return EXIT.unreachable;
+  }
+  if (stop.aborted) {
+    if (summary.website?.report.crawl.interrupted) reportInterrupted(summary.website.report, !!v["json"]);
+    else reportError(EXIT.interrupted, "interrupted", `interrupted ${stop.reason === "max-duration" ? "at --max-duration" : "by a signal"}: the remaining steps were skipped`, !!v["json"]);
+    return EXIT.interrupted;
   }
   const codes = [summary.website && failOnExit(summary.website.report, v["fail-on"]), summary.repository && failOnExit(summary.repository.report, v["fail-on"])];
   return codes.some((c) => c === EXIT.failOn) ? EXIT.failOn : EXIT.ok;
@@ -42827,6 +42896,8 @@ Common options
   --include <regex>     Only crawl matching URLs          --exclude <regex>  Skip matching URLs
   --check-external      Check outbound links (HEAD, robots.txt-aware, max 200)
   --no-sitemap          Do not seed from sitemaps         --resume <runId>   Resume an interrupted crawl
+  --max-duration <s>    Stop crawling after s seconds and write a partial report (exit 5). SIGINT/SIGTERM
+                        do the same; a second signal exits at once (130/143)
   --format <list>       md,html,json,sarif (default md,html,json)
   --out <dir>           Workspace for .searvex/ (default: current directory)
   --fail-on <severity>  Exit 1 if findings at/above severity exist (critical|high|medium|low)
@@ -42870,8 +42941,8 @@ Environment (all optional, read-only integrations)
 Exit codes
   0 completed \xB7 1 --fail-on threshold reached (also optimize verification failed, rollback conflict, or
   an integration status that is not working) \xB7 2 usage error \xB7 3 runtime error \xB7 4 target unreachable or
-  robots.txt blocks every URL (reports written, no page findings) \xB7 5 reserved for interrupted runs (not used
-  yet)
+  robots.txt blocks every URL (reports written, no page findings) \xB7 5 interrupted (SIGINT/SIGTERM or
+  --max-duration): a partial report was written
 
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
 `;
@@ -42897,6 +42968,7 @@ var CLI_OPTIONS = {
   exclude: { type: "string", multiple: true },
   "no-sitemap": { type: "boolean" },
   resume: { type: "string" },
+  "max-duration": { type: "string" },
   format: { type: "string" },
   out: { type: "string" },
   "fail-on": { type: "string" },
@@ -42960,7 +43032,7 @@ var EXIT = {
    * (`crawl.status` tells them apart). Reports were written but contain no findings about the pages.
    */
   unreachable: 4,
-  /** Reserved: interrupted run with a partial report (signal / --max-duration handling is planned, not used yet). */
+  /** Interrupted run (SIGINT/SIGTERM or --max-duration) with a partial report. */
   interrupted: 5
 };
 function assertTargetAllowed(report) {
@@ -42968,7 +43040,36 @@ function assertTargetAllowed(report) {
   if (err?.startsWith("Blocked: ")) throw new PolicyError(`${report.target} is blocked by the network policy (${err.slice(9)}). Use --allow-private for a local or private development server.`);
 }
 function auditExit(report, failOn) {
-  return notAnalysed(report) ? EXIT.unreachable : failOnExit(report, failOn);
+  return notAnalysed(report) ? EXIT.unreachable : report.crawl.interrupted ? EXIT.interrupted : failOnExit(report, failOn);
+}
+function reportInterrupted(report, json) {
+  if (!report.crawl.interrupted || notAnalysed(report)) return;
+  const why = report.crawl.interrupted === "signal" ? "by a signal" : "at --max-duration";
+  reportError(EXIT.interrupted, "interrupted", `interrupted ${why}: partial report of ${report.crawl.fetched} fetched page(s); continue with --resume ${report.runId}`, json);
+}
+function interrupter(v) {
+  const ac = new AbortController();
+  const seconds = v["max-duration"] === void 0 ? void 0 : num(v["max-duration"], 0, 1, 7 * 86400);
+  const timer = seconds ? setTimeout(() => {
+    log(v, `--max-duration ${seconds}s reached: finishing pages in flight and writing a partial report\u2026`);
+    ac.abort("max-duration");
+  }, seconds * 1e3) : void 0;
+  timer?.unref();
+  const onSignal = (sig) => {
+    if (ac.signal.aborted) process.exit(sig === "SIGINT" ? 130 : 143);
+    console.error(`searvex: ${sig} received: finishing pages in flight and writing a partial report (send it again to exit at once)`);
+    ac.abort("signal");
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+  return {
+    signal: ac.signal,
+    dispose: () => {
+      clearTimeout(timer);
+      process.off("SIGINT", onSignal);
+      process.off("SIGTERM", onSignal);
+    }
+  };
 }
 function reportNotAnalysed(report, json, suffix = "") {
   if (notAnalysed(report)) reportError(EXIT.unreachable, report.crawl.status, `${notAnalysedReason(report)}${suffix}`, json);
@@ -43074,7 +43175,8 @@ Searvex \u2014 ${report.target}`];
   if (env.length) L.push(`Environment-dependent (check on the production server, not scored): ${env.map((f) => f.title).join("; ")}`);
   if (auto.length) L.push(`Automatic fixes: ${auto.length} (${auto.map((f) => f.ruleId).join(", ")}) \u2014 preview with "searvex optimize ${report.mode === "repository" ? report.target : "<repo>"}"`);
   const limits = [];
-  if (report.crawl.truncated) limits.push(`crawl stopped at the page limit (${report.crawl.queuedRemaining} queued)`);
+  if (report.crawl.interrupted) limits.push(`run interrupted ${report.crawl.interrupted === "signal" ? "by a signal" : "at --max-duration"}: partial report (${report.crawl.queuedRemaining} queued; --resume ${report.runId})`);
+  else if (report.crawl.truncated) limits.push(`crawl stopped at the page limit (${report.crawl.queuedRemaining} queued)`);
   if (report.scores.notApplicable) limits.push("nothing to audit");
   if (report.mode === "website") {
     limits.push("search data not measured");
@@ -43112,8 +43214,10 @@ async function commandAudit(flags) {
   const kb = loadKnowledge();
   const workspace = path22.resolve(String(v["out"] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
-  const render3 = v["render"] ? await (await Promise.resolve().then(() => (init_render(), render_exports))).createRenderer(opts.policy) : void 0;
+  const stop = interrupter(v);
+  let render3;
   try {
+    if (v["render"]) render3 = await (await Promise.resolve().then(() => (init_render(), render_exports))).createRenderer(opts.policy);
     log(v, `Crawling ${target} (max ${opts.maxPages} pages, robots.txt respected)\u2026`);
     suggestPreLaunch(v, target);
     let last2 = 0;
@@ -43127,6 +43231,7 @@ async function commandAudit(flags) {
       crawl: {
         ...opts,
         render: render3?.render,
+        stop: stop.signal,
         onProgress: (p) => {
           if (p.fetched - last2 >= 10 || p.fetched === 1) {
             last2 = p.fetched;
@@ -43145,8 +43250,10 @@ async function commandAudit(flags) {
     const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
     printSummary(report, files, v);
     reportNotAnalysed(report, !!v["json"]);
+    reportInterrupted(report, !!v["json"]);
     return auditExit(report, v["fail-on"]);
   } finally {
+    stop.dispose();
     await render3?.close();
   }
 }
@@ -43158,14 +43265,16 @@ async function commandGeo(flags) {
   const kb = loadKnowledge();
   const opts = crawlOptionsFrom({ ...v, "max-pages": v["max-pages"] ?? "50" });
   suggestPreLaunch(v, target);
-  const { report, store: store2 } = await auditWebsite(target, { workspace: path22.resolve(String(v["out"] ?? process.cwd())), kb, crawl: opts, preLaunch: !!v["pre-launch"] });
+  const stop = interrupter(v);
+  const { report, store: store2 } = await auditWebsite(target, { workspace: path22.resolve(String(v["out"] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal }, preLaunch: !!v["pre-launch"] }).finally(stop.dispose);
   assertTargetAllowed(report);
+  reportInterrupted(report, !!v["json"]);
   const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
   const unreachable = notAnalysed(report);
   reportNotAnalysed(report, !!v["json"], " \u2014 no GEO checks were run.");
   if (v["json"]) {
     process.stdout.write(JSON.stringify({ target: report.target, ...unreachable ? { crawl: { status: report.crawl.status, error: report.crawl.error } } : {}, geo: report.geo, findings: report.findings.filter((f) => f.category === "geo" || f.ruleId.startsWith("sd.")) }, null, 2) + "\n");
-    return unreachable ? EXIT.unreachable : EXIT.ok;
+    return unreachable ? EXIT.unreachable : report.crawl.interrupted ? EXIT.interrupted : EXIT.ok;
   }
   if (unreachable) {
     console.error(`Reports:
@@ -43185,7 +43294,7 @@ llms.txt: ${report.geo.llmsTxt?.present ? "present" : "absent"} (informational; 
   console.log(`
 Reports:
 ${files.map((f) => "  " + f).join("\n")}`);
-  return 0;
+  return report.crawl.interrupted ? EXIT.interrupted : EXIT.ok;
 }
 async function commandRules(flags) {
   const kb = loadKnowledge();
@@ -43362,6 +43471,7 @@ export {
   errorJson,
   failOnExit,
   failOnIndex,
+  interrupter,
   isPrivateTarget,
   log,
   main,
@@ -43369,6 +43479,7 @@ export {
   pagesLabel,
   printSummary,
   reportError,
+  reportInterrupted,
   reportNotAnalysed,
   suggestPreLaunch,
   summaryText,

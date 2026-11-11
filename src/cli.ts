@@ -73,6 +73,8 @@ Common options
   --include <regex>     Only crawl matching URLs          --exclude <regex>  Skip matching URLs
   --check-external      Check outbound links (HEAD, robots.txt-aware, max 200)
   --no-sitemap          Do not seed from sitemaps         --resume <runId>   Resume an interrupted crawl
+  --max-duration <s>    Stop crawling after s seconds and write a partial report (exit 5). SIGINT/SIGTERM
+                        do the same; a second signal exits at once (130/143)
   --format <list>       md,html,json,sarif (default md,html,json)
   --out <dir>           Workspace for .searvex/ (default: current directory)
   --fail-on <severity>  Exit 1 if findings at/above severity exist (critical|high|medium|low)
@@ -116,8 +118,8 @@ Environment (all optional, read-only integrations)
 Exit codes
   0 completed · 1 --fail-on threshold reached (also optimize verification failed, rollback conflict, or
   an integration status that is not working) · 2 usage error · 3 runtime error · 4 target unreachable or
-  robots.txt blocks every URL (reports written, no page findings) · 5 reserved for interrupted runs (not used
-  yet)
+  robots.txt blocks every URL (reports written, no page findings) · 5 interrupted (SIGINT/SIGTERM or
+  --max-duration): a partial report was written
 
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
 `;
@@ -153,6 +155,7 @@ export const CLI_OPTIONS = {
   exclude: { type: 'string', multiple: true },
   'no-sitemap': { type: 'boolean' },
   resume: { type: 'string' },
+  'max-duration': { type: 'string' },
   format: { type: 'string' },
   out: { type: 'string' },
   'fail-on': { type: 'string' },
@@ -230,7 +233,7 @@ export const EXIT = {
    * (`crawl.status` tells them apart). Reports were written but contain no findings about the pages.
    */
   unreachable: 4,
-  /** Reserved: interrupted run with a partial report (signal / --max-duration handling is planned, not used yet). */
+  /** Interrupted run (SIGINT/SIGTERM or --max-duration) with a partial report. */
   interrupted: 5,
 } as const;
 
@@ -243,9 +246,57 @@ export function assertTargetAllowed(report: AuditReport): void {
   if (err?.startsWith('Blocked: ')) throw new PolicyError(`${report.target} is blocked by the network policy (${err.slice(9)}). Use --allow-private for a local or private development server.`);
 }
 
-/** Exit code for a finished website audit: target not analysable (unreachable, robots-blocked), else the --fail-on result. */
+/**
+ * Exit code for a finished website audit: target not analysable (unreachable, robots-blocked), then
+ * interrupted (partial report), else the --fail-on result.
+ */
 export function auditExit(report: AuditReport, failOn: unknown): number {
-  return notAnalysed(report) ? EXIT.unreachable : failOnExit(report, failOn);
+  return notAnalysed(report) ? EXIT.unreachable : report.crawl.interrupted ? EXIT.interrupted : failOnExit(report, failOn);
+}
+
+/** The stderr line of an interrupted run (exit 5), also with --json and --quiet. */
+export function reportInterrupted(report: AuditReport, json: boolean): void {
+  if (!report.crawl.interrupted || notAnalysed(report)) return;
+  const why = report.crawl.interrupted === 'signal' ? 'by a signal' : 'at --max-duration';
+  reportError(EXIT.interrupted, 'interrupted', `interrupted ${why}: partial report of ${report.crawl.fetched} fetched page(s); continue with --resume ${report.runId}`, json);
+}
+
+export interface Interrupter {
+  /** Aborted with reason `signal` or `max-duration`; pass it as the crawl's `stop`. */
+  signal: AbortSignal;
+  dispose: () => void;
+}
+
+/**
+ * Graceful interruption for crawling commands: the first SIGINT/SIGTERM, or the --max-duration deadline,
+ * aborts `signal` (the crawl stops and a partial report is written); a second signal exits at once with
+ * 130 (SIGINT) or 143 (SIGTERM).
+ */
+export function interrupter(v: GlobalFlags['values']): Interrupter {
+  const ac = new AbortController();
+  const seconds = v['max-duration'] === undefined ? undefined : num(v['max-duration'], 0, 1, 7 * 86_400);
+  const timer = seconds
+    ? setTimeout(() => {
+        log(v, `--max-duration ${seconds}s reached: finishing pages in flight and writing a partial report…`);
+        ac.abort('max-duration');
+      }, seconds * 1000)
+    : undefined;
+  timer?.unref();
+  const onSignal = (sig: NodeJS.Signals) => {
+    if (ac.signal.aborted) process.exit(sig === 'SIGINT' ? 130 : 143);
+    console.error(`searvex: ${sig} received: finishing pages in flight and writing a partial report (send it again to exit at once)`);
+    ac.abort('signal');
+  };
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+  return {
+    signal: ac.signal,
+    dispose: () => {
+      clearTimeout(timer);
+      process.off('SIGINT', onSignal);
+      process.off('SIGTERM', onSignal);
+    },
+  };
 }
 
 /**
@@ -373,7 +424,8 @@ export function summaryText(report: AuditReport, files: string[], autoRules: str
   if (env.length) L.push(`Environment-dependent (check on the production server, not scored): ${env.map((f) => f.title).join('; ')}`);
   if (auto.length) L.push(`Automatic fixes: ${auto.length} (${auto.map((f) => f.ruleId).join(', ')}) — preview with "searvex optimize ${report.mode === 'repository' ? report.target : '<repo>'}"`);
   const limits: string[] = [];
-  if (report.crawl.truncated) limits.push(`crawl stopped at the page limit (${report.crawl.queuedRemaining} queued)`);
+  if (report.crawl.interrupted) limits.push(`run interrupted ${report.crawl.interrupted === 'signal' ? 'by a signal' : 'at --max-duration'}: partial report (${report.crawl.queuedRemaining} queued; --resume ${report.runId})`);
+  else if (report.crawl.truncated) limits.push(`crawl stopped at the page limit (${report.crawl.queuedRemaining} queued)`);
   if (report.scores.notApplicable) limits.push('nothing to audit');
   if (report.mode === 'website') {
     limits.push('search data not measured');
@@ -414,8 +466,10 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
   const kb = loadKnowledge();
   const workspace = path.resolve(String(v['out'] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
-  const render = v['render'] ? await (await import('./crawl/render.js')).createRenderer(opts.policy) : undefined;
+  const stop = interrupter(v);
+  let render: Awaited<ReturnType<(typeof import('./crawl/render.js'))['createRenderer']>> | undefined;
   try {
+    if (v['render']) render = await (await import('./crawl/render.js')).createRenderer(opts.policy);
     log(v, `Crawling ${target} (max ${opts.maxPages} pages, robots.txt respected)…`);
     suggestPreLaunch(v, target);
     let last = 0;
@@ -429,6 +483,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
       crawl: {
         ...opts,
         render: render?.render,
+        stop: stop.signal,
         onProgress: (p) => {
           if (p.fetched - last >= 10 || p.fetched === 1) {
             last = p.fetched;
@@ -447,8 +502,10 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
     const files = writeReports(store, report, kb, String(v['format'] ?? 'md,html,json').split(','));
     printSummary(report, files, v);
     reportNotAnalysed(report, !!v['json']);
+    reportInterrupted(report, !!v['json']);
     return auditExit(report, v['fail-on']);
   } finally {
+    stop.dispose();
     await render?.close();
   }
 }
@@ -461,14 +518,16 @@ async function commandGeo(flags: GlobalFlags): Promise<number> {
   const kb = loadKnowledge();
   const opts = crawlOptionsFrom({ ...v, 'max-pages': v['max-pages'] ?? '50' });
   suggestPreLaunch(v, target);
-  const { report, store } = await auditWebsite(target, { workspace: path.resolve(String(v['out'] ?? process.cwd())), kb, crawl: opts, preLaunch: !!v['pre-launch'] });
+  const stop = interrupter(v);
+  const { report, store } = await auditWebsite(target, { workspace: path.resolve(String(v['out'] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal }, preLaunch: !!v['pre-launch'] }).finally(stop.dispose);
   assertTargetAllowed(report);
+  reportInterrupted(report, !!v['json']);
   const files = writeReports(store, report, kb, String(v['format'] ?? 'md,html,json').split(','));
   const unreachable = notAnalysed(report);
   reportNotAnalysed(report, !!v['json'], ' — no GEO checks were run.');
   if (v['json']) {
     process.stdout.write(JSON.stringify({ target: report.target, ...(unreachable ? { crawl: { status: report.crawl.status, error: report.crawl.error } } : {}), geo: report.geo, findings: report.findings.filter((f) => f.category === 'geo' || f.ruleId.startsWith('sd.')) }, null, 2) + '\n');
-    return unreachable ? EXIT.unreachable : EXIT.ok;
+    return unreachable ? EXIT.unreachable : report.crawl.interrupted ? EXIT.interrupted : EXIT.ok;
   }
   if (unreachable) {
     console.error(`Reports:\n${files.map((f) => '  ' + f).join('\n')}`);
@@ -482,7 +541,7 @@ async function commandGeo(flags: GlobalFlags): Promise<number> {
   console.log(`AI citations: not measured — ${report.geo.citations.measured ? '' : report.geo.citations.reason}`);
   for (const f of report.findings.filter((x) => x.category === 'geo' && x.severity !== 'info')) console.log(`  [${f.severity}] ${f.title}: ${f.evidence[0]?.observed ?? ''}`);
   console.log(`\nReports:\n${files.map((f) => '  ' + f).join('\n')}`);
-  return 0;
+  return report.crawl.interrupted ? EXIT.interrupted : EXIT.ok;
 }
 
 async function commandRules(flags: GlobalFlags): Promise<number> {

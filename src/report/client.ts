@@ -60,7 +60,7 @@ overview(panel('overview'),issues);priorities(panel('priorities'),issues);issues
 mkTabs(tabs);actionbar()}
 function overview(P,issues){
 function TT(k,fb){var s=T(k);return s===k?fb:s}
-var lim=[];if(R.crawl.truncated)lim.push([T('lim.truncated'),T('warn.truncated',{n:fmt(R.crawl.queuedRemaining)})]);if(R.scores.notApplicable)lim.push([T('warn.notApplicable'),T('warn.notApplicable')+': '+R.scores.notApplicable]);
+var lim=[];if(R.crawl.interrupted)lim.push([T('lim.interrupted'),T('warn.interrupted',{n:fmt(R.crawl.queuedRemaining),run:R.runId})]);else if(R.crawl.truncated)lim.push([T('lim.truncated'),T('warn.truncated',{n:fmt(R.crawl.queuedRemaining)})]);if(R.scores.notApplicable)lim.push([T('warn.notApplicable'),T('warn.notApplicable')+': '+R.scores.notApplicable]);
 if(!D.search&&R.mode==='website')lim.push([T('lim.search'),T('sp.notConnected')]);R.findings.filter(function(f){return f.confidence==='unmeasurable'}).forEach(function(f){var t=rt(f.ruleId).title,o=f.evidence[0]&&f.evidence[0].observed;lim.push([TT('lim.'+f.ruleId,t),t+(o?' — '+TT('limd.'+f.ruleId,o):'')])});
 if(R.mode==='website'&&!R.rendered)lim.push([T('lim.render'),T('warn.noRender')]);
 var groups=0;issues.forEach(function(f){groups+=groupsOf(f).length});

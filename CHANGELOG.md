@@ -21,6 +21,14 @@ All notable changes to this project are documented here. The format follows
 - With `--json`, every error also writes one JSON object on stderr:
   `{"error":{"code":2|3|4,"kind":"usage|policy|runtime|unreachable|robots-blocked","message":…}}`.
 - `SEARVEX_DEBUG=1` prints the stack trace of a runtime error.
+- Graceful interruption (exit `5`): the first SIGINT/SIGTERM, or the new `--max-duration <s>`, stops the crawl,
+  lets pages in flight finish, and writes every requested report format as a partial report
+  (`crawl.interrupted: "signal" | "max-duration"`, a limitation line, extra probes skipped). A second signal exits
+  at once (130/143). `audit`, `geo`, `monitor` and `run`; an interrupted run is never a monitor baseline.
+- The crawl checkpoint is written at the start and every 25 pages or 10 seconds, so `--resume` works after an early
+  kill; resuming no longer fetches pages stored after the last checkpoint again and still follows their links.
+- `--render`: Playwright no longer kills the browser on SIGINT/SIGTERM under pages that are still rendering;
+  Searvex closes it on every exit path.
 
 ### Changed
 - **`scores.overall` is `null`** whenever `scores.notApplicable` is set (unreachable or robots-blocked target,

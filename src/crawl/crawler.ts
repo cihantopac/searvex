@@ -25,8 +25,15 @@ export interface CrawlOptions {
   render?: (url: string) => Promise<{ html: string; error?: string }>;
   /** `crawled`: URLs processed (fetched + robots-blocked); `fetched`: URLs for which an HTTP request was made. */
   onProgress?: (p: { crawled: number; fetched: number; queued: number; url: string; status: number }) => void;
-  /** Persist progress every N pages. */
+  /** Persist progress every N pages… */
   checkpointEvery: number;
+  /** …or every N milliseconds, whichever comes first, so `--resume` works after an early kill. */
+  checkpointMs: number;
+  /**
+   * Graceful stop (SIGINT/SIGTERM, --max-duration): when aborted, no new URL is started, pages in flight
+   * finish (bounded by the request timeout) and the result is marked `interrupted` with `signal.reason`.
+   */
+  stop?: AbortSignal;
   /**
    * Public URL of the site when it is crawled at another origin (local or staging build). URLs the pages
    * declare on that origin are mapped to the crawled origin (see `mapOrigin`).
@@ -45,6 +52,7 @@ export const DEFAULT_CRAWL: CrawlOptions = {
   userAgent: DEFAULT_USER_AGENT,
   robotsAgent: 'SearvexBot',
   checkpointEvery: 25,
+  checkpointMs: 10_000,
 };
 
 export interface PageRecord {
@@ -94,6 +102,16 @@ export interface CrawlResult {
   unreachable?: { error: string; blocked: boolean };
   /** Public origin mapped to `origin` (from --site-url); absent when no mapping applied. */
   siteUrl?: string;
+  /** Set when the crawl was stopped early by `CrawlOptions.stop`: the pages cover only part of the site. */
+  interrupted?: Interruption;
+}
+
+/** Why a crawl was stopped early: a signal (SIGINT/SIGTERM) or the --max-duration deadline. */
+export type Interruption = 'signal' | 'max-duration';
+
+function interruptionOf(signal: AbortSignal | undefined): Interruption | undefined {
+  if (!signal?.aborted) return undefined;
+  return signal.reason === 'max-duration' ? 'max-duration' : 'signal';
 }
 
 interface QueueItem {
@@ -198,22 +216,51 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
   const pages: PageRecord[] = [...existing];
   const seen = new Set<string>(checkpoint?.seen ?? []);
   for (const p of existing) seen.add(p.url);
-  const queue: QueueItem[] = checkpoint?.queue ?? [];
+  // Pages appended after the last checkpoint are done: never fetch them twice.
+  const done = new Set(existing.map((p) => p.url));
+  const queue: QueueItem[] = (checkpoint?.queue ?? []).filter((i) => !done.has(i.url));
   const enqueue = (item: QueueItem) => {
     const n = normalizeUrl(item.url);
     if (!n || seen.has(n) || item.depth > opts.maxDepth || !inScope(n, rootHost, opts)) return;
     seen.add(n);
     queue.push({ ...item, url: n });
   };
+  /** Queue the URLs a fetched page leads to: internal links, canonical/hreflang targets, its redirect target. */
+  const enqueueLinksOf = (rec: PageRecord, item: QueueItem) => {
+    const linkSource = rec.rendered ?? rec.data;
+    if (linkSource && rec.data) {
+      const follow = !rec.data.metaRobots.includes('nofollow') && !rec.data.metaRobots.includes('none');
+      if (follow && rec.finalUrl && new URL(rec.finalUrl).hostname.replace(/^www\./, '') === rootHost) {
+        for (const l of linkSource.links) {
+          if (l.url && l.internal && !l.rel.includes('nofollow')) enqueue({ url: l.url, depth: item.depth + 1, foundOn: item.url });
+        }
+      }
+      // Canonical and hreflang targets are crawled too (even on nofollow pages) so their status,
+      // indexability and return links can be verified. They do not count as internal links.
+      for (const target of [linkSource.canonical, ...linkSource.hreflang.map((h) => h.href)]) {
+        if (target) enqueue({ url: target, depth: item.depth + 1, foundOn: `${item.url} (canonical/hreflang)` });
+      }
+    }
+    // Redirect targets are crawled as their own URLs so chains and final status are visible.
+    if (rec.redirects.length && rec.finalUrl && rec.finalUrl !== item.url) enqueue({ url: rec.finalUrl, depth: item.depth, foundOn: item.url });
+  };
   if (!checkpoint) {
     enqueue({ url: start, depth: 0 });
     for (const u of sitemapSet) enqueue({ url: u, depth: Math.max(1, pathDepth(u)), foundOn: 'sitemap' });
   }
-  store?.writeJson('meta.json', { runId: store.runId, kind: 'crawl', startUrl: start, startedAt, options: { ...opts, policy: undefined, render: !!opts.render, onProgress: undefined } });
+  store?.writeJson('meta.json', { runId: store.runId, kind: 'crawl', startUrl: start, startedAt, options: { ...opts, policy: undefined, render: !!opts.render, onProgress: undefined, stop: undefined } });
 
   let crawledThisRun = 0;
   let fetchedCount = existing.filter((p) => !p.blockedByRobots).length;
-  const persist = () => store?.writeJson('checkpoint.json', { queue, seen: [...seen] } satisfies Checkpoint);
+  let lastPersist = Date.now();
+  const persist = () => {
+    lastPersist = Date.now();
+    store?.writeJson('checkpoint.json', { queue, seen: [...seen] } satisfies Checkpoint);
+  };
+  // Links of pages stored after the last checkpoint were never queued: queue them again (seen dedupes).
+  if (checkpoint) for (const p of existing) enqueueLinksOf(p, { url: p.url, depth: p.depth });
+  // A first checkpoint right away: a run killed within seconds can still be resumed.
+  persist();
 
   const processItem = async (item: QueueItem): Promise<void> => {
     const host = new URL(item.url).host;
@@ -227,7 +274,12 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
       store?.append('pages.jsonl', rec);
       return;
     }
-    await limiter.wait(host);
+    await limiter.wait(host, opts.stop);
+    if (opts.stop?.aborted) {
+      // Stopped while waiting for the host's slot: not fetched, so it stays queued for --resume.
+      queue.unshift(item);
+      return;
+    }
     const res: FetchResult = await safeFetch(item.url, fetchOpts);
     if (res.status === 429 || res.status === 503) {
       const ra = Number(res.headers['retry-after']);
@@ -261,21 +313,8 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
         if (r.error) rec.renderError = r.error;
         else rec.rendered = mapPageData(extractPage(r.html, res.finalUrl), map);
       }
-      const linkSource = rec.rendered ?? rec.data;
-      const follow = !rec.data.metaRobots.includes('nofollow') && !rec.data.metaRobots.includes('none');
-      if (follow && res.finalUrl && new URL(res.finalUrl).hostname.replace(/^www\./, '') === rootHost) {
-        for (const l of linkSource.links) {
-          if (l.url && l.internal && !l.rel.includes('nofollow')) enqueue({ url: l.url, depth: item.depth + 1, foundOn: item.url });
-        }
-      }
-      // Canonical and hreflang targets are crawled too (even on nofollow pages) so their status,
-      // indexability and return links can be verified. They do not count as internal links.
-      for (const target of [linkSource.canonical, ...linkSource.hreflang.map((h) => h.href)]) {
-        if (target) enqueue({ url: target, depth: item.depth + 1, foundOn: `${item.url} (canonical/hreflang)` });
-      }
     }
-    // Redirect targets are crawled as their own URLs so chains and final status are visible.
-    if (res.redirects.length && res.finalUrl !== item.url) enqueue({ url: res.finalUrl, depth: item.depth, foundOn: item.url });
+    enqueueLinksOf(rec, item);
     // Keep stored text bounded for large crawls.
     for (const d of [rec.data, rec.rendered]) {
       if (!d) continue;
@@ -287,7 +326,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
     crawledThisRun++;
     fetchedCount++;
     opts.onProgress?.({ crawled: pages.length, fetched: fetchedCount, queued: queue.length, url: item.url, status: res.status });
-    if (crawledThisRun % opts.checkpointEvery === 0) persist();
+    if (crawledThisRun % opts.checkpointEvery === 0 || Date.now() - lastPersist >= opts.checkpointMs) persist();
   };
 
   // Concurrency pool; politeness is enforced per host by the limiter.
@@ -297,7 +336,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
   let active = 0;
   const next = async (): Promise<void> => {
     for (;;) {
-      if (pages.length + active >= opts.maxPages) return;
+      if (pages.length + active >= opts.maxPages || opts.stop?.aborted) return;
       const item = queue.shift();
       if (!item) {
         if (active === 0) return;
@@ -338,6 +377,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
     },
     truncated: queue.length > 0,
     ...(map ? { siteUrl: map.from } : {}),
+    ...(interruptionOf(opts.stop) ? { interrupted: interruptionOf(opts.stop) } : {}),
   };
   store?.writeJson('crawl-summary.json', {
     ...result,

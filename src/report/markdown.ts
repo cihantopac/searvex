@@ -18,12 +18,13 @@ export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = 
   if (r.crawl.siteUrl) L.push(`Audited \`${md(new URL(r.crawl.startUrl).origin)}\` as \`${md(r.crawl.siteUrl)}\` (--site-url)`, '');
   L.push(`Generated ${r.generatedAt} · Searvex ${r.tool.version} · rules ${r.tool.rulesVersion} · run \`${r.runId}\``, '');
   if (r.crawl.status === 'unreachable') L.push(`> **Target unreachable:** ${md(r.crawl.error ?? 'network error')}. No page was fetched, so this report contains no findings about the site.`, '');
+  if (r.crawl.interrupted) L.push(`> **Partial report:** the run was interrupted ${r.crawl.interrupted === 'signal' ? 'by a signal (SIGINT/SIGTERM)' : 'at --max-duration'} with ${r.crawl.queuedRemaining} URL(s) still queued. Continue with \`--resume ${md(r.runId)}\`.`, '');
   if (r.crawl.status === 'robots-blocked') L.push(`> **robots.txt blocks every URL:** ${md(r.crawl.error ?? 'robots.txt disallows crawling')}. No page was fetched, so this report contains no findings about the pages.`, '');
   L.push('## Summary', '');
   L.push(`| Metric | Value |`, `|---|---|`);
   L.push(`| Searvex health score¹ | **${scoreLabel(r.scores)}** |`);
   if (r.mode === 'website') {
-    L.push(`| Pages fetched | ${r.crawl.fetched ?? r.crawl.crawled - r.crawl.blocked}${r.crawl.truncated ? ` (limit reached, ${r.crawl.queuedRemaining} queued)` : ''} |`);
+    L.push(`| Pages fetched | ${r.crawl.fetched ?? r.crawl.crawled - r.crawl.blocked}${r.crawl.interrupted ? ` (interrupted, ${r.crawl.queuedRemaining} queued)` : r.crawl.truncated ? ` (limit reached, ${r.crawl.queuedRemaining} queued)` : ''} |`);
     if (r.crawl.blocked) L.push(`| Blocked by robots.txt | ${r.crawl.blocked} |`);
   } else L.push(`| Routes/pages | ${r.crawl.crawled}${r.crawl.truncated ? ' (file limit reached)' : ''} |`);
   L.push(`| Indexable HTML pages | ${indexableSummary(r).replace(/ indexable/, '')} |`);

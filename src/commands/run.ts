@@ -9,7 +9,7 @@ import { planFixes, type FixPlan } from '../optimize/fixes.js';
 import { auditRepository } from '../repo/audit.js';
 import { loadKnowledge } from '../rules/engine.js';
 import { md, renderMarkdown } from '../report/markdown.js';
-import { assertTargetAllowed, crawlOptionsFrom, EXIT, failOnExit, failOnIndex, log, num, reportNotAnalysed, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
+import { assertTargetAllowed, crawlOptionsFrom, EXIT, failOnExit, failOnIndex, interrupter, log, num, reportError, reportInterrupted, reportNotAnalysed, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
 import { diffReports, findBaseline, renderDiffMarkdown, type MonitorDiff } from './monitor.js';
 import { computeGaps, profile, renderResearchMarkdown, type ResearchReport } from './research.js';
 import { renderPlan } from './optimize.js';
@@ -54,7 +54,7 @@ export function renderRunSummary(s: RunSummary): string {
     L.push('## 1. Website audit', '', `${md(r.target)} — **${md(notAnalysedReason(r))}**. No page was fetched, so there are no findings about the pages and no score; steps 2–4 were skipped.`, '');
   } else if (s.website) {
     const r = s.website.report;
-    L.push('## 1. Website audit', '', `${md(r.target)} — health score **${scoreLabel(r.scores)}**, ${r.crawl.fetched ?? r.crawl.crawled} pages fetched${r.crawl.truncated ? ' (page limit reached)' : ''}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, '');
+    L.push('## 1. Website audit', '', `${md(r.target)} — health score **${scoreLabel(r.scores)}**, ${r.crawl.fetched ?? r.crawl.crawled} pages fetched${r.crawl.interrupted ? ' (run interrupted: partial)' : r.crawl.truncated ? ' (page limit reached)' : ''}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, '');
     for (const f of top(r)) L.push(`- [${f.severity}] ${md(f.title)} — ${f.count} × (\`${f.ruleId}\`)`);
     L.push('', `Interactive report: \`.searvex/runs/${s.website.runId}/report.html\` (details: \`report.md\`)`, '');
     L.push('## 2. GEO / AI search readiness', '');
@@ -92,6 +92,15 @@ export function renderRunSummary(s: RunSummary): string {
 }
 
 export async function commandRun(flags: GlobalFlags): Promise<number> {
+  const stop = interrupter(flags.values);
+  try {
+    return await runWorkflow(flags, stop.signal);
+  } finally {
+    stop.dispose();
+  }
+}
+
+async function runWorkflow(flags: GlobalFlags, stop: AbortSignal): Promise<number> {
   const v = flags.values;
   const targets = flags.positionals.slice(1);
   const url = targets.find((t) => /^https?:\/\//i.test(t));
@@ -116,14 +125,15 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
   if (url) {
     log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)…`);
     suggestPreLaunch(v, url);
-    const { report, store } = await auditWebsite(url, { workspace, kb, crawl: opts, checkExternal: !!v['check-external'], cruxApiKey: cruxKey()?.key, preLaunch: !!v['pre-launch'] });
+    const { report, store } = await auditWebsite(url, { workspace, kb, crawl: { ...opts, stop }, checkExternal: !!v['check-external'], cruxApiKey: cruxKey()?.key, preLaunch: !!v['pre-launch'] });
     assertTargetAllowed(report);
     const files = writeReports(store, report, kb, ['json', 'md', 'html']);
     summary.website = { report, runId: store.runId, files };
     summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!getCredential('gsc') || !!process.env['SEARVEX_GSC_TOKEN'] };
-    if (notAnalysed(report)) {
-      const why = notAnalysedReason(report);
-      step(1, 'Website audit', 'skipped', `${why}; reports written without findings`);
+    if (notAnalysed(report) || report.crawl.interrupted) {
+      const why = notAnalysed(report) ? notAnalysedReason(report) : `run interrupted (${report.crawl.interrupted})`;
+      if (notAnalysed(report)) step(1, 'Website audit', 'skipped', `${why}; reports written without findings`);
+      else step(1, 'Website audit', 'done', `partial: ${report.crawl.fetched} pages fetched before the interruption, score ${scoreLabel(report.scores)}`);
       step(2, 'GEO / AI search', 'skipped', why);
       step(3, 'Change since previous run', 'skipped', why);
       step(4, 'Competitor research', 'skipped', why);
@@ -141,7 +151,7 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
         const compReports: AuditReport[] = [];
         for (const c of competitors) {
           log(v, `4. Crawling competitor ${c} (max ${perSite} pages)…`);
-          compReports.push(await analyzeCrawl(await crawl(c, { ...opts, siteUrl: undefined, maxPages: perSite }), kb, { ...opts, probes: false }));
+          compReports.push(await analyzeCrawl(await crawl(c, { ...opts, siteUrl: undefined, maxPages: perSite, stop }), kb, { ...opts, probes: false }));
         }
         const allTerms = new Set(report.content.pageTerms.flatMap((p) => p.terms).concat(report.content.topTerms.map((t) => t.term)));
         summary.research = {
@@ -161,7 +171,10 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
   }
 
   // 5–6: repository
-  if (repo) {
+  if (repo && stop.aborted) {
+    step(5, 'Repository audit', 'skipped', 'run interrupted');
+    step(6, 'Fix plan (dry run)', 'skipped', 'run interrupted');
+  } else if (repo) {
     const root = fs.realpathSync(repo);
     const siteUrl = (v['site-url'] as string | undefined) ?? (url ? new URL(url).origin : undefined);
     log(v, `5. Auditing repository ${root}…`);
@@ -217,6 +230,11 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
   if (summary.website && notAnalysed(summary.website.report)) {
     reportNotAnalysed(summary.website.report, !!v['json']);
     return EXIT.unreachable;
+  }
+  if (stop.aborted) {
+    if (summary.website?.report.crawl.interrupted) reportInterrupted(summary.website.report, !!v['json']);
+    else reportError(EXIT.interrupted, 'interrupted', `interrupted ${stop.reason === 'max-duration' ? 'at --max-duration' : 'by a signal'}: the remaining steps were skipped`, !!v['json']);
+    return EXIT.interrupted;
   }
   const codes = [summary.website && failOnExit(summary.website.report, v['fail-on']), summary.repository && failOnExit(summary.repository.report, v['fail-on'])];
   return codes.some((c) => c === EXIT.failOn) ? EXIT.failOn : EXIT.ok;
