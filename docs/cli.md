@@ -132,6 +132,7 @@ With `--json`, the next stderr line is a JSON object:
 | Field | Meaning |
 |---|---|
 | `crawl.status` | `complete`, `unreachable` or `robots-blocked` (see exit code `4`; a proxy that refuses `CONNECT` to the start URL is `unreachable` with the proxy named in `crawl.error`) |
+| `traffic` | Search data that weighted the priorities (`source`, `metric`, `pages`, `clicks`, `impressions`), written into the joined audit by `gsc report --audit`, `gsc import --audit`, `bing report --audit` and `monitor --import` with a pages table (since schema 1.1) |
 | `crawl.proxy` | Upstream proxy used: `endpoint` (`host:port`, never credentials), `resolve` and `unresolvedAllowed` (since schema 1.1) |
 | `crawl.crawled` | URLs processed, including URLs blocked by robots.txt (never requested) |
 | `crawl.fetched` | URLs for which an HTTP request was made (since 1.3.0) |

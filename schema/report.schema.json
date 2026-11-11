@@ -433,6 +433,14 @@
       "description": "Whether JavaScript was executed for at least one page (`--render`).",
       "type": "boolean"
     },
+    "traffic": {
+      "description": "Search data that weighted the priorities (`gsc|bing report --audit`, `monitor --import` with a pages table): page importance is then half structure, half share of clicks (or impressions). Since schema 1.1.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/TrafficInput"
+        }
+      ]
+    },
     "rootCauseGroups": {
       "description": "Root-cause groups per rule id: occurrences of one rule split by URL template, source file, shared layout or site (see `rootCauseGroups`). Since 1.3.0.",
       "type": "object",
@@ -1446,6 +1454,41 @@
         "businessModel",
         "sections",
         "structuredData"
+      ]
+    },
+    "TrafficInput": {
+      "description": "What `applyTrafficPriorities` recorded on the report (`report.traffic`).",
+      "type": "object",
+      "properties": {
+        "source": {
+          "description": "Where the numbers come from, e.g. \"Search Console sc-domain:example.com, 28 days\".",
+          "type": "string"
+        },
+        "metric": {
+          "description": "`clicks`, or `impressions` when the joined pages have fewer than 10 clicks in all.",
+          "type": "string",
+          "enum": [
+            "clicks",
+            "impressions"
+          ]
+        },
+        "pages": {
+          "description": "Crawled indexable pages with search data.",
+          "type": "number"
+        },
+        "clicks": {
+          "type": "number"
+        },
+        "impressions": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "source",
+        "metric",
+        "pages",
+        "clicks",
+        "impressions"
       ]
     },
     "UnfetchedUrl": {

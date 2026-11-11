@@ -11,7 +11,7 @@ import { runContentChecks, type ContentReport } from './content.js';
 import { runGeoChecks, type GeoReport, type LlmsTxtStatus } from './geo.js';
 import { buildInventory, type SiteInventory } from './inventory.js';
 import { runRobotsAccessChecks, runTechnicalChecks } from './technical.js';
-import { prioritise } from './priority.js';
+import { prioritise, type TrafficInput } from './priority.js';
 import { checkExternalLinks, type ExternalLinkResult } from './external-links.js';
 import { failingMetrics, queryCrux, type CruxResult } from '../integrations/crux.js';
 import { annotateReport, type RootCauseGroup } from '../report/remediation.js';
@@ -69,6 +69,11 @@ export interface AuditReport {
   affectedUrls?: number;
   /** Whether JavaScript was executed for at least one page (`--render`). */
   rendered?: boolean;
+  /**
+   * Search data that weighted the priorities (`gsc|bing report --audit`, `monitor --import` with a pages table):
+   * page importance is then half structure, half share of clicks (or impressions). Since schema 1.1.
+   */
+  traffic?: TrafficInput;
   /**
    * Root-cause groups per rule id: occurrences of one rule split by URL template, source file, shared layout or
    * site (see `rootCauseGroups`). Since 1.3.0.

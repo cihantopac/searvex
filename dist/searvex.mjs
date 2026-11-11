@@ -37214,13 +37214,55 @@ function prioritise(findings, affected, ctx, totalUnits) {
     if (f.autofixable) reasons.push("auto-fixable in repository mode");
     else if (layoutWide) reasons.push("on most pages \u2014 likely one shared layout/template fix");
     else if (concentrated) reasons.push(`concentrated in ${templates.length} template${templates.length > 1 ? "s" : ""} \u2014 fix once`);
-    const confidence = f.confidence === "verified" ? 1 : f.confidence === "heuristic" ? 0.6 : 0;
-    const effortFactor = effort === "low" ? 1 : effort === "medium" ? 1.25 : 1.6;
-    const score = Math.round(Math.min(1, SEVERITY[f.severity] * confidence * (0.35 + 0.65 * reach) / effortFactor) * 100);
-    const bucket = score >= 45 ? "P1" : score >= 15 ? "P2" : "P3";
-    f.priority = { score, bucket, reach: Math.round(reach * 1e3) / 1e3, effort, reasons };
+    f.priority = { ...scoreOf(f, reach, effort), reach: Math.round(reach * 1e3) / 1e3, effort, reasons };
   }
   linkRootCauses(findings);
+}
+function scoreOf(f, reach, effort) {
+  const confidence = f.confidence === "verified" ? 1 : f.confidence === "heuristic" ? 0.6 : 0;
+  const effortFactor = effort === "low" ? 1 : effort === "medium" ? 1.25 : 1.6;
+  const score = Math.round(Math.min(1, SEVERITY[f.severity] * confidence * (0.35 + 0.65 * reach) / effortFactor) * 100);
+  return { score, bucket: score >= 45 ? "P1" : score >= 15 ? "P2" : "P3" };
+}
+function applyTrafficPriorities(report, rows, source) {
+  const key = (u) => normalizeUrl(u) ?? u;
+  const byUrl = /* @__PURE__ */ new Map();
+  for (const r of rows) {
+    const k = key(r.page);
+    const e = byUrl.get(k);
+    byUrl.set(k, e ? { page: r.page, clicks: e.clicks + r.clicks, impressions: e.impressions + r.impressions } : r);
+  }
+  const pages = report.inventory.pages.filter((p) => p.indexable);
+  const joined = pages.map((p) => ({ url: p.url, t: byUrl.get(key(p.url)) })).filter((x) => x.t);
+  const clicks = joined.reduce((a, x) => a + x.t.clicks, 0);
+  const impressions = joined.reduce((a, x) => a + x.t.impressions, 0);
+  const metric = clicks >= 10 ? "clicks" : "impressions";
+  const total = metric === "clicks" ? clicks : impressions;
+  if (!pages.length || total <= 0) return null;
+  const structural = new Map(pages.map((p) => [p.url, 1 + Math.log2(1 + p.inlinks) + (p.type === "home" ? 3 : 0)]));
+  const sTotal = [...structural.values()].reduce((a, b) => a + b, 0);
+  const importance = new Map(pages.map((p) => {
+    const t = byUrl.get(key(p.url));
+    return [p.url, 0.5 * (structural.get(p.url) / sTotal) + 0.5 * ((t ? t[metric] : 0) / total)];
+  }));
+  for (const f of report.findings) {
+    const pr = f.priority;
+    if (!pr || pr.reasons[0]?.includes("site-wide") || pr.reasons.includes("site-wide")) continue;
+    const urls = f.affected?.urls ?? f.evidence.map((e) => e.url).filter((u) => !!u);
+    const hit = urls.filter((u) => importance.has(u));
+    if (!hit.length) continue;
+    const reach = Math.min(1, hit.reduce((a, u) => a + importance.get(u), 0));
+    const t = hit.map((u) => byUrl.get(key(u))).filter((x) => !!x);
+    const reasons = pr.reasons.filter((r) => !/(importance|traffic)-weighted reach/.test(r) && !r.includes("verified search data") && !r.startsWith("likely "));
+    reasons.unshift(`${Math.round(reach * 100)}% traffic-weighted reach (${f.count} affected)`);
+    reasons.splice(1, 0, `${t.reduce((a, x) => a + x.clicks, 0)} clicks \xB7 ${t.reduce((a, x) => a + x.impressions, 0)} impressions on affected pages (${source}; verified search data)`);
+    f.priority = { ...pr, ...scoreOf(f, reach, pr.effort), reach: Math.round(reach * 1e3) / 1e3, reasons };
+  }
+  for (const f of report.findings) if (f.priority) f.priority.reasons = f.priority.reasons.filter((r) => !r.startsWith("likely "));
+  linkRootCauses(report.findings);
+  const input = { source, metric, pages: joined.length, clicks, impressions };
+  report.traffic = input;
+  return input;
 }
 var CONSEQUENCES = [
   {
@@ -39298,6 +39340,7 @@ function renderMarkdown(r, opts = {}) {
   L.push(`| Indexable HTML pages | ${indexableSummary(r).replace(/ indexable/, "")} |`);
   L.push(`| Likely site type (heuristic) | ${md(r.inventory.businessModel.label)} |`);
   L.push(`| Findings | ${r.findings.filter((f) => f.severity !== "info").length} issues + ${r.findings.filter((f) => f.severity === "info").length} informational |`);
+  if (r.traffic) L.push(`| Priorities weighted by | ${r.traffic.clicks} clicks \xB7 ${r.traffic.impressions} impressions on ${r.traffic.pages} pages (${md(r.traffic.source)}; verified data, ${r.traffic.metric}) |`);
   L.push(`| Evidence quality | ${r.measurement.verified} verified \xB7 ${r.measurement.heuristic} heuristic \xB7 ${r.measurement.unmeasurable} unmeasurable |`);
   L.push("", `\xB9 ${r.scores.method}`, "");
   const ranked = r.findings.filter((f) => f.priority && f.priority.score > 0).sort((a, b) => b.priority.score - a.priority.score);
@@ -40330,6 +40373,8 @@ async function commandMonitor(flags) {
     const label = `The export ${exp.files.join(", ")}`;
     propertyOrUsage(() => (assertAuditInProperty(report, importProperty, label), void 0));
     for (const w of exp.warnings) log(v, `warning: ${w}`);
+    const pages = exp.tables.pages;
+    if (pages?.length && applyTrafficPriorities(report, pages.map((p) => ({ page: p.key, clicks: p.clicks, impressions: p.impressions })), `Search Console export ${exp.files.join(", ")}`)) writeReports(store2, report, kb, ["json", "md", "html"]);
     const table = exp.tables.queries ?? exp.tables.pages;
     const verified = exp.tables.pages?.length ? "property checked against the pages table" : "property as stated with --property (the export has no pages table to check it)";
     if (table?.length) gsc = { rows: table.map((r) => ({ keys: [r.key], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })), source: `imported ${exp.files.join(", ")}, ${importProperty.raw}; ${verified}` };
@@ -42130,12 +42175,13 @@ function analyzeSearchPerformance(input, opts) {
     const pageStats = new Map(topPages.map((p) => [normalizeUrl(p.page) ?? p.page, p]));
     for (const f of opts.audit.findings) {
       if (f.severity === "info") continue;
-      const hit = f.evidence.map((e) => e.url ? pageStats.get(normalizeUrl(e.url) ?? e.url) : void 0).filter((x) => !!x);
+      const urls = f.affected?.urls ?? f.evidence.map((e) => e.url).filter((u) => !!u);
+      const hit = urls.map((u) => pageStats.get(normalizeUrl(u) ?? u)).filter((x) => !!x);
       if (!hit.length) continue;
       findingsOnTrafficPages.push({ ruleId: f.ruleId, title: f.title, severity: f.severity, pages: hit.length, clicks: hit.reduce((a, p) => a + p.clicks, 0), impressions: hit.reduce((a, p) => a + p.impressions, 0) });
     }
     findingsOnTrafficPages.sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
-    notes.push("Findings-on-traffic uses the evidence URLs recorded in the audit (up to 50 per rule).");
+    if (opts.audit.findings.some((f) => f.severity !== "info" && !f.affected?.urls)) notes.push("Findings-on-traffic uses the evidence URLs recorded in the audit (up to 50 per rule) for findings without a complete affected-URL list.");
   } else if (!opts.audit) notMeasured.push("Findings on traffic pages and pages without impressions: no audit joined (use --audit latest).");
   if (opts.audit && joined) {
     for (const d of qp) {
@@ -42157,6 +42203,7 @@ function analyzeSearchPerformance(input, opts) {
     totals: { clicks: totalClicks, impressions: totalImpr, ctr: r4(totalClicks / Math.max(1, totalImpr)), queries: queryAgg.length, pages: pageAgg.length, basis },
     topQueries: topQueries.slice(0, 100),
     topPages: topPages.slice(0, 100),
+    ...pageAgg.length ? { pageTotals: pageAgg.map((p) => ({ page: p.page, clicks: p.clicks, impressions: p.impressions })) } : {},
     strikingDistance,
     lowCtr,
     multiPageQueries: multiPageQueries.slice(0, 100),
@@ -42299,7 +42346,11 @@ function saveReport(flags, workspace, kind, meta, report) {
   if (report.audit) {
     const as = new RunStore(workspace, report.audit.runId);
     const audit = as.readJson("report.json");
-    if (audit) auditHtml = writeReports(as, audit, loadKnowledge(), ["html"])[0];
+    if (audit) {
+      const traffic = report.pageTotals ? applyTrafficPriorities(audit, report.pageTotals, `${report.source}, ${report.period.days} days`) : null;
+      if (traffic) log(v, `Priorities of ${report.audit.runId} weighted by ${traffic.metric} on ${traffic.pages} crawled page(s).`);
+      auditHtml = writeReports(as, audit, loadKnowledge(), traffic ? ["json", "html"] : ["html"]).at(-1);
+    }
   }
   if (v["json"]) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
   else if (!v["quiet"]) console.log(renderSearchPerformanceMarkdown(report) + `
