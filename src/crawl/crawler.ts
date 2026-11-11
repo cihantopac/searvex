@@ -23,7 +23,8 @@ export interface CrawlOptions {
   robotsAgent: string;
   /** Optional JS renderer (see render.ts). */
   render?: (url: string) => Promise<{ html: string; error?: string }>;
-  onProgress?: (p: { crawled: number; queued: number; url: string; status: number }) => void;
+  /** `crawled`: URLs processed (fetched + robots-blocked); `fetched`: URLs for which an HTTP request was made. */
+  onProgress?: (p: { crawled: number; fetched: number; queued: number; url: string; status: number }) => void;
   /** Persist progress every N pages. */
   checkpointEvery: number;
   /**
@@ -79,7 +80,11 @@ export interface CrawlResult {
   pages: PageRecord[];
   startedAt: string;
   finishedAt: string;
-  stats: { crawled: number; queuedRemaining: number; blocked: number; errors: number; durationMs: number; avgResponseMs: number };
+  /**
+   * `crawled`: URLs processed, including those blocked by robots.txt (never requested). `fetched`: URLs for
+   * which an HTTP request was made. `blocked`: URLs not requested because robots.txt disallows them.
+   */
+  stats: { crawled: number; fetched: number; queuedRemaining: number; blocked: number; errors: number; durationMs: number; avgResponseMs: number };
   /** True when the crawl stopped because maxPages was reached with URLs still queued. */
   truncated: boolean;
   /**
@@ -170,7 +175,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
         pages: [],
         startedAt,
         finishedAt: new Date().toISOString(),
-        stats: { crawled: 0, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: Date.now() - t0, avgResponseMs: 0 },
+        stats: { crawled: 0, fetched: 0, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: Date.now() - t0, avgResponseMs: 0 },
         truncated: false,
         unreachable,
       };
@@ -207,6 +212,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
   store?.writeJson('meta.json', { runId: store.runId, kind: 'crawl', startUrl: start, startedAt, options: { ...opts, policy: undefined, render: !!opts.render, onProgress: undefined } });
 
   let crawledThisRun = 0;
+  let fetchedCount = existing.filter((p) => !p.blockedByRobots).length;
   const persist = () => store?.writeJson('checkpoint.json', { queue, seen: [...seen] } satisfies Checkpoint);
 
   const processItem = async (item: QueueItem): Promise<void> => {
@@ -279,7 +285,8 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
     pages.push(rec);
     store?.append('pages.jsonl', rec);
     crawledThisRun++;
-    opts.onProgress?.({ crawled: pages.length, queued: queue.length, url: item.url, status: res.status });
+    fetchedCount++;
+    opts.onProgress?.({ crawled: pages.length, fetched: fetchedCount, queued: queue.length, url: item.url, status: res.status });
     if (crawledThisRun % opts.checkpointEvery === 0) persist();
   };
 
@@ -309,7 +316,8 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
   await Promise.all(workers);
   persist();
 
-  const fetched = pages.filter((p) => !p.blockedByRobots && p.status > 0);
+  const requested = pages.filter((p) => !p.blockedByRobots);
+  const fetched = requested.filter((p) => p.status > 0);
   const result: CrawlResult = {
     runId: store?.runId ?? 'ephemeral',
     startUrl: start,
@@ -321,6 +329,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
     finishedAt: new Date().toISOString(),
     stats: {
       crawled: pages.length,
+      fetched: requested.length,
       queuedRemaining: queue.length,
       blocked: pages.filter((p) => p.blockedByRobots).length,
       errors: pages.filter((p) => p.error).length,

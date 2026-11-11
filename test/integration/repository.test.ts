@@ -114,7 +114,7 @@ describe('optimizer — plan, apply, verify, rollback', () => {
     for (const r of ['html.lang-missing', 'mobile.viewport-missing', 'canonical.relative', 'canonical.multiple', 'sd.missing-context', 'hreflang.invalid-code', 'robots.no-sitemap', 'canonical.missing']) {
       expect(after.findings.map((f) => f.ruleId), r).not.toContain(r);
     }
-    expect(after.scores.overall).toBeGreaterThan(audit.report.scores.overall);
+    expect(after.scores.overall).toBeGreaterThan(audit.report.scores.overall!);
     const index = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
     expect(index).toContain('<html lang="en">');
     expect(index).toContain('<link rel="canonical" href="https://northwind.example/">');

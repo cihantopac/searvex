@@ -1,7 +1,7 @@
 import { cruxKey } from './crux.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import { analyzeCrawl, auditWebsite, scoreLabel, type AuditReport } from '../analyze/audit.js';
+import { analyzeCrawl, auditWebsite, notAnalysed, notAnalysedReason, scoreLabel, type AuditReport } from '../analyze/audit.js';
 import { crawl } from '../crawl/crawler.js';
 import { RunStore } from '../crawl/store.js';
 import { unifiedDiff } from '../optimize/diff.js';
@@ -9,7 +9,7 @@ import { planFixes, type FixPlan } from '../optimize/fixes.js';
 import { auditRepository } from '../repo/audit.js';
 import { loadKnowledge } from '../rules/engine.js';
 import { md, renderMarkdown } from '../report/markdown.js';
-import { assertTargetAllowed, crawlOptionsFrom, EXIT, failOnExit, log, num, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
+import { assertTargetAllowed, crawlOptionsFrom, EXIT, failOnExit, log, num, reportNotAnalysed, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
 import { diffReports, findBaseline, renderDiffMarkdown, type MonitorDiff } from './monitor.js';
 import { computeGaps, profile, renderResearchMarkdown, type ResearchReport } from './research.js';
 import { renderPlan } from './optimize.js';
@@ -49,12 +49,12 @@ export function renderRunSummary(s: RunSummary): string {
   L.push('| Step | Status | Note |', '|---|---|---|');
   for (const st of s.steps) L.push(`| ${st.step}. ${st.name} | ${st.status === 'done' ? '✅' : '⏭️ skipped'} | ${md(st.note)} |`);
   L.push('');
-  if (s.website?.report.crawl.status === 'unreachable') {
+  if (s.website && notAnalysed(s.website.report)) {
     const r = s.website.report;
-    L.push('## 1. Website audit', '', `${md(r.target)} — **target unreachable** (${md(r.crawl.error ?? 'network error')}). No page was fetched, so there are no findings and no score; steps 2–4 were skipped.`, '');
+    L.push('## 1. Website audit', '', `${md(r.target)} — **${md(notAnalysedReason(r))}**. No page was fetched, so there are no findings about the pages and no score; steps 2–4 were skipped.`, '');
   } else if (s.website) {
     const r = s.website.report;
-    L.push('## 1. Website audit', '', `${md(r.target)} — health score **${scoreLabel(r.scores)}**, ${r.crawl.crawled} pages${r.crawl.truncated ? ' (page limit reached)' : ''}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, '');
+    L.push('## 1. Website audit', '', `${md(r.target)} — health score **${scoreLabel(r.scores)}**, ${r.crawl.fetched ?? r.crawl.crawled} pages fetched${r.crawl.truncated ? ' (page limit reached)' : ''}, site type (heuristic): ${md(r.inventory.businessModel.label)}.`, '');
     for (const f of top(r)) L.push(`- [${f.severity}] ${md(f.title)} — ${f.count} × (\`${f.ruleId}\`)`);
     L.push('', `Interactive report: \`.searvex/runs/${s.website.runId}/report.html\` (details: \`report.md\`)`, '');
     L.push('## 2. GEO / AI search readiness', '');
@@ -120,14 +120,14 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
     const files = writeReports(store, report, kb, ['json', 'md', 'html']);
     summary.website = { report, runId: store.runId, files };
     summary.searchData = { measured: false, preference: getSitePreference(url), googleAuthorized: !!getCredential('gsc') || !!process.env['SEARVEX_GSC_TOKEN'] };
-    if (report.crawl.status === 'unreachable') {
-      const why = `target unreachable (${report.crawl.error ?? 'network error'})`;
+    if (notAnalysed(report)) {
+      const why = notAnalysedReason(report);
       step(1, 'Website audit', 'skipped', `${why}; reports written without findings`);
       step(2, 'GEO / AI search', 'skipped', why);
       step(3, 'Change since previous run', 'skipped', why);
       step(4, 'Competitor research', 'skipped', why);
     } else {
-      step(1, 'Website audit', 'done', `${report.crawl.crawled} pages, score ${scoreLabel(report.scores)}`);
+      step(1, 'Website audit', 'done', `${report.crawl.fetched} pages fetched, score ${scoreLabel(report.scores)}`);
       step(2, 'GEO / AI search', 'done', `${report.geo.bots.filter((b) => !b.allowed).length} crawler(s) blocked; citations not measured`);
       const base = findBaseline(workspace, report.target, store.runId);
       if (base) {
@@ -213,7 +213,10 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
     if (html) openFile(html);
   }
 
-  if (summary.website?.report.crawl.status === 'unreachable') return EXIT.unreachable;
+  if (summary.website && notAnalysed(summary.website.report)) {
+    reportNotAnalysed(summary.website.report);
+    return EXIT.unreachable;
+  }
   const codes = [summary.website && failOnExit(summary.website.report, v['fail-on']), summary.repository && failOnExit(summary.repository.report, v['fail-on'])];
   return codes.some((c) => c === EXIT.failOn) ? EXIT.failOn : EXIT.ok;
 }

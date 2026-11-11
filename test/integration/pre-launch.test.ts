@@ -79,7 +79,7 @@ describe('pre-launch profile (R1)', () => {
   it('fixing real issues raises the pre-launch score and never lowers it', async () => {
     const b = await audit(before, true);
     const a = await audit(after, true);
-    expect(a.scores.overall).toBeGreaterThan(b.scores.overall);
+    expect(a.scores.overall).toBeGreaterThan(b.scores.overall!);
     expect(byId(a, 'description.missing')).toBeUndefined();
   });
 
@@ -88,7 +88,7 @@ describe('pre-launch profile (R1)', () => {
     const pre = await audit(after, true);
     expect(byId(plain, 'https.not-used')?.context).toBeUndefined();
     expect(plain.scores.profile).toBeUndefined();
-    expect(plain.scores.overall).toBeLessThan(pre.scores.overall);
+    expect(plain.scores.overall).toBeLessThan(pre.scores.overall!);
   });
 
   it('reports show the launch checklist and the environment-dependent findings', async () => {

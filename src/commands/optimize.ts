@@ -8,6 +8,7 @@ import { planFixes, type FixPlan } from '../optimize/fixes.js';
 import { applyFixes, interruptedChanges, listChanges, rollback, writeManifest, ConflictError, type Manifest } from '../optimize/transaction.js';
 import { auditRepository } from '../repo/audit.js';
 import { loadKnowledge } from '../rules/engine.js';
+import { scoreLabel } from '../analyze/audit.js';
 import { UsageError, type GlobalFlags } from '../cli.js';
 
 function gitDirty(root: string): boolean | null {
@@ -115,7 +116,7 @@ export async function commandOptimize(flags: GlobalFlags): Promise<number> {
   }
   manifest.status = 'verified';
   writeManifest(root, manifest);
-  console.log(`\nVerified. Health score ${before.report.scores.overall} → ${after.report.scores.overall}.`);
+  console.log(`\nVerified. Health score ${scoreLabel(before.report.scores)} → ${scoreLabel(after.report.scores)}.`);
   console.log(`Undo with: searvex rollback ${manifest.changeId} ${target}`);
   return 0;
 }

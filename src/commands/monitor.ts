@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { auditWebsite, type AuditReport } from '../analyze/audit.js';
+import { auditWebsite, notAnalysed, notAnalysedReason, type AuditReport } from '../analyze/audit.js';
 import { originMap } from '../core/url.js';
 import { RunStore } from '../crawl/store.js';
 import { loadKnowledge } from '../rules/engine.js';
@@ -26,7 +26,8 @@ export interface MonitorDiff {
   baselineRun: string | null;
   currentRun: string;
   scoreBefore: number | null;
-  scoreAfter: number;
+  /** null when the current run audited nothing (see `notAnalysed`). */
+  scoreAfter: number | null;
   newFindings: FindingDelta[];
   resolved: FindingDelta[];
   worsened: FindingDelta[];
@@ -71,7 +72,7 @@ export function diffReports(before: AuditReport | null, after: AuditReport, base
 export function renderDiffMarkdown(d: MonitorDiff, gsc?: { rows: GscRow[]; source: string }): string {
   const L = [`# Searvex monitor — ${md(d.target)}`, ''];
   if (!d.baselineRun) L.push('_No previous run for this target: this run is the new baseline._', '');
-  else L.push(`Baseline \`${d.baselineRun}\` → current \`${d.currentRun}\``, '', `Health score: ${d.scoreBefore} → **${d.scoreAfter}** · pages: ${d.pagesBefore} → ${d.pagesAfter}`, '');
+  else L.push(`Baseline \`${d.baselineRun}\` → current \`${d.currentRun}\``, '', `Health score: ${d.scoreBefore ?? 'n/a'} → **${d.scoreAfter ?? 'n/a'}** · pages: ${d.pagesBefore} → ${d.pagesAfter}`, '');
   const sec = (title: string, xs: FindingDelta[]) => {
     if (!xs.length) return;
     L.push(`## ${title}`, '', ...xs.map((x) => `- [${x.severity}] ${md(x.title)} (\`${x.ruleId}\`): ${x.before} → ${x.after}${x.context ? ` · ${x.context === 'environment' ? 'environment-dependent' : 'launch checklist'}, not a regression` : ''}`), '');
@@ -98,8 +99,8 @@ export function findBaseline(workspace: string, target: string, exclude: string)
   const runs = RunStore.list(workspace).filter((id) => id !== exclude).reverse();
   for (const id of runs) {
     const r = new RunStore(workspace, id).readJson<AuditReport>('report.json');
-    // An unreachable run audited nothing and is never a baseline.
-    if (r && r.target === target && r.mode === 'website' && r.crawl.status !== 'unreachable') return { id, report: r };
+    // An unreachable or robots-blocked run audited nothing and is never a baseline.
+    if (r && r.target === target && r.mode === 'website' && !notAnalysed(r)) return { id, report: r };
   }
   return null;
 }
@@ -157,12 +158,12 @@ export async function commandMonitor(flags: GlobalFlags): Promise<number> {
   const { report, store } = await auditWebsite(target, { workspace, kb, crawl: crawlOptionsFrom(v), preLaunch: !!v['pre-launch'] });
   assertTargetAllowed(report);
   writeReports(store, report, kb, ['json', 'md', 'html']);
-  if (report.crawl.status === 'unreachable') {
+  if (notAnalysed(report)) {
     // Nothing was audited: diffing against the baseline would report every finding as resolved.
-    const note = `Target unreachable (${report.crawl.error ?? 'network error'}): no comparison with the previous run.`;
+    const note = `${notAnalysedReason(report)}; no comparison with the previous run.`;
     store.writeJson('monitor.json', { diff: null, notes: [note] });
     if (v['json']) process.stdout.write(JSON.stringify({ diff: null, notes: [note] }, null, 2) + '\n');
-    else console.error(`searvex: ${note}`);
+    console.error(`searvex: ${note}`);
     return EXIT.unreachable;
   }
   const explicit = v['baseline'] as string | undefined;

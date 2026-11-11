@@ -37,7 +37,7 @@ export interface EcosystemObservation {
 export interface EcosystemReport {
   sites: Array<{
     host: string; siteName: string; organization: string; parent: string; children: string[]; model: string;
-    languages: string[]; pages: number; score: number; offerings: string[];
+    languages: string[]; pages: number; score: number | null; offerings: string[];
   }>;
   links: Record<string, Record<string, number>>;
   overlap: Array<{ a: string; b: string; similarity: number; shared: string[] }>;
@@ -212,7 +212,7 @@ export function analyzeEcosystem(snaps: SiteSnapshot[]): EcosystemReport {
 export function renderEcosystemMarkdown(r: EcosystemReport): string {
   const L: string[] = ['# Searvex ecosystem analysis', ''];
   L.push('## Sites', '', '| Site | Site name | Organization | Parent | Declares children | Model (heuristic) | Languages | Pages | Score |', '|---|---|---|---|---|---|---|---|---|');
-  for (const s of r.sites) L.push(`| ${md(s.host)} | ${md(s.siteName)} | ${md(s.organization)} | ${md(s.parent)} | ${s.children.map(md).join(', ') || '—'} | ${md(s.model)} | ${s.languages.map(md).join(', ')} | ${s.pages} | ${s.score} |`);
+  for (const s of r.sites) L.push(`| ${md(s.host)} | ${md(s.siteName)} | ${md(s.organization)} | ${md(s.parent)} | ${s.children.map(md).join(', ') || '—'} | ${md(s.model)} | ${s.languages.map(md).join(', ')} | ${s.pages} | ${s.score ?? 'n/a'} |`);
   L.push('', '## Cross-links (links from row site to column site, crawled pages)', '');
   const hosts = r.sites.map((s) => s.host);
   L.push(`| from \\ to | ${hosts.map(md).join(' | ')} |`, `|---|${hosts.map(() => '---').join('|')}|`);

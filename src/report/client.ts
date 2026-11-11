@@ -65,11 +65,11 @@ if(!D.search&&R.mode==='website')lim.push([T('lim.search'),T('sp.notConnected')]
 if(R.mode==='website'&&!R.rendered)lim.push([T('lim.render'),T('warn.noRender')]);
 var groups=0;issues.forEach(function(f){groups+=groupsOf(f).length});
 var auto=issues.filter(function(f){return D.rem[f.ruleId]==='auto'}),optOnly=issues.filter(function(f){return D.rem[f.ruleId]!=='auto'&&D.opt[f.ruleId]});
-var ch=null;if(D.diff){var dd=D.diff.scoreBefore===null?null:D.diff.scoreAfter-D.diff.scoreBefore;ch=card(T('kpi.change'),dd===null?'—':(dd>=0?'+':'')+dd,'+'+D.diff.newFindings.length+' / −'+D.diff.resolved.length)}
+var ch=null;if(D.diff){var dd=D.diff.scoreBefore===null||D.diff.scoreAfter===null?null:D.diff.scoreAfter-D.diff.scoreBefore;ch=card(T('kpi.change'),dd===null?'—':(dd>=0?'+':'')+dd,'+'+D.diff.newFindings.length+' / −'+D.diff.resolved.length)}
 var score=R.scores.notApplicable?'n/a':R.scores.overall;
 P.appendChild(el('div',{class:'cards kpis'},[card(T('kpi.score'),score+(R.scores.notApplicable?'':'/100'),T('kpi.scoreNote')+(R.scores.profile==='pre-launch'?' · '+T('kpi.preLaunch'):''),gauge(R.scores.notApplicable?null:R.scores.overall),'score'),
 card(T('kpi.groups'),fmt(groups),T('kpi.types',{n:fmt(issues.length)})),
-card(T(R.mode==='website'?'kpi.affected':'kpi.affectedFiles'),fmt(R.affectedUrls!==undefined?R.affectedUrls:0),(R.mode==='website'?T('kpi.pages'):T('kpi.routes'))+': '+fmt(R.crawl.crawled)),
+card(T(R.mode==='website'?'kpi.affected':'kpi.affectedFiles'),fmt(R.affectedUrls!==undefined?R.affectedUrls:0),(R.mode==='website'?T('kpi.pages')+': '+fmt(R.crawl.fetched!==undefined?R.crawl.fetched:R.crawl.crawled-R.crawl.blocked)+(R.crawl.blocked?' · '+T('kpi.blocked',{n:fmt(R.crawl.blocked)}):''):T('kpi.routes')+': '+fmt(R.crawl.crawled))),
 card(T('kpi.critical'),fmt(issues.filter(function(f){return f.severity==='critical'||f.severity==='high'}).length),null,null,issues.some(function(f){return f.severity==='critical'})?'alert':''),
 card(T('kpi.auto'),fmt(auto.length),auto.length?null:optOnly.length?T('kpi.autoRepo')+' ('+optOnly.length+')':T('kpi.autoNone')),ch||card(T('kpi.change'),'—',T('kpi.noBaseline'))]));
 if(lim.length)P.appendChild(el('div',{class:'limits',role:'note'},[el('b',{text:T('ov.limits')}),el('span',{class:'lim',text:lim.map(function(l){return l[0]}).join(' · ')}),el('details',{},[el('summary',{text:T('ov.limitsMore')}),el('ul',{},lim.map(function(l){return el('li',{text:l[1]})}))])]));
@@ -174,8 +174,8 @@ P.appendChild(el('p',{class:'muted small',text:T('ev.promise')}))}
 `;
 
 /** Before/after view used by the audit "Changes" tab and the standalone monitor page. */
-export const DIFF_VIEW = String.raw`function diffView(P,M){var delta=M.scoreBefore===null?null:M.scoreAfter-M.scoreBefore;
-P.appendChild(el('div',{class:'cards'},[card(T('ch.score'),(M.scoreBefore===null?'':M.scoreBefore+' → ')+M.scoreAfter,delta===null?null:(delta>=0?'+':'')+delta),card(T('ch.pages'),(M.pagesBefore===null?'':fmt(M.pagesBefore)+' → ')+fmt(M.pagesAfter)),card(T('ch.new'),M.newFindings.length,null,null,M.newFindings.length?'alert':''),card(T('ch.resolved'),M.resolved.length),card(T('ch.worse')+' / '+T('ch.better'),M.worsened.length+' / '+M.improved.length),card(T('ch.regression'),T(M.regression?'ch.yes':'ch.no'),null,null,M.regression?'alert':'')]));
+export const DIFF_VIEW = String.raw`function diffView(P,M){var delta=M.scoreBefore===null||M.scoreAfter===null?null:M.scoreAfter-M.scoreBefore;
+P.appendChild(el('div',{class:'cards'},[card(T('ch.score'),(M.scoreBefore===null?'':M.scoreBefore+' → ')+(M.scoreAfter===null?'n/a':M.scoreAfter),delta===null?null:(delta>=0?'+':'')+delta),card(T('ch.pages'),(M.pagesBefore===null?'':fmt(M.pagesBefore)+' → ')+fmt(M.pagesAfter)),card(T('ch.new'),M.newFindings.length,null,null,M.newFindings.length?'alert':''),card(T('ch.resolved'),M.resolved.length),card(T('ch.worse')+' / '+T('ch.better'),M.worsened.length+' / '+M.improved.length),card(T('ch.regression'),T(M.regression?'ch.yes':'ch.no'),null,null,M.regression?'alert':'')]));
 var changed=M.newFindings.concat(M.worsened,M.improved,M.resolved),mx=Math.max.apply(null,changed.map(function(x){return Math.max(x.before,x.after)}).concat([1]));
 if(changed.length){var c=el('div',{class:'charts'});c.appendChild(bars(T('ch.before'),changed.slice(0,10).map(function(x){return[rtitle(x),x.before,x.severity]}),{max:mx}));c.appendChild(bars(T('ch.after'),changed.slice(0,10).map(function(x){return[rtitle(x),x.after,x.severity]}),{max:mx}));P.appendChild(c)}
 [['ch.new',M.newFindings],['ch.worse',M.worsened],['ch.better',M.improved],['ch.resolved',M.resolved]].forEach(function(g){P.appendChild(h2(T(g[0])+' ('+g[1].length+')'));P.appendChild(g[1].length?table([T('ch.issue'),T('iss.filterSev'),T('ch.before'),T('ch.after'),T('ch.delta')],g[1].map(function(x){return[rtitle(x)+' ('+x.ruleId+')',T('sev.'+x.severity),x.before,x.after,deltaSpan(x.after-x.before)]})):el('p',{class:'muted',text:T('ch.nothing')}))});
@@ -191,7 +191,7 @@ var P=panel('changes');diffView(P,X);if(!X.baselineRun)P.insertBefore(el('p',{cl
 export const ECOSYSTEM_SCRIPT = String.raw`function render(){var M=document.getElementById('main');M.textContent='';var E=D.eco;
 document.getElementById('kicker').textContent=T('title.ecosystem');document.getElementById('t').textContent=E.sites.length+' sites';document.getElementById('meta').textContent=E.sites.map(function(s){return s.host}).join(' · ');
 var B=panel('overview');var ch=el('div',{class:'charts'});
-ch.appendChild(bars(T('eco.scoreBySite'),E.sites.map(function(s){return[s.host,s.score,s.score>=90?'good':s.score>=70?'medium':'critical']}),{max:100,note:T('kpi.scoreNote')}));
+ch.appendChild(bars(T('eco.scoreBySite'),E.sites.filter(function(s){return s.score!==null}).map(function(s){return[s.host,s.score,s.score>=90?'good':s.score>=70?'medium':'critical']}),{max:100,note:T('kpi.scoreNote')}));
 ch.appendChild(bars(T('eco.shared'),E.sharedIssues.slice(0,10).map(function(i){return[i.title,i.sites,i.severity]}),{max:E.sites.length}));B.appendChild(ch);
 B.appendChild(h2(T('eco.sites')));B.appendChild(table(['Site','Site name','Organization','Parent','Children','Model ~','Languages',T('ch.pages')],E.sites.map(function(s){return[s.host,s.siteName,s.organization,s.parent,s.children.join(', ')||'—',s.model,s.languages.join(', '),s.pages]})));
 B.appendChild(h2(T('eco.links')));var H=E.sites.map(function(s){return s.host});

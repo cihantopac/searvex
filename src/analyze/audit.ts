@@ -1,5 +1,5 @@
 import type { Category, Finding, Severity } from '../core/types.js';
-import { crawl, type CrawlOptions, type CrawlResult } from '../crawl/crawler.js';
+import { crawl, DEFAULT_CRAWL, type CrawlOptions, type CrawlResult } from '../crawl/crawler.js';
 import { RunStore } from '../crawl/store.js';
 import { DEFAULT_USER_AGENT, safeFetch, SEARVEX_VERSION } from '../net/fetcher.js';
 import { DEFAULT_POLICY } from '../net/ssrf.js';
@@ -10,7 +10,7 @@ import { applyPreLaunch, asLaunched, emitLaunchNoindex } from './pre-launch.js';
 import { runContentChecks, type ContentReport } from './content.js';
 import { runGeoChecks, type GeoReport, type LlmsTxtStatus } from './geo.js';
 import { buildInventory, type SiteInventory } from './inventory.js';
-import { runTechnicalChecks } from './technical.js';
+import { runRobotsAccessChecks, runTechnicalChecks } from './technical.js';
 import { prioritise } from './priority.js';
 import { checkExternalLinks, type ExternalLinkResult } from './external-links.js';
 import { failingMetrics, queryCrux, type CruxResult } from '../integrations/crux.js';
@@ -22,8 +22,12 @@ export interface AuditReport {
   runId: string;
   generatedAt: string;
   crawl: CrawlResult['stats'] & {
-    /** Website mode: `unreachable` when the start URL failed at the network level and nothing was audited. */
-    status?: 'complete' | 'unreachable';
+    /**
+     * Website mode. `unreachable`: the start URL failed at the network level. `robots-blocked`: robots.txt
+     * (unreachable with 5xx/429, or disallowing every URL) blocked every queued URL, so no page was fetched.
+     * In both cases nothing was analysed: `scores.overall` is null and the CLI exits 4.
+     */
+    status?: CrawlStatus;
     /** Network error for an unreachable target. */
     error?: string;
     /** Public origin the crawled origin stands for (--site-url); URLs on it were mapped to the crawled origin. */
@@ -45,6 +49,22 @@ export interface AuditReport {
   rendered?: boolean;
 }
 
+export type CrawlStatus = 'complete' | 'unreachable' | 'robots-blocked';
+
+/**
+ * A website run that analysed no page: the target was unreachable, or robots.txt blocked every URL. The
+ * report has no score and no findings about the pages; the CLI exits 4.
+ */
+export function notAnalysed(r: Pick<AuditReport, 'crawl'>): boolean {
+  return r.crawl.status === 'unreachable' || r.crawl.status === 'robots-blocked';
+}
+
+/** One line saying why nothing was analysed, e.g. "target unreachable: getaddrinfo ENOTFOUND x". */
+export function notAnalysedReason(r: Pick<AuditReport, 'crawl'>): string {
+  if (r.crawl.status === 'robots-blocked') return `robots.txt blocks every URL: ${r.crawl.error ?? 'robots.txt disallows crawling'}`;
+  return `target unreachable: ${r.crawl.error ?? 'network error'}`;
+}
+
 /**
  * Whether a finding counts toward the score, --fail-on, affected counts and regressions: unmeasurable
  * findings and pre-launch context findings (environment, launch checklist) never do.
@@ -56,7 +76,7 @@ export function countsTowardScore(f: Pick<Finding, 'confidence' | 'context'>): b
 /** Distinct affected URLs/files across all non-informational findings. */
 export function countAffected(findings: Array<Finding & { count: number }>, affected: (ruleId: string) => string[]): number {
   const all = new Set<string>();
-  for (const f of findings) if (f.severity !== 'info' && countsTowardScore(f)) for (const u of affected(f.ruleId)) if (!/\/robots\.txt$/.test(u)) all.add(u);
+  for (const f of findings) if (f.severity !== 'info' && countsTowardScore(f)) for (const u of affected(f.ruleId)) if (!/\/(robots|llms)\.txt$/.test(u)) all.add(u);
   return all.size;
 }
 
@@ -72,11 +92,14 @@ export function indexableSummary(r: Pick<AuditReport, 'inventory' | 'findings'>)
 }
 
 export interface Scores {
-  /** 0–100. Searvex health score: a summary of Searvex findings, NOT a search engine metric. */
-  overall: number;
+  /**
+   * 0–100. Searvex health score: a summary of Searvex findings, NOT a search engine metric. `null` when
+   * `notApplicable` is set (nothing was audited).
+   */
+  overall: number | null;
   byCategory: Partial<Record<Category, number>>;
   method: string;
-  /** Set when there was nothing to audit (e.g. a repository without any website); `overall` is then meaningless. */
+  /** Why nothing could be audited (unreachable or robots-blocked target, repository without a website); `overall` is then null. */
   notApplicable?: string;
   /** `pre-launch`: environment and launch-checklist findings were excluded (--pre-launch). */
   profile?: 'pre-launch';
@@ -95,7 +118,7 @@ const WEIGHT: Record<Severity, number> = { critical: 25, high: 10, medium: 4, lo
  * Unmeasurable findings, and environment/launch-checklist findings of the pre-launch profile, never change
  * the score.
  */
-export function computeScores(findings: Array<Finding & { count: number }>, pageCount: number): Scores {
+export function computeScores(findings: Array<Finding & { count: number }>, pageCount: number): Scores & { overall: number } {
   const penalty = (fs: Array<Finding & { count: number }>) =>
     fs.reduce((sum, f) => {
       if (!countsTowardScore(f)) return sum;
@@ -111,6 +134,11 @@ export function computeScores(findings: Array<Finding & { count: number }>, page
     byCategory,
     method: 'Searvex health score = 100 − Σ(severity weight × share of affected pages); heuristic findings weigh 50%; unmeasurable findings are excluded. It summarises Searvex findings and is not a search engine metric.',
   };
+}
+
+/** Scores of a run that audited nothing: no overall score, no categories. */
+export function notApplicableScores(reason: string): Scores {
+  return { ...computeScores([], 1), overall: null, notApplicable: reason };
 }
 
 async function probeLlmsTxt(origin: string, opts: Pick<CrawlOptions, 'policy' | 'timeoutMs' | 'userAgent'>): Promise<LlmsTxtStatus> {
@@ -153,11 +181,27 @@ async function probeHostVariants(startUrl: string, opts: Pick<CrawlOptions, 'pol
   if (!res.error && res.status === 200) sink.emit('canonical.www-duplicate', { url: alt.toString(), observed: `${alt.host} and ${u.host} both return 200` });
 }
 
-function crawlSummary(result: CrawlResult): AuditReport['crawl'] {
+/** robots.txt blocked every queued URL, so no page was requested (RFC 9309 disallow, or `Disallow: /`). */
+export function robotsBlockedAll(result: CrawlResult): boolean {
+  return !result.unreachable && result.pages.length > 0 && result.pages.every((p) => p.blockedByRobots);
+}
+
+/** Why robots.txt blocked the whole crawl (see `robotsBlockedAll`). */
+function robotsBlockReason(result: CrawlResult, robotsAgent: string): string {
+  const r = result.robots;
+  return r.state === 'unreachable'
+    ? `robots.txt could not be read (${r.error ?? `HTTP ${r.status}`}); RFC 9309 requires treating that as a complete disallow`
+    : `robots.txt disallows every queued URL for ${robotsAgent}`;
+}
+
+function crawlSummary(result: CrawlResult, robotsAgent = DEFAULT_CRAWL.robotsAgent): AuditReport['crawl'] {
+  const blocked = robotsBlockedAll(result);
   return {
     ...result.stats,
-    status: result.unreachable ? 'unreachable' : 'complete',
-    ...(result.unreachable ? { error: result.unreachable.error } : {}),
+    // Reports of runs before 1.3.0 have no `fetched`.
+    fetched: result.stats.fetched ?? result.pages.filter((p) => !p.blockedByRobots).length,
+    status: result.unreachable ? 'unreachable' : blocked ? 'robots-blocked' : 'complete',
+    ...(result.unreachable ? { error: result.unreachable.error } : blocked ? { error: robotsBlockReason(result, robotsAgent) } : {}),
     ...(result.siteUrl ? { siteUrl: result.siteUrl } : {}),
     truncated: result.truncated,
     startUrl: result.startUrl,
@@ -196,28 +240,48 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
   const ctx = buildContext(result);
   const netOpts = { policy: opts.policy ?? DEFAULT_POLICY, timeoutMs: opts.timeoutMs ?? 15000, userAgent: opts.userAgent ?? DEFAULT_USER_AGENT };
   const unreachable = result.unreachable;
+  const robotsAgent = opts.robotsAgent ?? DEFAULT_CRAWL.robotsAgent;
   let llms: LlmsTxtStatus | undefined;
-  if (unreachable) {
-    // Nothing was fetched, so no check can say anything about the site. Run them on a throwaway sink
+  if (unreachable || robotsBlockedAll(result)) {
+    // Nothing was fetched, so no page check can say anything about the site. Run them on a throwaway sink
     // only to build the (empty) report sections.
     const none = new FindingSink(kb);
-    // robots.txt was never read, so no crawler access can be stated.
-    const geo = { ...runGeoChecks(ctx, none), bots: [] };
+    const geo = runGeoChecks(ctx, none);
     const content = runContentChecks(ctx, none);
+    // A robots-blocked run keeps the one site finding the user has to fix (robots.txt unreachable, or the
+    // site disallowed for search crawlers). It stays empty when only Searvex's own user agent is disallowed.
+    const sink = new FindingSink(kb);
+    if (!unreachable) runRobotsAccessChecks(ctx, sink);
+    const findings = sink.findings();
+    prioritise(findings, (id) => sink.affected(id), ctx);
+    if (opts.preLaunch) applyPreLaunch(findings, kb);
+    const why = unreachable ? `target unreachable (${unreachable.error})` : robotsBlockReason(result, robotsAgent);
+    const limitation = unreachable
+      ? `The start URL could not be reached (${unreachable.error}); no page was fetched, so this report contains no findings about the site. Check the URL, DNS, the network or the server, then run the audit again.`
+      : `No page was fetched: ${why}, so all ${result.pages.length} queued URL(s) were skipped and this report contains no findings about the pages. ${
+          result.robots.state === 'unreachable'
+            ? 'Make /robots.txt return 200 (with rules) or 404 (no rules), then run the audit again.'
+            : `To audit the site, allow the ${robotsAgent} user agent in robots.txt (on a staging build, for the test only), then run the audit again.`
+        }`;
     return {
       tool: { name: 'searvex', version: SEARVEX_VERSION, rulesVersion: kb.version },
       mode: 'website',
       target: result.startUrl,
       runId: result.runId,
       generatedAt: new Date().toISOString(),
-      crawl: crawlSummary(result),
+      crawl: crawlSummary(result, robotsAgent),
       inventory: buildInventory(ctx),
-      findings: [],
-      geo,
+      findings,
+      // robots.txt was never read for an unreachable target, so no crawler access can be stated.
+      geo: unreachable ? { ...geo, bots: [] } : geo,
       content,
-      scores: { ...computeScores([], 1), notApplicable: `target unreachable (${unreachable.error})` },
-      measurement: { verified: 0, heuristic: 0, unmeasurable: 0 },
-      limitations: [`The start URL could not be reached (${unreachable.error}); no page was fetched, so this report contains no findings about the site. Check the URL, DNS, the network or the server, then run the audit again.`],
+      scores: { ...notApplicableScores(why), ...(opts.preLaunch ? { profile: 'pre-launch' as const } : {}) },
+      measurement: {
+        verified: findings.filter((f) => f.confidence === 'verified').length,
+        heuristic: findings.filter((f) => f.confidence === 'heuristic').length,
+        unmeasurable: findings.filter((f) => f.confidence === 'unmeasurable').length,
+      },
+      limitations: [limitation],
       affectedUrls: 0,
       rendered: false,
     };
@@ -262,7 +326,7 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
     target: result.startUrl,
     runId: result.runId,
     generatedAt: new Date().toISOString(),
-    crawl: crawlSummary(result),
+    crawl: crawlSummary(result, robotsAgent),
     inventory,
     findings,
     geo,
