@@ -616,6 +616,17 @@ var require_boolbase = __commonJS({
 
 // src/net/ssrf.ts
 import { isIP } from "node:net";
+function hostMatches(host, glob) {
+  const norm4 = (s) => s.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.+$/, "");
+  const re = new RegExp(`^${norm4(glob).split("*").map((p) => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`);
+  return re.test(norm4(host));
+}
+function hostPolicyViolation(host, policy) {
+  const deny = policy.denyHosts?.find((g) => hostMatches(host, g));
+  if (deny) return `Host denied by --deny-host ${deny}: ${host}`;
+  if (policy.allowHosts?.length && !policy.allowHosts.some((g) => hostMatches(host, g))) return `Host not in --allow-host: ${host}`;
+  return null;
+}
 function ipv4ToInt(ip) {
   const p = ip.split(".").map(Number);
   return (p[0] << 24 >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3] >>> 0;
@@ -694,8 +705,10 @@ function assertUrlAllowed(raw, policy) {
   if (!policy.schemes.includes(u.protocol)) throw new BlockedUrlError(`Scheme not allowed: ${u.protocol}`, raw);
   if (u.username || u.password) throw new BlockedUrlError("URLs with embedded credentials are not allowed", raw);
   const port = u.port ? Number(u.port) : u.protocol === "https:" ? 443 : 80;
-  if (policy.ports.length && !policy.ports.includes(port)) throw new BlockedUrlError(`Port not allowed: ${port}`, raw);
+  if (policy.ports.length && !policy.ports.includes(port)) throw new BlockedUrlError(`Port not allowed by --ports: ${port}`, raw);
   const host = u.hostname.replace(/^\[|\]$/g, "");
+  const violation = hostPolicyViolation(host, policy);
+  if (violation) throw new BlockedUrlError(violation, raw);
   if (isIP(host) && !isAddressAllowed(host, policy)) {
     throw new BlockedUrlError(`Address not allowed (${classifyAddress(host)}): ${host}`, raw);
   }
@@ -764,6 +777,8 @@ import dns from "node:dns";
 import zlib from "node:zlib";
 function guardedLookup(policy) {
   return ((hostname, options, callback) => {
+    const violation = hostPolicyViolation(hostname, policy);
+    if (violation) return callback(new BlockedUrlError(violation, hostname));
     dns.lookup(hostname, { ...options, all: true }, (err, addresses) => {
       if (err) return callback(err);
       const list = addresses;
@@ -35948,7 +35963,7 @@ function brandTermsFrom(site) {
 var UNFETCHED_CAP = 1e4;
 function unfetchedReason(p) {
   if (p.blockedByRobots) return { url: p.url, status: 0, reason: "robots-blocked" };
-  if (p.error) return { url: p.url, status: p.status, reason: "error", detail: p.error };
+  if (p.error) return { url: p.url, status: p.status, reason: p.error.startsWith("Blocked: ") ? "policy-blocked" : "error", detail: p.error };
   if (p.redirects.length) return { url: p.url, status: p.redirects[0].status, reason: "redirect", detail: p.finalUrl };
   if (p.status !== 200) return { url: p.url, status: p.status, reason: "non-200" };
   return factsOf(p) ? null : { url: p.url, status: 200, reason: "not-html" };
@@ -36690,7 +36705,7 @@ function runTechnicalChecks(ctx, sink) {
     }
     if (p.error) {
       const loop = p.error.includes("redirect") || p.error.includes("Redirect");
-      if (loop || p !== start) sink.emit(loop ? "redirect.loop" : "http.fetch-error", { url: p.url, observed: p.error });
+      if ((loop || p !== start) && !p.error.startsWith("Blocked: ")) sink.emit(loop ? "redirect.loop" : "http.fetch-error", { url: p.url, observed: p.error });
       continue;
     }
     if (p.status >= 500 || p.status === 429) sink.emit("http.server-error", { url: p.url, observed: `HTTP ${p.status}` });
@@ -37002,6 +37017,7 @@ function linkRootCauses(findings) {
 
 // src/analyze/external-links.ts
 init_fetcher();
+init_ssrf();
 async function checkExternalLinks(ctx, sink, opts = {}) {
   const limit = opts.limit ?? 200;
   const sources = /* @__PURE__ */ new Map();
@@ -37013,6 +37029,12 @@ async function checkExternalLinks(ctx, sink, opts = {}) {
   const queue = urls.slice(0, limit);
   const worker = async () => {
     for (let u = queue.shift(); u; u = queue.shift()) {
+      try {
+        assertUrlAllowed(u, opts.policy ?? DEFAULT_POLICY);
+      } catch {
+        result.skippedByPolicy = (result.skippedByPolicy ?? 0) + 1;
+        continue;
+      }
       const origin = new URL(u).origin;
       let robots = robotsCache.get(origin);
       if (!robots) robotsCache.set(origin, robots = await fetchRobots(origin, opts));
@@ -37025,6 +37047,10 @@ async function checkExternalLinks(ctx, sink, opts = {}) {
       if (res.error || res.status >= 400) {
         await limiter.wait(new URL(u).host);
         res = await safeFetch(u, { ...opts, maxBytes: 64 * 1024 });
+      }
+      if (res.error?.startsWith("Blocked: ")) {
+        result.skippedByPolicy = (result.skippedByPolicy ?? 0) + 1;
+        continue;
       }
       result.checked++;
       if (res.error || res.status === 404 || res.status === 410 || res.status >= 500) {
@@ -42996,6 +43022,9 @@ Common options
   --out <dir>           Workspace for .searvex/ (default: current directory)
   --fail-on <severity>  Exit 1 if findings at/above severity exist (critical|high|medium|low)
   --allow-private       Allow localhost/private network targets (local dev servers only)
+  --allow-host <glob>   Only contact matching hosts (repeatable; *.example.com); include the target
+  --deny-host <glob>    Never contact matching hosts (repeatable; wins over --allow-host)
+  --ports <list>        Only contact these ports (e.g. 80,443,8080)
   --pre-launch          Audit a local/staging build as it will be once live: test-server findings
                         (no HTTPS, no compression) and deliberate pre-launch states (noindex, a public
                         sitemap host that is not live yet) are listed separately, not scored
@@ -43073,6 +43102,9 @@ var CLI_OPTIONS = {
   out: { type: "string" },
   "fail-on": { type: "string" },
   "allow-private": { type: "boolean" },
+  "allow-host": { type: "string", multiple: true },
+  "deny-host": { type: "string", multiple: true },
+  ports: { type: "string" },
   "pre-launch": { type: "boolean" },
   json: { type: "boolean" },
   quiet: { type: "boolean", short: "q" },
@@ -43148,7 +43180,10 @@ var EXIT = {
 };
 function assertTargetAllowed(report) {
   const err = report.crawl.status === "unreachable" ? report.crawl.error : void 0;
-  if (err?.startsWith("Blocked: ")) throw new PolicyError(`${report.target} is blocked by the network policy (${err.slice(9)}). Use --allow-private for a local or private development server.`);
+  if (!err?.startsWith("Blocked: ")) return;
+  const why = err.slice(9);
+  const hint = /--(deny|allow)-host|--ports/.test(why) ? "Adjust --allow-host, --deny-host or --ports." : "Use --allow-private for a local or private development server.";
+  throw new PolicyError(`${report.target} is blocked by the network policy (${why}). ${hint}`);
 }
 function auditExit(report, failOn) {
   return notAnalysed(report) ? EXIT.unreachable : report.crawl.interrupted ? EXIT.interrupted : failOnExit(report, failOn);
@@ -43186,6 +43221,17 @@ function interrupter(v) {
 function reportNotAnalysed(report, json, suffix = "") {
   if (notAnalysed(report)) reportError(EXIT.unreachable, report.crawl.status, `${notAnalysedReason(report)}${suffix}`, json);
 }
+function portsFrom(v) {
+  if (v === void 0) return [];
+  const ports = String(v).split(",").map((x) => x.trim()).filter(Boolean).map((x) => num(x, 0, 1, 65535));
+  if (!ports.length || ports.some((p) => !Number.isInteger(p))) throw new UsageError(`--ports must be a comma-separated list of ports (got ${String(v)})`);
+  return ports;
+}
+function hostGlobs(v, flag) {
+  const globs = (v ?? []).flatMap((x) => x.split(",")).map((x) => x.trim()).filter(Boolean);
+  for (const g of globs) if (!/^[a-z0-9*.:[\]-]+$/i.test(g)) throw new UsageError(`${flag} takes a host name or glob such as *.example.com (got ${g})`);
+  return globs;
+}
 function crawlOptionsFrom(v) {
   return {
     maxPages: num(v["max-pages"], 500, 1, 1e6),
@@ -43196,7 +43242,13 @@ function crawlOptionsFrom(v) {
     useSitemaps: !v["no-sitemap"],
     include: v["include"]?.map((r) => new RegExp(r)),
     exclude: v["exclude"]?.map((r) => new RegExp(r)),
-    policy: { ...DEFAULT_POLICY, allowPrivate: !!v["allow-private"] },
+    policy: {
+      ...DEFAULT_POLICY,
+      allowPrivate: !!v["allow-private"],
+      ports: portsFrom(v["ports"]),
+      allowHosts: hostGlobs(v["allow-host"], "--allow-host"),
+      denyHosts: hostGlobs(v["deny-host"], "--deny-host")
+    },
     // monitor also accepts a Search Console property (sc-domain:…) here; only URLs map origins.
     siteUrl: typeof v["site-url"] === "string" && /^https?:\/\//i.test(v["site-url"]) ? v["site-url"] : void 0
   };
@@ -43631,6 +43683,7 @@ export {
   errorJson,
   failOnExit,
   failOnIndex,
+  hostGlobs,
   interrupter,
   isPrivateTarget,
   log,
@@ -43638,6 +43691,7 @@ export {
   num,
   pagesLabel,
   phaseProgress,
+  portsFrom,
   printSummary,
   reportError,
   reportInterrupted,

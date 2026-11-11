@@ -86,6 +86,9 @@ Common options
   --out <dir>           Workspace for .searvex/ (default: current directory)
   --fail-on <severity>  Exit 1 if findings at/above severity exist (critical|high|medium|low)
   --allow-private       Allow localhost/private network targets (local dev servers only)
+  --allow-host <glob>   Only contact matching hosts (repeatable; *.example.com); include the target
+  --deny-host <glob>    Never contact matching hosts (repeatable; wins over --allow-host)
+  --ports <list>        Only contact these ports (e.g. 80,443,8080)
   --pre-launch          Audit a local/staging build as it will be once live: test-server findings
                         (no HTTPS, no compression) and deliberate pre-launch states (noindex, a public
                         sitemap host that is not live yet) are listed separately, not scored
@@ -173,6 +176,9 @@ export const CLI_OPTIONS = {
   out: { type: 'string' },
   'fail-on': { type: 'string' },
   'allow-private': { type: 'boolean' },
+  'allow-host': { type: 'string', multiple: true },
+  'deny-host': { type: 'string', multiple: true },
+  ports: { type: 'string' },
   'pre-launch': { type: 'boolean' },
   json: { type: 'boolean' },
   quiet: { type: 'boolean', short: 'q' },
@@ -272,7 +278,10 @@ export const EXIT = {
  */
 export function assertTargetAllowed(report: AuditReport): void {
   const err = report.crawl.status === 'unreachable' ? report.crawl.error : undefined;
-  if (err?.startsWith('Blocked: ')) throw new PolicyError(`${report.target} is blocked by the network policy (${err.slice(9)}). Use --allow-private for a local or private development server.`);
+  if (!err?.startsWith('Blocked: ')) return;
+  const why = err.slice(9);
+  const hint = /--(deny|allow)-host|--ports/.test(why) ? 'Adjust --allow-host, --deny-host or --ports.' : 'Use --allow-private for a local or private development server.';
+  throw new PolicyError(`${report.target} is blocked by the network policy (${why}). ${hint}`);
 }
 
 /**
@@ -337,6 +346,21 @@ export function reportNotAnalysed(report: AuditReport, json: boolean, suffix = '
   if (notAnalysed(report)) reportError(EXIT.unreachable, report.crawl.status as ErrorKind, `${notAnalysedReason(report)}${suffix}`, json);
 }
 
+/** --ports 80,443,8080 → [80, 443, 8080]; empty when not given. */
+export function portsFrom(v: unknown): number[] {
+  if (v === undefined) return [];
+  const ports = String(v).split(',').map((x) => x.trim()).filter(Boolean).map((x) => num(x, 0, 1, 65535));
+  if (!ports.length || ports.some((p) => !Number.isInteger(p))) throw new UsageError(`--ports must be a comma-separated list of ports (got ${String(v)})`);
+  return ports;
+}
+
+/** Host globs of --allow-host / --deny-host (comma-separated or repeated). */
+export function hostGlobs(v: unknown, flag: string): string[] {
+  const globs = ((v as string[] | undefined) ?? []).flatMap((x) => x.split(',')).map((x) => x.trim()).filter(Boolean);
+  for (const g of globs) if (!/^[a-z0-9*.:[\]-]+$/i.test(g)) throw new UsageError(`${flag} takes a host name or glob such as *.example.com (got ${g})`);
+  return globs;
+}
+
 export function crawlOptionsFrom(v: GlobalFlags['values']) {
   return {
     maxPages: num(v['max-pages'], 500, 1, 1_000_000),
@@ -347,7 +371,13 @@ export function crawlOptionsFrom(v: GlobalFlags['values']) {
     useSitemaps: !v['no-sitemap'],
     include: (v['include'] as string[] | undefined)?.map((r) => new RegExp(r)),
     exclude: (v['exclude'] as string[] | undefined)?.map((r) => new RegExp(r)),
-    policy: { ...DEFAULT_POLICY, allowPrivate: !!v['allow-private'] },
+    policy: {
+      ...DEFAULT_POLICY,
+      allowPrivate: !!v['allow-private'],
+      ports: portsFrom(v['ports']),
+      allowHosts: hostGlobs(v['allow-host'], '--allow-host'),
+      denyHosts: hostGlobs(v['deny-host'], '--deny-host'),
+    },
     // monitor also accepts a Search Console property (sc-domain:…) here; only URLs map origins.
     siteUrl: typeof v['site-url'] === 'string' && /^https?:\/\//i.test(v['site-url']) ? v['site-url'] : undefined,
   };
