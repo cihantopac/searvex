@@ -770,16 +770,188 @@ var init_ssrf = __esm({
   }
 });
 
+// src/net/proxy.ts
+import dns from "node:dns";
+import net from "node:net";
+import tls from "node:tls";
+function proxyEndpoint(p) {
+  return `${net.isIPv6(p.host) ? `[${p.host}]` : p.host}:${p.port}`;
+}
+function proxyFromConfig(o) {
+  const env = o.env ?? {};
+  if (o.resolve !== void 0 && o.resolve !== "proxy" && o.resolve !== "local") throw new ProxyConfigError(`--proxy-resolve must be proxy or local (got ${o.resolve})`);
+  if (o.flag === "none") return null;
+  const fromEnv = o.flag === void 0 ? ENV_ORDER.find((k) => env[k]?.trim()) : void 0;
+  const raw = o.flag ?? (fromEnv ? env[fromEnv].trim() : void 0);
+  if (!raw) {
+    if (o.resolve !== void 0) throw new ProxyConfigError("--proxy-resolve needs a proxy (--proxy or HTTPS_PROXY)");
+    return null;
+  }
+  const source = fromEnv ?? "--proxy";
+  let u;
+  try {
+    u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `http://${raw}`);
+  } catch {
+    throw new ProxyConfigError(`${source} is not a valid proxy URL`);
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new ProxyConfigError(`${source}: only http:// and https:// proxies are supported (got ${u.protocol})`);
+  if (u.pathname && u.pathname !== "/" || u.search || u.hash) throw new ProxyConfigError(`${source} must be a proxy origin such as http://proxy.example:3128 (no path)`);
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  if (net.isIP(host)) {
+    const cls = classifyAddress(host);
+    if (cls === "link-local" || cls === "reserved" || cls === "invalid") throw new ProxyConfigError(`${source} points at a ${cls} address (${host}); a proxy there is never used`);
+  }
+  const violation = hostPolicyViolation(host, { denyHosts: o.policy?.denyHosts });
+  if (violation) throw new ProxyConfigError(`${source}: ${violation}`);
+  const user = decodeURIComponent(u.username);
+  const pass = decodeURIComponent(u.password);
+  const noProxy = (env["NO_PROXY"] ?? env["no_proxy"] ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  return {
+    protocol: u.protocol,
+    host,
+    port: u.port ? Number(u.port) : u.protocol === "https:" ? 443 : 80,
+    ...user || pass ? { auth: `${user}:${pass}` } : {},
+    resolve: o.resolve === "local" ? "local" : "proxy",
+    allowUnresolved: o.resolve === "proxy",
+    noProxy,
+    source
+  };
+}
+function noProxyMatches(host, port, entries) {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.+$/, "");
+  for (const raw of entries) {
+    if (raw === "*") return true;
+    let entry = raw;
+    let entryPort;
+    const bracketed = /^\[([^\]]+)\](?::(\d+))?$/.exec(raw);
+    if (bracketed) [, entry, entryPort] = bracketed;
+    else if (!net.isIPv6(raw)) {
+      const m = /^(.+):(\d+)$/.exec(raw);
+      if (m) [, entry, entryPort] = m;
+    }
+    if (entryPort && Number(entryPort) !== port) continue;
+    const e = entry.replace(/^\*?\./, "").replace(/\.+$/, "");
+    if (h === e || h.endsWith(`.${e}`)) return true;
+  }
+  return false;
+}
+async function routeFor(host, port, policy, lookup = systemLookup) {
+  const proxy = policy.upstream;
+  const h = host.replace(/^\[|\]$/g, "");
+  if (!proxy || noProxyMatches(h, port, proxy.noProxy)) return { via: "direct" };
+  if (net.isIP(h)) {
+    return classifyAddress(h) === "public" ? { via: "proxy", proxy, connectHost: h, checked: true } : { via: "direct" };
+  }
+  let addresses;
+  try {
+    addresses = await lookup(h);
+  } catch (e) {
+    if (proxy.resolve === "proxy" && proxy.allowUnresolved) return { via: "proxy", proxy, connectHost: h, checked: false };
+    throw e;
+  }
+  const nonPublic = addresses.filter((a) => classifyAddress(a) !== "public");
+  if (nonPublic.length) {
+    const bad = nonPublic.find((a) => !isAddressAllowed(a, policy));
+    if (bad) throw new BlockedUrlError(`Resolved address not allowed (${classifyAddress(bad)}): ${bad}`, h);
+    return { via: "direct" };
+  }
+  if (!addresses.length) throw new Error(`No address for ${h}`);
+  return { via: "proxy", proxy, connectHost: proxy.resolve === "local" ? addresses[0] : h, checked: true };
+}
+function openTunnel(proxy, connectHost, port, timeoutMs) {
+  const endpoint = proxyEndpoint(proxy);
+  const authority = `${net.isIPv6(connectHost) ? `[${connectHost}]` : connectHost}:${port}`;
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const opts = { host: proxy.host, port: proxy.port, lookup: proxyLookup };
+    const socket = proxy.protocol === "https:" ? tls.connect({ ...opts, servername: net.isIP(proxy.host) ? void 0 : proxy.host }) : net.connect(opts);
+    const fail = (e) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      reject(e);
+    };
+    const timer = setTimeout(() => fail(new ProxyError("unreachable", `Proxy unreachable (${endpoint}): no answer to CONNECT within ${timeoutMs} ms`)), timeoutMs);
+    let buf = Buffer.alloc(0);
+    const onData = (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
+      const end2 = buf.indexOf("\r\n\r\n");
+      if (end2 === -1) {
+        if (buf.length > 16 * 1024) fail(new ProxyError("refused", `Proxy refused CONNECT to ${authority}: oversized response (proxy ${endpoint})`));
+        return;
+      }
+      const status = Number(/^HTTP\/1\.[01] (\d{3})/.exec(buf.subarray(0, end2).toString("latin1"))?.[1] ?? 0);
+      if (status === 407) return fail(new ProxyError("auth", `Proxy authentication failed (${endpoint}, HTTP 407)`));
+      if (status < 200 || status > 299) return fail(new ProxyError("refused", `Proxy refused CONNECT to ${authority} (HTTP ${status || "invalid response"}, proxy ${endpoint})`));
+      settled = true;
+      clearTimeout(timer);
+      socket.off("data", onData);
+      socket.off("error", onError);
+      const rest = buf.subarray(end2 + 4);
+      if (rest.length) socket.unshift(rest);
+      resolve(socket);
+    };
+    const onError = (e) => fail(e instanceof ProxyError ? e : new ProxyError("unreachable", `Proxy unreachable (${endpoint}): ${e.code ?? e.message}`));
+    socket.on("error", onError);
+    socket.on("data", onData);
+    socket.once(proxy.protocol === "https:" ? "secureConnect" : "connect", () => {
+      const auth = proxy.auth ? `Proxy-Authorization: Basic ${Buffer.from(proxy.auth).toString("base64")}\r
+` : "";
+      socket.write(`CONNECT ${authority} HTTP/1.1\r
+Host: ${authority}\r
+${auth}\r
+`);
+    });
+  });
+}
+function tlsOverTunnel(tunnel, hostname) {
+  const host = hostname.replace(/^\[|\]$/g, "");
+  return tls.connect({ socket: tunnel, host, servername: net.isIP(host) ? void 0 : host, ALPNProtocols: ["http/1.1"] });
+}
+function proxySummary(p) {
+  return { endpoint: proxyEndpoint(p), resolve: p.resolve, unresolvedAllowed: p.allowUnresolved };
+}
+var ProxyConfigError, ProxyError, ENV_ORDER, systemLookup, proxyLookup;
+var init_proxy = __esm({
+  "src/net/proxy.ts"() {
+    "use strict";
+    init_ssrf();
+    ProxyConfigError = class extends Error {
+    };
+    ProxyError = class extends Error {
+      constructor(kind, message) {
+        super(message);
+        this.kind = kind;
+        this.name = "ProxyError";
+      }
+      kind;
+    };
+    ENV_ORDER = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"];
+    systemLookup = (host) => dns.promises.lookup(host, { all: true }).then((l) => l.map((a) => a.address));
+    proxyLookup = ((hostname, options, callback) => {
+      dns.lookup(hostname, { ...options, all: true }, (err, list) => {
+        if (err) return callback(err);
+        const addresses = list;
+        const bad = addresses.find((a) => ["link-local", "reserved", "invalid"].includes(classifyAddress(a.address)));
+        if (bad) return callback(new ProxyError("unreachable", `Proxy address not allowed (${classifyAddress(bad.address)}): ${bad.address}`));
+        if (options.all) return callback(null, addresses);
+        callback(null, addresses[0].address, addresses[0].family);
+      });
+    });
+  }
+});
+
 // src/net/fetcher.ts
 import http from "node:http";
 import https from "node:https";
-import dns from "node:dns";
+import dns2 from "node:dns";
 import zlib from "node:zlib";
 function guardedLookup(policy) {
   return ((hostname, options, callback) => {
     const violation = hostPolicyViolation(hostname, policy);
     if (violation) return callback(new BlockedUrlError(violation, hostname));
-    dns.lookup(hostname, { ...options, all: true }, (err, addresses) => {
+    dns2.lookup(hostname, { ...options, all: true }, (err, addresses) => {
       if (err) return callback(err);
       const list = addresses;
       const bad = list.find((a) => !isAddressAllowed(a.address, policy));
@@ -816,24 +988,30 @@ function charsetOf(contentType) {
   if (cs === "iso-8859-1" || cs === "latin1" || cs === "windows-1252") return "latin1";
   return "utf8";
 }
-function requestOnce(url, opts) {
+async function requestOnce(url, opts) {
+  const t0 = Date.now();
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  const port = Number(url.port) || (url.protocol === "https:" ? 443 : 80);
+  const route = await routeFor(host, port, opts.policy);
+  const tunnel = route.via === "proxy" ? await openTunnel(route.proxy, route.connectHost, port, opts.timeoutMs) : null;
+  const connection = tunnel ? { agent: void 0, createConnection: () => url.protocol === "https:" ? tlsOverTunnel(tunnel, host) : tunnel } : (
+    // Never reuse sockets across hosts; each request goes through the guarded lookup.
+    { lookup: guardedLookup(opts.policy), agent: false }
+  );
   return new Promise((resolve, reject) => {
-    const t0 = Date.now();
     const mod = url.protocol === "https:" ? https : http;
     const req = mod.request(
       url,
       {
         method: opts.method,
-        lookup: guardedLookup(opts.policy),
+        ...connection,
         headers: {
           "user-agent": opts.userAgent,
           accept: "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5",
           "accept-encoding": "gzip, deflate, br",
           ...opts.headers
         },
-        timeout: opts.timeoutMs,
-        // Never reuse sockets across hosts; each request goes through the guarded lookup.
-        agent: false
+        timeout: opts.timeoutMs
       },
       (res) => {
         const ttfbMs = Date.now() - t0;
@@ -944,6 +1122,7 @@ var SEARVEX_VERSION, DEFAULT_USER_AGENT, DEFAULTS, HostRateLimiter;
 var init_fetcher = __esm({
   "src/net/fetcher.ts"() {
     "use strict";
+    init_proxy();
     init_ssrf();
     SEARVEX_VERSION = "1.3.0";
     DEFAULT_USER_AGENT = `Mozilla/5.0 (compatible; SearvexBot/${SEARVEX_VERSION}; +https://github.com/cihantopac/searvex)`;
@@ -15931,7 +16110,7 @@ var init_bing = __esm({
 // src/net/policy-proxy.ts
 import crypto7 from "node:crypto";
 import http6 from "node:http";
-import net from "node:net";
+import net2 from "node:net";
 async function startPolicyProxy(policy, opts = {}) {
   const maxBytes = opts.maxBytesPerWindow ?? 64 * 1024 * 1024;
   const idle = opts.idleTimeoutMs ?? 3e4;
@@ -15944,7 +16123,7 @@ async function startPolicyProxy(policy, opts = {}) {
   const track = (s) => {
     sockets.add(s);
     s.on("close", () => sockets.delete(s));
-    if (s instanceof net.Socket) s.setTimeout(idle, () => s.destroy());
+    if (s instanceof net2.Socket) s.setTimeout(idle, () => s.destroy());
   };
   const meter = (s, peer) => {
     s.on("data", (chunk) => {
@@ -15995,32 +16174,59 @@ Connection: close\r
     }
     const headers = {};
     for (const [k, val2] of Object.entries(req.headers)) if (!HOP_BY_HOP.has(k.toLowerCase()) && val2 !== void 0) headers[k] = val2;
-    const upstream = http6.request(
-      { host: u.hostname.replace(/^\[|\]$/g, ""), port: u.port || 80, path: `${u.pathname}${u.search}`, method: req.method, headers, lookup: guardedLookup(policy), agent: false, timeout: idle },
-      (up) => {
-        const out = {};
-        for (const [k, val2] of Object.entries(up.headers)) if (!HOP_BY_HOP.has(k.toLowerCase()) && val2 !== void 0) out[k] = val2;
-        res.writeHead(up.statusCode ?? 502, out);
-        meter(up, res.socket ?? up);
-        up.pipe(res);
-      }
-    );
-    upstream.on("timeout", () => upstream.destroy(new Error("upstream timeout")));
-    upstream.on("error", (e) => {
+    const host = u.hostname.replace(/^\[|\]$/g, "");
+    const port2 = Number(u.port) || 80;
+    const fail = (e) => {
       if (e instanceof BlockedUrlError) block(u.host);
       if (!res.headersSent) res.writeHead(e instanceof BlockedUrlError ? 403 : 502, { connection: "close" });
       res.end();
-    });
-    req.pipe(upstream);
+    };
+    routeFor(host, port2, policy).then(async (route) => {
+      const via = route.via === "proxy" ? await openTunnel(route.proxy, route.connectHost, port2, idle) : null;
+      if (via) track(via);
+      forward(via ? { agent: void 0, createConnection: () => via } : { lookup: guardedLookup(policy), agent: false });
+    }).catch(fail);
+    const forward = (connection) => {
+      const upstream = http6.request(
+        { host, port: port2, path: `${u.pathname}${u.search}`, method: req.method, headers, ...connection, timeout: idle },
+        (up) => {
+          const out = {};
+          for (const [k, val2] of Object.entries(up.headers)) if (!HOP_BY_HOP.has(k.toLowerCase()) && val2 !== void 0) out[k] = val2;
+          res.writeHead(up.statusCode ?? 502, out);
+          meter(up, res.socket ?? up);
+          up.pipe(res);
+        }
+      );
+      upstream.on("timeout", () => upstream.destroy(new Error("upstream timeout")));
+      upstream.on("error", fail);
+      req.pipe(upstream);
+    };
   });
+  const connectUpstream = async (host, port2) => {
+    const route = await routeFor(host, port2, policy);
+    if (route.via === "proxy") return openTunnel(route.proxy, route.connectHost, port2, idle);
+    return new Promise((resolve, reject) => {
+      const s = net2.connect({ host, port: port2, lookup: guardedLookup(policy) });
+      track(s);
+      s.once("connect", () => {
+        s.off("error", reject);
+        resolve(s);
+      });
+      s.once("error", reject);
+    });
+  };
   const tunnel = (target, client, head, preamble) => {
     stats.tunnels++;
     track(client);
     const host = target.hostname.replace(/^\[|\]$/g, "");
     const port2 = Number(target.port) || (target.protocol === "https:" ? 443 : 80);
-    const upstream = net.connect({ host, port: port2, lookup: guardedLookup(policy) });
-    track(upstream);
-    upstream.on("connect", () => {
+    const deny = (e) => {
+      if (e instanceof BlockedUrlError) block(target.host);
+      if (client.writable) rawDeny(client, e instanceof BlockedUrlError ? "403 Forbidden" : "502 Bad Gateway");
+      client.destroy();
+    };
+    connectUpstream(host, port2).then((upstream) => {
+      track(upstream);
       if (preamble === null) client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
       else upstream.write(preamble);
       if (head.length) upstream.write(head);
@@ -16028,13 +16234,9 @@ Connection: close\r
       meter(client, upstream);
       upstream.pipe(client);
       client.pipe(upstream);
-    });
-    upstream.on("error", (e) => {
-      if (e instanceof BlockedUrlError) block(target.host);
-      if (client.writable) rawDeny(client, e instanceof BlockedUrlError ? "403 Forbidden" : "502 Bad Gateway");
-      client.destroy();
-    });
-    client.on("error", () => upstream.destroy());
+      upstream.on("error", () => client.destroy());
+      client.on("error", () => upstream.destroy());
+    }, deny);
   };
   server.on("connect", (req, client, head) => {
     stats.requests++;
@@ -16075,6 +16277,7 @@ var init_policy_proxy = __esm({
   "src/net/policy-proxy.ts"() {
     "use strict";
     init_fetcher();
+    init_proxy();
     init_ssrf();
     HOP_BY_HOP = /* @__PURE__ */ new Set(["connection", "keep-alive", "proxy-authorization", "proxy-authenticate", "proxy-connection", "te", "trailer", "transfer-encoding", "upgrade"]);
   }
@@ -30702,6 +30905,7 @@ function parseXRobotsTag(header) {
 // src/crawl/crawler.ts
 init_fetcher();
 init_ssrf();
+init_proxy();
 
 // node_modules/fast-xml-parser/src/util.js
 var nameStartChar = ":A-Za-z_\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD";
@@ -35053,7 +35257,8 @@ async function crawl(startUrl, partial = {}, store2) {
         finishedAt: (/* @__PURE__ */ new Date()).toISOString(),
         stats: { crawled: 0, fetched: 0, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: Date.now() - t0, avgResponseMs: 0 },
         truncated: false,
-        unreachable
+        unreachable,
+        ...opts.policy.upstream ? { proxy: proxySummary(opts.policy.upstream) } : {}
       };
       store2?.writeJson("meta.json", { runId: store2.runId, kind: "crawl", startUrl: start, startedAt, unreachable });
       return result2;
@@ -35229,7 +35434,8 @@ async function crawl(startUrl, partial = {}, store2) {
     },
     truncated: queue.length > 0,
     ...map2 ? { siteUrl: map2.from } : {},
-    ...interruptionOf(opts.stop) ? { interrupted: interruptionOf(opts.stop) } : {}
+    ...interruptionOf(opts.stop) ? { interrupted: interruptionOf(opts.stop) } : {},
+    ...opts.policy.upstream ? { proxy: proxySummary(opts.policy.upstream) } : {}
   };
   store2?.writeJson("crawl-summary.json", {
     ...result,
@@ -37701,7 +37907,7 @@ function rootCauseGroups(r) {
 }
 
 // src/contract.ts
-var SCHEMA_VERSION = "1.0";
+var SCHEMA_VERSION = "1.1";
 
 // src/analyze/audit.ts
 function notAnalysed(r) {
@@ -37806,6 +38012,7 @@ function crawlSummary(result, robotsAgent = DEFAULT_CRAWL.robotsAgent) {
     ...result.unreachable ? { error: result.unreachable.error } : blocked ? { error: robotsBlockReason(result, robotsAgent) } : {},
     ...result.siteUrl ? { siteUrl: result.siteUrl } : {},
     ...result.interrupted ? { interrupted: result.interrupted } : {},
+    ...result.proxy ? { proxy: result.proxy } : {},
     truncated: result.truncated,
     startUrl: result.startUrl,
     robots: { url: result.robots.url, state: result.robots.state, status: result.robots.status, sitemaps: result.robots.sitemaps },
@@ -37910,6 +38117,10 @@ async function analyzeCrawl(result, kb, opts = {}) {
     );
   else if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
   if (launch2) limitations.push(`Pre-launch profile (--pre-launch): the site is audited as it will be once live. ${launch2.noindex.size ? `${launch2.noindex.size} noindex page(s) were evaluated as indexable; their noindex is in the launch checklist. ` : ""}Findings that depend on the test server (environment) or on a deliberate pre-launch state (launch checklist) are listed separately and excluded from the score and --fail-on.`);
+  if (result.proxy)
+    limitations.push(
+      `Crawled through the upstream proxy ${result.proxy.endpoint} (CONNECT only). Response times include the proxy hop. ${result.proxy.resolve === "local" ? "Targets were resolved and checked locally and the proxy was given their addresses." : `Targets were checked against local DNS before CONNECT, but the proxy resolved the names itself; if its DNS view differs (split-horizon DNS), Searvex cannot see the address it connected to.${result.proxy.unresolvedAllowed ? " Names local DNS could not resolve were sent to the proxy unchecked (--proxy-resolve proxy)." : ""}`}`
+    );
   if (result.siteUrl) limitations.push(`Audited ${result.origin} as ${result.siteUrl} (--site-url): canonical, hreflang, sitemap and link URLs on ${result.siteUrl} were checked against the crawled pages at ${result.origin}; the public site itself was not fetched.`);
   if (!opts.checkExternal) limitations.push("Outbound links were not checked (use --check-external).");
   if (!result.pages.some((p) => p.rendered)) limitations.push("JavaScript was not executed (run with --render to compare rendered DOM); client-rendered content is only detected heuristically.");
@@ -37964,6 +38175,7 @@ function setProgress(p) {
 
 // src/cli.ts
 init_ssrf();
+init_proxy();
 
 // src/report/client.ts
 var THEME_BOOT = String.raw`(function(){try{var t=localStorage.getItem('searvex.theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}})();`;
@@ -43066,6 +43278,10 @@ Common options
   --allow-host <glob>   Only contact matching hosts (repeatable; *.example.com); include the target
   --deny-host <glob>    Never contact matching hosts (repeatable; wins over --allow-host)
   --ports <list>        Only contact these ports (e.g. 80,443,8080)
+  --proxy <url|none>    Upstream HTTP(S) proxy, CONNECT only (default: HTTPS_PROXY / HTTP_PROXY, with
+                        NO_PROXY); private targets never go through it. none: ignore the environment
+  --proxy-resolve <m>   proxy (CONNECT by host name after a local DNS check) or local (CONNECT to the
+                        locally resolved address); passing proxy also allows names local DNS cannot resolve
   --pre-launch          Audit a local/staging build as it will be once live: test-server findings
                         (no HTTPS, no compression) and deliberate pre-launch states (noindex, a public
                         sitemap host that is not live yet) are listed separately, not scored
@@ -43104,6 +43320,8 @@ Environment (all optional, read-only integrations)
   SEARVEX_CREDENTIAL_STORE  file (default, 0600 file in the config dir) or keychain (macOS Keychain,
                         Secret Service via secret-tool, Windows DPAPI)
   SEARVEX_DEBUG=1       Print the stack trace of a runtime error (exit 3); by default one line
+  HTTPS_PROXY, HTTP_PROXY, NO_PROXY
+                        Upstream proxy for crawling when --proxy is not given (see --proxy)
 
 Exit codes
   0 completed \xB7 1 --fail-on threshold reached (also optimize verification failed, rollback conflict, or
@@ -43146,6 +43364,8 @@ var CLI_OPTIONS = {
   "allow-host": { type: "string", multiple: true },
   "deny-host": { type: "string", multiple: true },
   ports: { type: "string" },
+  proxy: { type: "string" },
+  "proxy-resolve": { type: "string" },
   "pre-launch": { type: "boolean" },
   json: { type: "boolean" },
   quiet: { type: "boolean", short: "q" },
@@ -43221,6 +43441,8 @@ var EXIT = {
 };
 function assertTargetAllowed(report) {
   const err = report.crawl.status === "unreachable" ? report.crawl.error : void 0;
+  if (err?.startsWith("Proxy authentication failed")) throw new UsageError(`${err}. Check the credentials in --proxy or HTTPS_PROXY.`);
+  if (err?.startsWith("Proxy unreachable")) throw new Error(err);
   if (!err?.startsWith("Blocked: ")) return;
   const why = err.slice(9);
   const hint = /--(deny|allow)-host|--ports/.test(why) ? "Adjust --allow-host, --deny-host or --ports." : "Use --allow-private for a local or private development server.";
@@ -43273,6 +43495,22 @@ function hostGlobs(v, flag) {
   for (const g of globs) if (!/^[a-z0-9*.:[\]-]+$/i.test(g)) throw new UsageError(`${flag} takes a host name or glob such as *.example.com (got ${g})`);
   return globs;
 }
+function policyFrom(v, env = process.env) {
+  const policy = {
+    ...DEFAULT_POLICY,
+    allowPrivate: !!v["allow-private"],
+    ports: portsFrom(v["ports"]),
+    allowHosts: hostGlobs(v["allow-host"], "--allow-host"),
+    denyHosts: hostGlobs(v["deny-host"], "--deny-host")
+  };
+  try {
+    const upstream = proxyFromConfig({ flag: v["proxy"], resolve: v["proxy-resolve"], env, policy });
+    return upstream ? { ...policy, upstream } : policy;
+  } catch (e) {
+    if (e instanceof ProxyConfigError) throw new UsageError(e.message);
+    throw e;
+  }
+}
 function crawlOptionsFrom(v) {
   return {
     maxPages: num(v["max-pages"], 500, 1, 1e6),
@@ -43283,13 +43521,7 @@ function crawlOptionsFrom(v) {
     useSitemaps: !v["no-sitemap"],
     include: v["include"]?.map((r) => new RegExp(r)),
     exclude: v["exclude"]?.map((r) => new RegExp(r)),
-    policy: {
-      ...DEFAULT_POLICY,
-      allowPrivate: !!v["allow-private"],
-      ports: portsFrom(v["ports"]),
-      allowHosts: hostGlobs(v["allow-host"], "--allow-host"),
-      denyHosts: hostGlobs(v["deny-host"], "--deny-host")
-    },
+    policy: policyFrom(v),
     // monitor also accepts a Search Console property (sc-domain:…) here; only URLs map origins.
     siteUrl: typeof v["site-url"] === "string" && /^https?:\/\//i.test(v["site-url"]) ? v["site-url"] : void 0
   };
@@ -43552,7 +43784,7 @@ ${kb.rules.size} rules, ${errors.length} errors, ${issues.length - errors.length
   if (sub === "check-sources") {
     const file2 = snapshotFile(defaultKnowledgeDir());
     const previous = readSnapshots(file2);
-    const results = await checkSources(kb, previous, { onProgress: (d, t, u) => log(v, `  [${d}/${t}] ${u}`) });
+    const results = await checkSources(kb, previous, { policy: policyFrom(v), onProgress: (d, t, u) => log(v, `  [${d}/${t}] ${u}`) });
     if (v["update"]) {
       const next2 = { ...previous };
       for (const r of results) if (r.change !== "broken" && !r.current.challenged) next2[r.url] = r.current;
@@ -43743,6 +43975,7 @@ export {
   num,
   pagesLabel,
   phaseProgress,
+  policyFrom,
   portsFrom,
   printSummary,
   reportError,

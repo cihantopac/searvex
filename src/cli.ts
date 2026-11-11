@@ -8,7 +8,8 @@ import { RunStore } from './crawl/store.js';
 import { SEARVEX_VERSION } from './net/fetcher.js';
 import { Progress, progress, setProgress, type ProgressPhase } from './progress.js';
 import type { CrawlOptions } from './crawl/crawler.js';
-import { classifyAddress, DEFAULT_POLICY } from './net/ssrf.js';
+import { classifyAddress, DEFAULT_POLICY, type NetPolicy } from './net/ssrf.js';
+import { ProxyConfigError, proxyFromConfig } from './net/proxy.js';
 import { renderHtml } from './report/html.js';
 import { loadExtras, planOf } from './report/extras.js';
 import { annotateReport, remediationOf } from './report/remediation.js';
@@ -92,6 +93,10 @@ Common options
   --allow-host <glob>   Only contact matching hosts (repeatable; *.example.com); include the target
   --deny-host <glob>    Never contact matching hosts (repeatable; wins over --allow-host)
   --ports <list>        Only contact these ports (e.g. 80,443,8080)
+  --proxy <url|none>    Upstream HTTP(S) proxy, CONNECT only (default: HTTPS_PROXY / HTTP_PROXY, with
+                        NO_PROXY); private targets never go through it. none: ignore the environment
+  --proxy-resolve <m>   proxy (CONNECT by host name after a local DNS check) or local (CONNECT to the
+                        locally resolved address); passing proxy also allows names local DNS cannot resolve
   --pre-launch          Audit a local/staging build as it will be once live: test-server findings
                         (no HTTPS, no compression) and deliberate pre-launch states (noindex, a public
                         sitemap host that is not live yet) are listed separately, not scored
@@ -130,6 +135,8 @@ Environment (all optional, read-only integrations)
   SEARVEX_CREDENTIAL_STORE  file (default, 0600 file in the config dir) or keychain (macOS Keychain,
                         Secret Service via secret-tool, Windows DPAPI)
   SEARVEX_DEBUG=1       Print the stack trace of a runtime error (exit 3); by default one line
+  HTTPS_PROXY, HTTP_PROXY, NO_PROXY
+                        Upstream proxy for crawling when --proxy is not given (see --proxy)
 
 Exit codes
   0 completed · 1 --fail-on threshold reached (also optimize verification failed, rollback conflict, or
@@ -182,6 +189,8 @@ export const CLI_OPTIONS = {
   'allow-host': { type: 'string', multiple: true },
   'deny-host': { type: 'string', multiple: true },
   ports: { type: 'string' },
+  proxy: { type: 'string' },
+  'proxy-resolve': { type: 'string' },
   'pre-launch': { type: 'boolean' },
   json: { type: 'boolean' },
   quiet: { type: 'boolean', short: 'q' },
@@ -281,6 +290,9 @@ export const EXIT = {
  */
 export function assertTargetAllowed(report: AuditReport): void {
   const err = report.crawl.status === 'unreachable' ? report.crawl.error : undefined;
+  // The proxy failed, not the site: a wrong credential is a usage error, an unreachable proxy a runtime error.
+  if (err?.startsWith('Proxy authentication failed')) throw new UsageError(`${err}. Check the credentials in --proxy or HTTPS_PROXY.`);
+  if (err?.startsWith('Proxy unreachable')) throw new Error(err);
   if (!err?.startsWith('Blocked: ')) return;
   const why = err.slice(9);
   const hint = /--(deny|allow)-host|--ports/.test(why) ? 'Adjust --allow-host, --deny-host or --ports.' : 'Use --allow-private for a local or private development server.';
@@ -364,6 +376,27 @@ export function hostGlobs(v: unknown, flag: string): string[] {
   return globs;
 }
 
+/**
+ * Network policy from the flags: private targets, host and port lists, and the upstream proxy (`--proxy`, else
+ * HTTPS_PROXY / HTTP_PROXY with NO_PROXY; `--proxy none` ignores the environment).
+ */
+export function policyFrom(v: GlobalFlags['values'], env: Record<string, string | undefined> = process.env): NetPolicy {
+  const policy: NetPolicy = {
+    ...DEFAULT_POLICY,
+    allowPrivate: !!v['allow-private'],
+    ports: portsFrom(v['ports']),
+    allowHosts: hostGlobs(v['allow-host'], '--allow-host'),
+    denyHosts: hostGlobs(v['deny-host'], '--deny-host'),
+  };
+  try {
+    const upstream = proxyFromConfig({ flag: v['proxy'] as string | undefined, resolve: v['proxy-resolve'] as string | undefined, env, policy });
+    return upstream ? { ...policy, upstream } : policy;
+  } catch (e) {
+    if (e instanceof ProxyConfigError) throw new UsageError(e.message);
+    throw e;
+  }
+}
+
 export function crawlOptionsFrom(v: GlobalFlags['values']) {
   return {
     maxPages: num(v['max-pages'], 500, 1, 1_000_000),
@@ -374,13 +407,7 @@ export function crawlOptionsFrom(v: GlobalFlags['values']) {
     useSitemaps: !v['no-sitemap'],
     include: (v['include'] as string[] | undefined)?.map((r) => new RegExp(r)),
     exclude: (v['exclude'] as string[] | undefined)?.map((r) => new RegExp(r)),
-    policy: {
-      ...DEFAULT_POLICY,
-      allowPrivate: !!v['allow-private'],
-      ports: portsFrom(v['ports']),
-      allowHosts: hostGlobs(v['allow-host'], '--allow-host'),
-      denyHosts: hostGlobs(v['deny-host'], '--deny-host'),
-    },
+    policy: policyFrom(v),
     // monitor also accepts a Search Console property (sc-domain:…) here; only URLs map origins.
     siteUrl: typeof v['site-url'] === 'string' && /^https?:\/\//i.test(v['site-url']) ? v['site-url'] : undefined,
   };
@@ -651,7 +678,7 @@ async function commandRules(flags: GlobalFlags): Promise<number> {
   if (sub === 'check-sources') {
     const file = snapshotFile(defaultKnowledgeDir());
     const previous = readSnapshots(file);
-    const results = await checkSources(kb, previous, { onProgress: (d, t, u) => log(v, `  [${d}/${t}] ${u}`) });
+    const results = await checkSources(kb, previous, { policy: policyFrom(v), onProgress: (d, t, u) => log(v, `  [${d}/${t}] ${u}`) });
     if (v['update']) {
       const next = { ...previous };
       // Never overwrite a snapshot with an error page or a bot challenge.

@@ -58,8 +58,11 @@ Searvex reports what it can observe and labels everything else. Known limits (v1
 - `--pre-launch` evaluates noindex pages as if they were indexable and moves tagged findings out of the score.
   Rules are tagged in the knowledge base (`environment`), not detected from the server, so on a production site
   the profile would hide real HTTPS, compression and noindex problems: use it only for builds that are not live.
-- There is no upstream (corporate) proxy support yet; the design is in [design/proxy.md](design/proxy.md) and awaits
-  approval.
+- Upstream proxy (`--proxy`, HTTPS_PROXY): `CONNECT` only, Basic authentication only (no NTLM/Kerberos, SOCKS or
+  PAC). In the default `proxy` resolution mode the proxy resolves names itself; when its DNS view differs from the
+  local one (split-horizon DNS), Searvex cannot see the address it connected to (`--proxy-resolve local` closes
+  this at the cost of host-filtering proxies). The search-data integrations (Search Console, Bing, CrUX) connect
+  directly, not through the proxy.
 
 ## Repository mode
 

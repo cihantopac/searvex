@@ -1,7 +1,7 @@
 # Design note: upstream (corporate) proxy
 
-Status: **proposal, awaiting owner approval** (1.3.0 plan D1b, decision O7). Implementation (plan E1) starts only
-after approval. Tracks Frameva SEARVEX-007.
+Status: **approved** by the owner on 2026-11-11 with the four recommended decisions below, and **implemented**
+(plan E1, released with 1.4.0). Tracks Frameva SEARVEX-007.
 
 ## Problem
 
@@ -116,7 +116,7 @@ proxy include the proxy hop; the report says so next to TTFB.
   upstream proxy.
 - An environment proxy pointing at 169.254.169.254 is rejected.
 
-## Decisions for the owner
+## Decisions (approved 2026-11-11)
 
 1. Approve **CONNECT-only** (no absolute-form HTTP through the proxy).
 2. Default resolution mode: **`proxy`** (pre-resolve locally, then `CONNECT` by host name; works with

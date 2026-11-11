@@ -175,5 +175,5 @@ describe('C1: events, errors and the schema command', () => {
 
 it('AuditReport is the exported report type', () => {
   const r: Pick<AuditReport, 'schemaVersion'> = { schemaVersion: SCHEMA_VERSION };
-  expect(r.schemaVersion).toBe('1.0');
+  expect(r.schemaVersion).toBe('1.1');
 });

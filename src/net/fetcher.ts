@@ -4,6 +4,7 @@ import dns from 'node:dns';
 import zlib from 'node:zlib';
 import type { LookupFunction } from 'node:net';
 import type { FetchResult, RedirectHop } from '../core/types.js';
+import { openTunnel, routeFor, tlsOverTunnel } from './proxy.js';
 import { assertUrlAllowed, BlockedUrlError, classifyAddress, DEFAULT_POLICY, hostPolicyViolation, isAddressAllowed, type NetPolicy } from './ssrf.js';
 
 export const SEARVEX_VERSION = '1.3.0';
@@ -86,15 +87,24 @@ interface RawResponse {
   truncated: boolean;
 }
 
-function requestOnce(url: URL, opts: Required<Omit<FetchOptions, 'headers'>> & { headers: Record<string, string> }): Promise<RawResponse> {
+async function requestOnce(url: URL, opts: Required<Omit<FetchOptions, 'headers'>> & { headers: Record<string, string> }): Promise<RawResponse> {
+  const t0 = Date.now();
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  const port = Number(url.port) || (url.protocol === 'https:' ? 443 : 80);
+  const route = await routeFor(host, port, opts.policy);
+  // Through an upstream proxy: a CONNECT tunnel (checked before CONNECT in routeFor), TLS end to end.
+  const tunnel = route.via === 'proxy' ? await openTunnel(route.proxy, route.connectHost, port, opts.timeoutMs) : null;
+  const connection = tunnel
+    ? { agent: undefined, createConnection: () => (url.protocol === 'https:' ? tlsOverTunnel(tunnel, host) : tunnel) }
+    : // Never reuse sockets across hosts; each request goes through the guarded lookup.
+      { lookup: guardedLookup(opts.policy), agent: false as const };
   return new Promise((resolve, reject) => {
-    const t0 = Date.now();
     const mod = url.protocol === 'https:' ? https : http;
     const req = mod.request(
       url,
       {
         method: opts.method,
-        lookup: guardedLookup(opts.policy),
+        ...connection,
         headers: {
           'user-agent': opts.userAgent,
           accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5',
@@ -102,8 +112,6 @@ function requestOnce(url: URL, opts: Required<Omit<FetchOptions, 'headers'>> & {
           ...opts.headers,
         },
         timeout: opts.timeoutMs,
-        // Never reuse sockets across hosts; each request goes through the guarded lookup.
-        agent: false,
       },
       (res) => {
         const ttfbMs = Date.now() - t0;
