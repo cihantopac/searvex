@@ -11,9 +11,22 @@ searvex <command> [target] [options]
 | `0` | Completed |
 | `1` | `--fail-on` threshold met, optimize verification failed, rollback conflict, or a `gsc\|bing\|crux status` integration that is not configured or not working |
 | `2` | Usage error (unknown command or option, invalid value, a target blocked by the network policy without `--allow-private`). A policy-blocked target still gets a `report.json` in its run directory (`crawl.status: "unreachable"`, `crawl.error` starting with `Blocked:`), but no HTML or Markdown report, and one `searvex: …` line on stderr |
-| `3` | Runtime error (until 1.1.1 this was `2`) |
+| `3` | Runtime error (until 1.1.1 this was `2`): one `searvex: <message>` line; the stack trace only with `SEARVEX_DEBUG=1` |
 | `4` | Target not analysable, nothing was fetched. `crawl.status: "unreachable"`: the start URL failed at the network level (DNS, TCP, TLS). `crawl.status: "robots-blocked"`: robots.txt blocked every queued URL, because it answered 5xx/429 (RFC 9309: assume complete disallow) or disallows them; the report keeps the one site finding to fix (`robots.unreachable` or `robots.disallow-all`; none when only `SearvexBot` is disallowed). Reports are written with no page findings, `scores.overall: null` and `scores.notApplicable`; one `searvex: …` line goes to stderr, also with `--json` and `--quiet`; `monitor` does not diff, and the run is never a baseline |
 | `5` | Reserved for interrupted runs with a partial report (SIGINT/SIGTERM and `--max-duration` handling is planned; not returned in 1.2.0) |
+
+### Error output
+
+Every error is one `searvex: <message>` line on stderr. Usage errors (exit `2`) end with
+`Run "searvex --help" for usage.`; runtime errors (exit `3`) end with `Run with SEARVEX_DEBUG=1 for details.`.
+With `--json`, the next stderr line is a JSON object:
+
+```json
+{"error":{"code":2,"kind":"usage","message":"Unknown command: nope"}}
+```
+
+`kind` is `usage`, `policy` (target blocked by the network policy), `runtime`, `unreachable` or
+`robots-blocked` (exit `4`), or `interrupted` (exit `5`).
 
 ## Commands
 
@@ -84,6 +97,7 @@ searvex <command> [target] [options]
 | `SEARVEX_BING_API_KEY` | Bing Webmaster Tools API key (instead of `searvex bing auth`) |
 | `SEARVEX_CREDENTIAL_STORE` | `file` (default: 0600 JSON file in the config dir) or `keychain`: macOS Keychain (`security`), Secret Service (`secret-tool`, libsecret) or Windows DPAPI (`powershell.exe`). Secrets go to the tools on stdin, never as arguments. Credentials saved by the file store remain readable and move to the keychain on the next save. |
 | `SEARVEX_CONFIG_DIR` | Override the user config directory (credentials, search-data choices) |
+| `SEARVEX_DEBUG` | `1`: print the stack trace of a runtime error (exit `3`). By default a runtime error is one `searvex: <message>` line |
 
 ## Output files (`.searvex/runs/<runId>/`)
 

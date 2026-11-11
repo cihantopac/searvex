@@ -111,6 +111,7 @@ Environment (all optional, read-only integrations)
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
   SEARVEX_CREDENTIAL_STORE  file (default, 0600 file in the config dir) or keychain (macOS Keychain,
                         Secret Service via secret-tool, Windows DPAPI)
+  SEARVEX_DEBUG=1       Print the stack trace of a runtime error (exit 3); by default one line
 
 Exit codes
   0 completed · 1 --fail-on threshold reached (also optimize verification failed, rollback conflict, or
@@ -195,6 +196,28 @@ export function num(v: unknown, def: number, min = 0, max = Number.MAX_SAFE_INTE
 
 export class UsageError extends Error {}
 
+/** A target blocked by the network policy (exit 2, kind `policy`); the user can allow it. */
+export class PolicyError extends UsageError {}
+
+export const HELP_TRAILER = 'Run "searvex --help" for usage.';
+
+/** `kind` of the JSON error object written to stderr with --json (see `errorLine`). */
+export type ErrorKind = 'usage' | 'runtime' | 'unreachable' | 'robots-blocked' | 'policy' | 'interrupted';
+
+/** The one-line JSON error object written to stderr with --json: `{"error":{"code","kind","message"}}`. */
+export function errorJson(code: number, kind: ErrorKind, message: string): string {
+  return JSON.stringify({ error: { code, kind, message } });
+}
+
+/**
+ * Report an error on stderr: one `searvex: …` line (plus an optional hint line) and, with --json, the JSON
+ * error object on the next line.
+ */
+export function reportError(code: number, kind: ErrorKind, message: string, json: boolean, hint?: string): void {
+  console.error(`searvex: ${message}${hint ? `\n${hint}` : ''}`);
+  if (json) console.error(errorJson(code, kind, message));
+}
+
 /** Process exit codes (documented in docs/cli.md and --help). */
 export const EXIT = {
   ok: 0,
@@ -217,7 +240,7 @@ export const EXIT = {
  */
 export function assertTargetAllowed(report: AuditReport): void {
   const err = report.crawl.status === 'unreachable' ? report.crawl.error : undefined;
-  if (err?.startsWith('Blocked: ')) throw new UsageError(`${report.target} is blocked by the network policy (${err.slice(9)}). Use --allow-private for a local or private development server.`);
+  if (err?.startsWith('Blocked: ')) throw new PolicyError(`${report.target} is blocked by the network policy (${err.slice(9)}). Use --allow-private for a local or private development server.`);
 }
 
 /** Exit code for a finished website audit: target not analysable (unreachable, robots-blocked), else the --fail-on result. */
@@ -229,8 +252,8 @@ export function auditExit(report: AuditReport, failOn: unknown): number {
  * The one stderr line of a run that analysed nothing (exit 4). It is printed also with --json and --quiet,
  * so a caller that reads only stderr learns why.
  */
-export function reportNotAnalysed(report: AuditReport): void {
-  if (notAnalysed(report)) console.error(`searvex: ${notAnalysedReason(report)}`);
+export function reportNotAnalysed(report: AuditReport, json: boolean, suffix = ''): void {
+  if (notAnalysed(report)) reportError(EXIT.unreachable, report.crawl.status as ErrorKind, `${notAnalysedReason(report)}${suffix}`, json);
 }
 
 export function crawlOptionsFrom(v: GlobalFlags['values']) {
@@ -289,10 +312,16 @@ export function writeReports(store: RunStore, report: AuditReport, kb: Knowledge
   return out;
 }
 
-export function failOnExit(report: AuditReport, failOn: unknown): number {
-  if (!failOn) return EXIT.ok;
+/** --fail-on severity index (checked before crawling, so a typo does not cost a whole crawl). */
+export function failOnIndex(failOn: unknown): number {
   const idx = SEVERITY_ORDER.indexOf(String(failOn) as Severity);
   if (idx < 0 || failOn === 'info') throw new UsageError('--fail-on must be critical|high|medium|low');
+  return idx;
+}
+
+export function failOnExit(report: AuditReport, failOn: unknown): number {
+  if (!failOn) return EXIT.ok;
+  const idx = failOnIndex(failOn);
   return report.findings.some((f) => SEVERITY_ORDER.indexOf(f.severity) <= idx && countsTowardScore(f)) ? EXIT.failOn : EXIT.ok;
 }
 
@@ -381,6 +410,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
     throw new UsageError(`Not a URL and not an existing path: ${target}`);
   }
   assertSiteUrl(v);
+  if (v['fail-on'] !== undefined) failOnIndex(v['fail-on']);
   const kb = loadKnowledge();
   const workspace = path.resolve(String(v['out'] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
@@ -416,7 +446,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
     assertTargetAllowed(report);
     const files = writeReports(store, report, kb, String(v['format'] ?? 'md,html,json').split(','));
     printSummary(report, files, v);
-    reportNotAnalysed(report);
+    reportNotAnalysed(report, !!v['json']);
     return auditExit(report, v['fail-on']);
   } finally {
     await render?.close();
@@ -435,7 +465,7 @@ async function commandGeo(flags: GlobalFlags): Promise<number> {
   assertTargetAllowed(report);
   const files = writeReports(store, report, kb, String(v['format'] ?? 'md,html,json').split(','));
   const unreachable = notAnalysed(report);
-  if (unreachable) console.error(`searvex: ${notAnalysedReason(report)} — no GEO checks were run.`);
+  reportNotAnalysed(report, !!v['json'], ' — no GEO checks were run.');
   if (v['json']) {
     process.stdout.write(JSON.stringify({ target: report.target, ...(unreachable ? { crawl: { status: report.crawl.status, error: report.crawl.error } } : {}), geo: report.geo, findings: report.findings.filter((f) => f.category === 'geo' || f.ruleId.startsWith('sd.')) }, null, 2) + '\n');
     return unreachable ? EXIT.unreachable : EXIT.ok;
@@ -547,7 +577,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   try {
     flags = parse(argv);
   } catch (e) {
-    console.error(`searvex: ${(e as Error).message}\nRun "searvex --help" for usage.`);
+    reportError(EXIT.usage, 'usage', (e as Error).message, argv.includes('--json'), HELP_TRAILER);
     return EXIT.usage;
   }
   if (flags.values['version']) return (console.log(SEARVEX_VERSION), 0);
@@ -593,11 +623,15 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         throw new UsageError(`Unknown command: ${cmd}`);
     }
   } catch (e) {
+    const json = !!flags.values['json'];
     if (e instanceof UsageError) {
-      console.error(`searvex: ${e.message}`);
+      reportError(EXIT.usage, e instanceof PolicyError ? 'policy' : 'usage', e.message, json, HELP_TRAILER);
       return EXIT.usage;
     }
-    console.error(`searvex: ${(e as Error).stack ?? e}`);
+    // One line by default: a stack trace shows absolute install paths and helps only when debugging.
+    const message = e instanceof Error ? e.message || e.name : String(e);
+    const debug = !!process.env['SEARVEX_DEBUG'] && process.env['SEARVEX_DEBUG'] !== '0';
+    reportError(EXIT.runtime, 'runtime', message, json, debug ? String((e as Error).stack ?? e) : 'Run with SEARVEX_DEBUG=1 for details.');
     return EXIT.runtime;
   }
 }

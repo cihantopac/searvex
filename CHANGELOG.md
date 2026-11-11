@@ -18,6 +18,9 @@ All notable changes to this project are documented here. The format follows
   status and reason (`robots-blocked`, `error`, `redirect`, `non-200`, `not-html`), capped at 10,000.
 - Exit code `4` always prints one `searvex: …` line on stderr, also with `--json` and `--quiet` (`audit`, `geo`,
   `monitor`, `run`).
+- With `--json`, every error also writes one JSON object on stderr:
+  `{"error":{"code":2|3|4,"kind":"usage|policy|runtime|unreachable|robots-blocked","message":…}}`.
+- `SEARVEX_DEBUG=1` prints the stack trace of a runtime error.
 
 ### Changed
 - **`scores.overall` is `null`** whenever `scores.notApplicable` is set (unreachable or robots-blocked target,
@@ -26,6 +29,9 @@ All notable changes to this project are documented here. The format follows
 - A failing start URL is reported once, as `http.start-url-error`, instead of also as `http.fetch-error` with the
   same evidence.
 - `/llms.txt` never counts as an affected URL, like `/robots.txt`.
+- A runtime error (exit `3`) prints one `searvex: <message>` line and a `SEARVEX_DEBUG=1` hint instead of a stack
+  trace with absolute install paths. Every usage error, also one raised inside a command, ends with
+  `Run "searvex --help" for usage.`. `--fail-on` is validated before crawling.
 - `docs/cli.md` documents that a target blocked by the network policy (exit `2`) still writes `report.json`.
 
 ## [1.2.0] - 2026-11-03
