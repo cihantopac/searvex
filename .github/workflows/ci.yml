@@ -31,7 +31,9 @@ jobs:
 
   render:
     name: JavaScript rendering (Playwright + Chromium)
-    runs-on: ubuntu-latest
+    # Pinned: on the ubuntu-26.04 image (ubuntu-latest since November 2026) "playwright install --with-deps"
+    # fails to fetch its apt packages.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
