@@ -25,6 +25,11 @@ All notable changes to this project are documented here. The format follows
   lets pages in flight finish, and writes every requested report format as a partial report
   (`crawl.interrupted: "signal" | "max-duration"`, a limitation line, extra probes skipped). A second signal exits
   at once (130/143). `audit`, `geo`, `monitor` and `run`; an interrupted run is never a monitor baseline.
+- `report.json` carries what the HTML report computed: every finding has `ref` and `remediation`
+  (`auto | agent | manual`), every evidence item its stable `ref`, and the report has `rootCauseGroups`.
+- `findings[].affected = { count, urls, truncated? }`: every affected URL or file of a finding (complete up to
+  10,000), so consumers no longer derive counts from the 50-item evidence sample. `--compact` writes only the
+  count.
 - The crawl checkpoint is written at the start and every 25 pages or 10 seconds, so `--resume` works after an early
   kill; resuming no longer fetches pages stored after the last checkpoint again and still follows their links.
 - `--render`: Playwright no longer kills the browser on SIGINT/SIGTERM under pages that are still rendering;

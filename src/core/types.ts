@@ -51,6 +51,11 @@ export interface Evidence {
   /** Short excerpt or observed value. Never contains secrets. */
   observed?: string;
   expected?: string;
+  /**
+   * Stable reference of this occurrence, `<ruleId>#<hash of url|file|line>` (the one the HTML report, repair
+   * prompts and `searvex review` use). Set on reports written since 1.3.0.
+   */
+  ref?: string;
 }
 
 export interface Finding {
@@ -76,6 +81,20 @@ export interface Finding {
    * --fail-on or monitor regressions.
    */
   context?: 'environment' | 'launch-checklist';
+  /**
+   * Every affected URL (website) or file (repository) of this finding, sorted; `evidence` is only a sample of at
+   * most 50. `urls` is complete up to 10,000 entries, `truncated` counts the rest; with --compact only `count`
+   * is written. robots.txt and llms.txt locations are never listed (those findings are about the site).
+   * Since 1.3.0.
+   */
+  affected?: { count: number; urls?: string[]; truncated?: number };
+  /** Stable reference of the finding: its rule id (a report has one finding per rule). Since 1.3.0. */
+  ref?: string;
+  /**
+   * How it gets fixed: `auto` (a concrete Searvex patch exists in the linked repository), `agent` (needs code or
+   * content work) or `manual` (server, infrastructure, account or business decision). Since 1.3.0.
+   */
+  remediation?: 'auto' | 'agent' | 'manual';
 }
 
 export interface Priority {

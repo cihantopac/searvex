@@ -4,7 +4,7 @@ import { RunStore } from '../crawl/store.js';
 import { DEFAULT_USER_AGENT, safeFetch, SEARVEX_VERSION } from '../net/fetcher.js';
 import { DEFAULT_POLICY } from '../net/ssrf.js';
 import { extractPage } from '../extract/html.js';
-import { FindingSink, loadKnowledge, type KnowledgeBase } from '../rules/engine.js';
+import { FindingSink, loadKnowledge, SITE_FILE, type KnowledgeBase } from '../rules/engine.js';
 import { buildContext } from './context.js';
 import { applyPreLaunch, asLaunched, emitLaunchNoindex } from './pre-launch.js';
 import { runContentChecks, type ContentReport } from './content.js';
@@ -14,6 +14,7 @@ import { runRobotsAccessChecks, runTechnicalChecks } from './technical.js';
 import { prioritise } from './priority.js';
 import { checkExternalLinks, type ExternalLinkResult } from './external-links.js';
 import { failingMetrics, queryCrux, type CruxResult } from '../integrations/crux.js';
+import { annotateReport, type RootCauseGroup } from '../report/remediation.js';
 
 export interface AuditReport {
   tool: { name: 'searvex'; version: string; rulesVersion: string };
@@ -52,6 +53,11 @@ export interface AuditReport {
   affectedUrls?: number;
   /** Whether JavaScript was executed for at least one page (`--render`). */
   rendered?: boolean;
+  /**
+   * Root-cause groups per rule id: occurrences of one rule split by URL template, source file, shared layout or
+   * site (see `rootCauseGroups`). Since 1.3.0.
+   */
+  rootCauseGroups?: Record<string, RootCauseGroup[]>;
 }
 
 export type CrawlStatus = 'complete' | 'unreachable' | 'robots-blocked';
@@ -81,7 +87,7 @@ export function countsTowardScore(f: Pick<Finding, 'confidence' | 'context'>): b
 /** Distinct affected URLs/files across all non-informational findings. */
 export function countAffected(findings: Array<Finding & { count: number }>, affected: (ruleId: string) => string[]): number {
   const all = new Set<string>();
-  for (const f of findings) if (f.severity !== 'info' && countsTowardScore(f)) for (const u of affected(f.ruleId)) if (!/\/(robots|llms)\.txt$/.test(u)) all.add(u);
+  for (const f of findings) if (f.severity !== 'info' && countsTowardScore(f)) for (const u of affected(f.ruleId)) if (!SITE_FILE.test(u)) all.add(u);
   return all.size;
 }
 
@@ -228,13 +234,22 @@ export interface AuditOptions {
   cruxApiKey?: string;
   /** Pre-launch profile (--pre-launch): see `applyPreLaunch`. */
   preLaunch?: boolean;
+  /** --compact: write only the count of each finding's affected URLs (see `compactAffected`). */
+  compact?: boolean;
+}
+
+/** --compact: keep only `affected.count` per finding, for very large crawls. Mutates and returns `r`. */
+export function compactAffected(r: AuditReport): AuditReport {
+  for (const f of r.findings) if (f.affected) f.affected = { count: f.affected.count };
+  return r;
 }
 
 export async function auditWebsite(url: string, options: AuditOptions = {}): Promise<{ report: AuditReport; store: RunStore }> {
   const kb = options.kb ?? loadKnowledge();
   const store = new RunStore(options.workspace ?? process.cwd(), options.resumeRunId ?? RunStore.newRunId('audit'));
   const result = await crawl(url, options.crawl, store);
-  const report = await analyzeCrawl(result, kb, { ...options.crawl, probes: options.probes ?? true, checkExternal: options.checkExternal, cruxApiKey: options.cruxApiKey, preLaunch: options.preLaunch });
+  const report = annotateReport(await analyzeCrawl(result, kb, { ...options.crawl, probes: options.probes ?? true, checkExternal: options.checkExternal, cruxApiKey: options.cruxApiKey, preLaunch: options.preLaunch }));
+  if (options.compact) compactAffected(report);
   store.writeJson('report.json', report);
   return { report, store };
 }

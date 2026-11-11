@@ -17,6 +17,7 @@ import { getSitePreference, type SitePreference } from '../integrations/preferen
 import { getCredential } from '../integrations/google-oauth.js';
 import { renderHtml } from '../report/html.js';
 import { writeContext } from '../report/extras.js';
+import { annotateReport } from '../report/remediation.js';
 import { summaryText } from '../cli.js';
 import { openFile } from './review.js';
 
@@ -125,7 +126,7 @@ async function runWorkflow(flags: GlobalFlags, stop: AbortSignal): Promise<numbe
   if (url) {
     log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)…`);
     suggestPreLaunch(v, url);
-    const { report, store } = await auditWebsite(url, { workspace, kb, crawl: { ...opts, stop }, checkExternal: !!v['check-external'], cruxApiKey: cruxKey()?.key, preLaunch: !!v['pre-launch'] });
+    const { report, store } = await auditWebsite(url, { workspace, kb, crawl: { ...opts, stop }, compact: !!v['compact'], checkExternal: !!v['check-external'], cruxApiKey: cruxKey()?.key, preLaunch: !!v['pre-launch'] });
     assertTargetAllowed(report);
     const files = writeReports(store, report, kb, ['json', 'md', 'html']);
     summary.website = { report, runId: store.runId, files };
@@ -187,7 +188,7 @@ async function runWorkflow(flags: GlobalFlags, stop: AbortSignal): Promise<numbe
     if (summary.website) {
       const ws = new RunStore(workspace, summary.website.runId);
       writeContext(ws, { repository: { path: root, framework: summary.repository.framework, siteUrl, lang: v['lang'] as string | undefined }, autoRules: [...new Set(summary.plan.fixes.map((f) => f.ruleId))] });
-      writeReports(ws, summary.website.report, kb, ['html']);
+      writeReports(ws, summary.website.report, kb, ['json', 'html']);
     }
   } else {
     step(5, 'Repository audit', 'skipped', 'no repository path given');
@@ -207,7 +208,7 @@ async function runWorkflow(flags: GlobalFlags, stop: AbortSignal): Promise<numbe
   });
   if (summary.plan) store.writeText('plan.patch', summary.plan.files.map((c) => unifiedDiff(c.path, c.before, c.after)).join('\n') + '\n');
   if (summary.repository) {
-    const rr = summary.repository.report;
+    const rr = annotateReport(summary.repository.report, summary.plan);
     rr.runId = store.runId;
     store.writeText('repository-report.md', renderMarkdown(rr));
     store.writeJson('repository-report.json', rr);

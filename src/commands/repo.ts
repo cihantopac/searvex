@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { RunStore } from '../crawl/store.js';
+import { compactAffected } from '../analyze/audit.js';
 import { auditRepository } from '../repo/audit.js';
 import { loadKnowledge } from '../rules/engine.js';
 import { failOnExit, printSummary, UsageError, writeReports, type GlobalFlags } from '../cli.js';
@@ -15,6 +16,7 @@ export async function commandRepo(flags: GlobalFlags): Promise<number> {
   if (siteUrl && !/^https?:\/\//.test(siteUrl)) throw new UsageError('--site-url must be an absolute http(s) URL');
   const kb = loadKnowledge();
   const { report, scan } = auditRepository(root, { siteUrl, kb });
+  if (v['compact']) compactAffected(report);
   const store = new RunStore(path.resolve(String(v['out'] ?? root)), RunStore.newRunId('repo'));
   report.runId = store.runId;
   store.writeJson('meta.json', { kind: 'repository', target: root, framework: scan.detection.framework, startedAt: report.generatedAt });

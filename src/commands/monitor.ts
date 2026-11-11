@@ -156,7 +156,7 @@ export async function commandMonitor(flags: GlobalFlags): Promise<number> {
   log(v, `Re-auditing ${target}…`);
   suggestPreLaunch(v, target);
   const stop = interrupter(v);
-  const { report, store } = await auditWebsite(target, { workspace, kb, crawl: { ...crawlOptionsFrom(v), stop: stop.signal }, preLaunch: !!v['pre-launch'] }).finally(stop.dispose);
+  const { report, store } = await auditWebsite(target, { workspace, kb, crawl: { ...crawlOptionsFrom(v), stop: stop.signal }, preLaunch: !!v['pre-launch'], compact: !!v['compact'] }).finally(stop.dispose);
   assertTargetAllowed(report);
   writeReports(store, report, kb, ['json', 'md', 'html']);
   if (notAnalysed(report)) {

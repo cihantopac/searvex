@@ -8,8 +8,8 @@ import { RunStore } from './crawl/store.js';
 import { SEARVEX_VERSION } from './net/fetcher.js';
 import { classifyAddress, DEFAULT_POLICY } from './net/ssrf.js';
 import { renderHtml } from './report/html.js';
-import { loadExtras } from './report/extras.js';
-import { remediationOf } from './report/remediation.js';
+import { loadExtras, planOf } from './report/extras.js';
+import { annotateReport, remediationOf } from './report/remediation.js';
 import { commandOpen, commandReview, openFile } from './commands/review.js';
 import { pathToFileURL } from 'node:url';
 import { renderMarkdown } from './report/markdown.js';
@@ -76,6 +76,7 @@ Common options
   --max-duration <s>    Stop crawling after s seconds and write a partial report (exit 5). SIGINT/SIGTERM
                         do the same; a second signal exits at once (130/143)
   --format <list>       md,html,json,sarif (default md,html,json)
+  --compact             report.json: only the count of each finding's affected URLs (very large crawls)
   --out <dir>           Workspace for .searvex/ (default: current directory)
   --fail-on <severity>  Exit 1 if findings at/above severity exist (critical|high|medium|low)
   --allow-private       Allow localhost/private network targets (local dev servers only)
@@ -156,6 +157,7 @@ export const CLI_OPTIONS = {
   'no-sitemap': { type: 'boolean' },
   resume: { type: 'string' },
   'max-duration': { type: 'string' },
+  compact: { type: 'boolean' },
   format: { type: 'string' },
   out: { type: 'string' },
   'fail-on': { type: 'string' },
@@ -353,6 +355,7 @@ export function log(v: GlobalFlags['values'], ...args: unknown[]): void {
 
 export function writeReports(store: RunStore, report: AuditReport, kb: KnowledgeBase, formats: string[]): string[] {
   const out: string[] = [];
+  annotateReport(report, planOf(store) as never);
   for (const f of formats) {
     if (f === 'json') out.push((store.writeJson('report.json', report), store.file('report.json')));
     else if (f === 'md') out.push(store.writeText('report.md', renderMarkdown(report)));
@@ -480,6 +483,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
       checkExternal: !!v['check-external'],
       cruxApiKey: cruxKey()?.key,
       preLaunch: !!v['pre-launch'],
+      compact: !!v['compact'],
       crawl: {
         ...opts,
         render: render?.render,
@@ -519,7 +523,7 @@ async function commandGeo(flags: GlobalFlags): Promise<number> {
   const opts = crawlOptionsFrom({ ...v, 'max-pages': v['max-pages'] ?? '50' });
   suggestPreLaunch(v, target);
   const stop = interrupter(v);
-  const { report, store } = await auditWebsite(target, { workspace: path.resolve(String(v['out'] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal }, preLaunch: !!v['pre-launch'] }).finally(stop.dispose);
+  const { report, store } = await auditWebsite(target, { workspace: path.resolve(String(v['out'] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal }, preLaunch: !!v['pre-launch'], compact: !!v['compact'] }).finally(stop.dispose);
   assertTargetAllowed(report);
   reportInterrupted(report, !!v['json']);
   const files = writeReports(store, report, kb, String(v['format'] ?? 'md,html,json').split(','));

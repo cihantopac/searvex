@@ -178,6 +178,18 @@ export function validateKnowledge(kb: KnowledgeBase, opts: { implemented?: Set<s
   return issues;
 }
 
+/** Maximum number of affected URLs listed per finding (`Finding.affected.urls`). */
+export const AFFECTED_URL_CAP = 10_000;
+
+/** Site files that locate a site-level finding but are not affected pages. */
+export const SITE_FILE = /\/(robots|llms)\.txt$/;
+
+/** `Finding.affected` from every affected location of a rule. */
+export function affectedSummary(locations: string[]): NonNullable<Finding['affected']> {
+  const list = locations.filter((u) => !SITE_FILE.test(u)).sort();
+  return { count: list.length, urls: list.slice(0, AFFECTED_URL_CAP), ...(list.length > AFFECTED_URL_CAP ? { truncated: list.length - AFFECTED_URL_CAP } : {}) };
+}
+
 /** Collector that turns rule ids + evidence into Findings, grouping evidence per rule. */
 export class FindingSink {
   private byRule = new Map<string, Finding>();
@@ -230,6 +242,8 @@ export class FindingSink {
 
   findings(): Array<Finding & { count: number }> {
     const order = (s: Severity) => SEVERITIES.indexOf(s);
-    return [...this.byRule.values()].sort((a, b) => order(a.severity) - order(b.severity) || a.ruleId.localeCompare(b.ruleId)) as Array<Finding & { count: number }>;
+    const out = [...this.byRule.values()].sort((a, b) => order(a.severity) - order(b.severity) || a.ruleId.localeCompare(b.ruleId)) as Array<Finding & { count: number }>;
+    for (const f of out) f.affected = affectedSummary(this.affected(f.ruleId));
+    return out;
   }
 }
