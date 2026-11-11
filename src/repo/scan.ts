@@ -8,6 +8,7 @@ import type { FindingSink } from '../rules/engine.js';
 import { detect, type Detection, type Framework } from './detect.js';
 import { lineOf, readText, walk, type WalkedFile } from './fs-safe.js';
 import { attrString, isJsSource, jsxAnchorsWithoutHref, jsxImagesWithoutAlt, jsxTags, nextMetadata, parseSource, type NextMetadata } from './ast.js';
+import { laravelAuthRanges, laravelRoutePrivate, nextPrivacy } from './private-routes.js';
 
 export interface RouteInfo {
   route: string;
@@ -17,6 +18,8 @@ export interface RouteInfo {
   hasTitle: boolean | null;
   hasDescription: boolean | null;
   noindex: boolean;
+  /** Set when the route needs a login (auth middleware or guarded layout): why it is private. */
+  private?: string;
 }
 
 export interface AppLocations {
@@ -144,6 +147,14 @@ function inheritedNoindex(chain: NextMetadata[]): boolean | null {
 const anyOf = (...xs: Array<boolean | null>): boolean | null => (xs.includes(true) ? true : xs.includes(null) ? null : false);
 
 /** Scan Next.js (app router) sources. */
+/** Mark the routes a privacy check identifies as login-protected. */
+function markPrivate(scan: AppScan, why: (route: string, file: string) => string | null): void {
+  for (const r of scan.routes) {
+    const reason = why(r.route, r.file);
+    if (reason) r.private = reason;
+  }
+}
+
 function scanNextApp(appRoot: string, files: WalkedFile[], read: (f: string) => string, sink: FindingSink, scan: AppScan): void {
   const appBase = files.some((f) => f.rel.startsWith(rel(appRoot, 'src/app/'))) ? rel(appRoot, 'src/app/') : rel(appRoot, 'app/');
   const baseRe = new RegExp('^' + appBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
@@ -409,10 +420,12 @@ function scanApp(root: string, appRoot: string, framework: Framework, files: Wal
     case 'nextjs-app':
       scanNextApp(appRoot, appFiles, read, sink, scan);
       if (/"next-sitemap"/.test(pkgText)) scan.locations.hasSitemapGenerator ??= 'next-sitemap (package.json)';
+      markPrivate(scan, nextPrivacy(appRoot, appFiles, read));
       break;
     case 'nextjs-pages':
       scanNextPages(appRoot, appFiles, read, sink, scan);
       if (/"next-sitemap"/.test(pkgText)) scan.locations.hasSitemapGenerator ??= 'next-sitemap (package.json)';
+      markPrivate(scan, nextPrivacy(appRoot, appFiles, read));
       break;
     case 'astro': {
       const layouts = find(appFiles, /\/(layouts|components)\/[^/]*(Layout|Head|BaseHead|SEO)[^/]*\.astro$/i).map((f) => f.rel);
@@ -452,9 +465,11 @@ function scanApp(root: string, appRoot: string, framework: Framework, files: Wal
       const routeFiles = appFiles.filter((f) => f.rel.startsWith(rel(appRoot, 'routes') + '/') && /\.php$/.test(f.rel) && !/\/(api|console|channels)\.php$/.test(f.rel));
       for (const routes of routeFiles) {
         const src = read(routes.rel);
+        const authRanges = laravelAuthRanges(src);
         for (const m of src.matchAll(/Route::(get|view|match|any)\s*\(\s*['"]([^'"]+)['"]/g)) {
           const r = m[2]!.startsWith('/') ? m[2]! : '/' + m[2]!;
-          scan.routes.push({ route: r, file: routes.rel, framework: 'laravel', dynamic: /\{.+\}/.test(r), hasTitle: null, hasDescription: null, noindex: false });
+          const priv = laravelRoutePrivate(src, m.index, authRanges);
+          scan.routes.push({ route: r, file: routes.rel, framework: 'laravel', dynamic: /\{.+\}/.test(r), hasTitle: null, hasDescription: null, noindex: false, ...(priv ? { private: `${priv} (${routes.rel})` } : {}) });
         }
       }
       if (/spatie\/laravel-sitemap/.test(composerText)) scan.locations.hasSitemapGenerator = 'spatie/laravel-sitemap';

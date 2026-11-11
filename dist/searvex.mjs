@@ -1196,35 +1196,35 @@ var require_Robots = __commonJS({
       }
       return formattedUserAgent.trim();
     }
-    function normaliseEncoding(path23) {
+    function normaliseEncoding(path24) {
       try {
-        return urlEncodeToUpper(encodeURI(path23).replace(/%25/g, "%"));
+        return urlEncodeToUpper(encodeURI(path24).replace(/%25/g, "%"));
       } catch (e) {
-        return path23;
+        return path24;
       }
     }
-    function urlEncodeToUpper(path23) {
-      return path23.replace(/%[0-9a-fA-F]{2}/g, function(match) {
+    function urlEncodeToUpper(path24) {
+      return path24.replace(/%[0-9a-fA-F]{2}/g, function(match) {
         return match.toUpperCase();
       });
     }
-    function matches(pattern, path23) {
-      var matchingLengths = new Array(path23.length + 1);
+    function matches(pattern, path24) {
+      var matchingLengths = new Array(path24.length + 1);
       var numMatchingLengths = 1;
       matchingLengths[0] = 0;
       for (var p = 0; p < pattern.length; p++) {
         if (pattern[p] === "$" && p + 1 === pattern.length) {
-          return matchingLengths[numMatchingLengths - 1] === path23.length;
+          return matchingLengths[numMatchingLengths - 1] === path24.length;
         }
         if (pattern[p] == "*") {
-          numMatchingLengths = path23.length - matchingLengths[0] + 1;
+          numMatchingLengths = path24.length - matchingLengths[0] + 1;
           for (var i = 1; i < numMatchingLengths; i++) {
             matchingLengths[i] = matchingLengths[i - 1] + 1;
           }
         } else {
           var numMatches = 0;
           for (var i = 0; i < numMatchingLengths; i++) {
-            if (matchingLengths[i] < path23.length && path23[matchingLengths[i]] === pattern[p]) {
+            if (matchingLengths[i] < path24.length && path24[matchingLengths[i]] === pattern[p]) {
               matchingLengths[numMatches++] = matchingLengths[i] + 1;
             }
           }
@@ -1278,11 +1278,11 @@ var require_Robots = __commonJS({
         isNoneUserAgentState = line[0].toLowerCase() !== "user-agent";
       }
     }
-    function findRule(path23, rules) {
+    function findRule(path24, rules) {
       var matchedRule = null;
       for (var i = 0; i < rules.length; i++) {
         var rule = rules[i];
-        if (!matches(rule.pattern, path23)) {
+        if (!matches(rule.pattern, path24)) {
           continue;
         }
         if (!matchedRule || rule.pattern.length > matchedRule.pattern.length) {
@@ -1349,8 +1349,8 @@ var require_Robots = __commonJS({
         return;
       }
       var rules = this._rules[userAgent] || this._rules["*"] || [];
-      var path23 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
-      var rule = findRule(path23, rules);
+      var path24 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
+      var rule = findRule(path24, rules);
       return rule;
     };
     Robots.prototype.isAllowed = function(url, ua) {
@@ -16416,7 +16416,7 @@ var init_render = __esm({
 
 // src/cli.ts
 import fs16 from "node:fs";
-import path22 from "node:path";
+import path23 from "node:path";
 import { parseArgs } from "node:util";
 
 // src/core/url.ts
@@ -33028,16 +33028,16 @@ var MatcherView = class {
    * @returns {string|undefined}
    */
   getCurrentTag() {
-    const path23 = this._matcher.path;
-    return path23.length > 0 ? path23[path23.length - 1].tag : void 0;
+    const path24 = this._matcher.path;
+    return path24.length > 0 ? path24[path24.length - 1].tag : void 0;
   }
   /**
    * Get current namespace.
    * @returns {string|undefined}
    */
   getCurrentNamespace() {
-    const path23 = this._matcher.path;
-    return path23.length > 0 ? path23[path23.length - 1].namespace : void 0;
+    const path24 = this._matcher.path;
+    return path24.length > 0 ? path24[path24.length - 1].namespace : void 0;
   }
   /**
    * Get current node's attribute value.
@@ -33045,9 +33045,9 @@ var MatcherView = class {
    * @returns {*}
    */
   getAttrValue(attrName) {
-    const path23 = this._matcher.path;
-    if (path23.length === 0) return void 0;
-    return path23[path23.length - 1].values?.[attrName];
+    const path24 = this._matcher.path;
+    if (path24.length === 0) return void 0;
+    return path24[path24.length - 1].values?.[attrName];
   }
   /**
    * Check if current node has an attribute.
@@ -33055,9 +33055,9 @@ var MatcherView = class {
    * @returns {boolean}
    */
   hasAttr(attrName) {
-    const path23 = this._matcher.path;
-    if (path23.length === 0) return false;
-    const current2 = path23[path23.length - 1];
+    const path24 = this._matcher.path;
+    if (path24.length === 0) return false;
+    const current2 = path24[path24.length - 1];
     return current2.values !== void 0 && attrName in current2.values;
   }
   /**
@@ -33083,18 +33083,18 @@ var MatcherView = class {
    * @returns {number}
    */
   getPosition() {
-    const path23 = this._matcher.path;
-    if (path23.length === 0) return -1;
-    return path23[path23.length - 1].position ?? 0;
+    const path24 = this._matcher.path;
+    if (path24.length === 0) return -1;
+    return path24[path24.length - 1].position ?? 0;
   }
   /**
    * Get current node's repeat counter (occurrence count of this tag name).
    * @returns {number}
    */
   getCounter() {
-    const path23 = this._matcher.path;
-    if (path23.length === 0) return -1;
-    return path23[path23.length - 1].counter ?? 0;
+    const path24 = this._matcher.path;
+    if (path24.length === 0) return -1;
+    return path24[path24.length - 1].counter ?? 0;
   }
   /**
    * Get current node's sibling index (alias for getPosition).
@@ -36242,10 +36242,10 @@ function buildInventory(ctx) {
     if (!f || p.status !== 200 || p.redirects.length) continue;
     const types = /* @__PURE__ */ new Set();
     for (const b of f.jsonLd) for (const n of typedNodes(b.data)) for (const t of [].concat(n["@type"] ?? [])) if (typeof t === "string") types.add(t);
-    const path23 = new URL(p.finalUrl).pathname;
+    const path24 = new URL(p.finalUrl).pathname;
     let type = "other";
     let basis = "default";
-    if (p === ctx.homepage || path23 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path23)) {
+    if (p === ctx.homepage || path24 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path24)) {
       type = "home";
       basis = "url";
     } else {
@@ -36254,7 +36254,7 @@ function buildInventory(ctx) {
         type = s;
         basis = "schema";
       } else {
-        const r = URL_RULES.find(([re]) => re.test(path23));
+        const r = URL_RULES.find(([re]) => re.test(path24));
         if (r) {
           type = r[1];
           basis = "url";
@@ -36326,7 +36326,7 @@ function buildInventory(ctx) {
       pagesWithStructuredData: pagesWithSd,
       invalidJsonLdPages
     },
-    sections: [...sectionsMap.entries()].map(([path23, c]) => ({ path: path23, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
+    sections: [...sectionsMap.entries()].map(([path24, c]) => ({ path: path24, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
   };
 }
 function classifyBusiness(ctx, byType, sd) {
@@ -37018,8 +37018,8 @@ function runTechnicalChecks(ctx, sink) {
     const ttfb = p.ttfbMs ?? p.timingMs;
     if (ttfb > 800 && !p.redirects.length) sink.emit("perf.slow-ttfb", { url: p.url, observed: `TTFB ${ttfb} ms (single sample from the crawler's location; full response ${p.timingMs} ms)` });
     if (p.bytes > 10 * 1024 && !p.headers["content-encoding"]) sink.emit("perf.no-compression", { url: p.url, observed: `${Math.round(p.bytes / 1024)} KB uncompressed` });
-    const path23 = new URL(p.finalUrl).pathname;
-    if (path23.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
+    const path24 = new URL(p.finalUrl).pathname;
+    if (path24.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
     const declared = primaryTag(f.lang);
     if (declared && ["en", "tr", "de", "fr", "es", "it", "pt", "nl"].includes(declared) && !noindex) {
       const detected = detectLanguage(f.mainText);
@@ -37127,11 +37127,11 @@ function checkFacetsAndPagination(ctx, sink) {
     const key = u.origin + u.pathname;
     (variants.get(key) ?? variants.set(key, /* @__PURE__ */ new Set()).get(key)).add(u.search);
   }
-  for (const [path23, set] of variants) {
+  for (const [path24, set] of variants) {
     if (set.size < 10) continue;
     const paramCount = /* @__PURE__ */ new Map();
     for (const q of set) for (const k of new URLSearchParams(q).keys()) if (!PAGE_PARAM.test(k)) paramCount.set(k, (paramCount.get(k) ?? 0) + 1);
-    const crawled = ctx.pages.filter((p) => p.url.startsWith(path23 + "?"));
+    const crawled = ctx.pages.filter((p) => p.url.startsWith(path24 + "?"));
     const blocked = crawled.filter((p) => p.blockedByRobots).length;
     const canonicalised = crawled.filter((p) => {
       const f = factsOf(p);
@@ -37139,7 +37139,7 @@ function checkFacetsAndPagination(ctx, sink) {
     }).length;
     const params = [...paramCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => `${k} (${n})`).join(", ");
     sink.emit("crawl.facet-explosion", {
-      url: path23,
+      url: path24,
       observed: `${set.size} parameter variants linked internally; parameters: ${params}; of ${crawled.length} crawled variants, ${blocked} robots-blocked, ${canonicalised} canonicalised elsewhere`
     });
   }
@@ -37157,13 +37157,13 @@ function checkFacetsAndPagination(ctx, sink) {
 // src/analyze/priority.ts
 var SEVERITY = { critical: 1, high: 0.7, medium: 0.4, low: 0.15, info: 0 };
 function urlPattern(urlOrPath) {
-  let path23;
+  let path24;
   try {
-    path23 = new URL(urlOrPath).pathname;
+    path24 = new URL(urlOrPath).pathname;
   } catch {
-    path23 = urlOrPath.startsWith("/") ? urlOrPath : "/" + urlOrPath;
+    path24 = urlOrPath.startsWith("/") ? urlOrPath : "/" + urlOrPath;
   }
-  const segs = path23.split("/").filter(Boolean);
+  const segs = path24.split("/").filter(Boolean);
   if (!segs.length) return "/";
   const out = [];
   if (/^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0])) out.push(segs.shift());
@@ -40737,17 +40737,80 @@ var IMPLEMENTED_RULES = /* @__PURE__ */ new Set([
 ]);
 
 // src/commands/repo.ts
-import path14 from "node:path";
+import path15 from "node:path";
 
 // src/repo/audit.ts
-import path13 from "node:path";
+import path14 from "node:path";
+
+// src/repo/private-routes.ts
+import path11 from "node:path";
+var LARAVEL_AUTH = /['"](auth(?::[\w-]+)?|verified)['"]/;
+function laravelAuthRanges(src) {
+  const ranges = [];
+  for (const m of src.matchAll(/->group\s*\(\s*(?:static\s+)?function\s*\([^)]*\)\s*(?:use\s*\([^)]*\)\s*)?\{|Route::group\s*\(\s*\[([^\]]*)\]\s*,\s*(?:static\s+)?function\s*\([^)]*\)\s*\{/g)) {
+    const statementStart = Math.max(src.lastIndexOf(";", m.index), src.lastIndexOf("{", m.index - 1), src.lastIndexOf("}", m.index - 1)) + 1;
+    const head = m[1] !== void 0 ? `'middleware' => [${m[1]}]` : src.slice(statementStart, m.index);
+    const guarded = m[1] !== void 0 ? /['"]middleware['"]\s*=>\s*\[?[^\]]*/.test(head) && LARAVEL_AUTH.test(m[1]) : /->middleware\s*\(|Route::middleware\s*\(/.test(head) && LARAVEL_AUTH.test(head.slice(head.search(/middleware\s*\(/)));
+    if (!guarded) continue;
+    const open = m.index + m[0].length - 1;
+    let depth = 0;
+    let end2 = src.length;
+    for (let i = open; i < src.length; i++) {
+      if (src[i] === "{") depth++;
+      else if (src[i] === "}" && --depth === 0) {
+        end2 = i;
+        break;
+      }
+    }
+    ranges.push([open, end2]);
+  }
+  return ranges;
+}
+function laravelRoutePrivate(src, index2, ranges) {
+  if (ranges.some(([a, b]) => index2 > a && index2 < b)) return "auth middleware group";
+  const end2 = src.indexOf(";", index2);
+  const statement = src.slice(index2, end2 === -1 ? void 0 : end2);
+  const mw = statement.search(/->middleware\s*\(/);
+  return mw !== -1 && LARAVEL_AUTH.test(statement.slice(mw)) ? "auth middleware on the route" : null;
+}
+var NEXT_AUTH_SIGNAL = /\b(auth\s*\(|getToken\s*\(|getServerSession\s*\(|currentUser\s*\(|withAuth\s*\(|clerkMiddleware|authMiddleware|\.protect\s*\(|getSession\s*\(|getUser\s*\()/;
+var LOGIN_REDIRECT = /redirect\s*\(\s*[`'"]\/?(login|log-in|signin|sign-in|auth)\b/i;
+function matcherPrefixes(src) {
+  const literals = [];
+  const blocks = [...src.matchAll(/matcher\s*:\s*(\[[^\]]*\]|'[^']*'|"[^"]*"|`[^`]*`)/g), ...src.matchAll(/createRouteMatcher\s*\(\s*(\[[^\]]*\])/g)];
+  for (const b of blocks) for (const l of b[1].matchAll(/['"`]([^'"`]+)['"`]/g)) literals.push(l[1]);
+  const out = [];
+  for (const raw of literals) {
+    const p = raw.replace(/\(\.\*\)$/, "").replace(/\/:[\w]+[*+?]?$/, "");
+    if (!p.startsWith("/") || /[()[\]?*+|\\]/.test(p) || p === "/") continue;
+    out.push(p.replace(/\/$/, ""));
+  }
+  return [...new Set(out)];
+}
+function nextPrivacy(appRoot, files, read) {
+  const rel2 = (p) => appRoot === "." ? p : `${appRoot}/${p}`;
+  const mwFile = files.find((f) => [rel2("middleware.ts"), rel2("middleware.js"), rel2("src/middleware.ts"), rel2("src/middleware.js")].includes(f.rel));
+  const mwSrc = mwFile ? read(mwFile.rel) : "";
+  const prefixes = mwFile && NEXT_AUTH_SIGNAL.test(mwSrc) ? matcherPrefixes(mwSrc) : [];
+  const guardedDirs = files.filter((f) => /(^|\/)layout\.(tsx|jsx|ts|js)$/.test(f.rel)).filter((f) => {
+    const s = read(f.rel);
+    return NEXT_AUTH_SIGNAL.test(s) && LOGIN_REDIRECT.test(s);
+  }).map((f) => ({ dir: path11.posix.dirname(f.rel) + "/", file: f.rel }));
+  return (route, file2) => {
+    const p = prefixes.find((x) => route === x || route.startsWith(x + "/"));
+    if (p) return `auth middleware ${mwFile.rel} (matcher ${p})`;
+    const g = guardedDirs.find((d) => file2.startsWith(d.dir));
+    return g ? `login-redirecting layout ${g.file}` : null;
+  };
+}
+var PRIVATE_SUPPRESSED = /^(title|description|canonical|index|social|hreflang|h1)\./;
 
 // src/repo/scan.ts
-import path12 from "node:path";
+import path13 from "node:path";
 
 // src/repo/detect.ts
 import fs10 from "node:fs";
-import path11 from "node:path";
+import path12 from "node:path";
 function readJson(p) {
   try {
     return JSON.parse(fs10.readFileSync(p, "utf8"));
@@ -40756,12 +40819,12 @@ function readJson(p) {
   }
 }
 function has2(dir, ...names) {
-  return names.some((n) => fs10.existsSync(path11.join(dir, n)));
+  return names.some((n) => fs10.existsSync(path12.join(dir, n)));
 }
 var SSR = ["nextjs-app", "nextjs-pages", "astro", "nuxt", "sveltekit", "remix", "gatsby", "laravel", "wordpress-theme", "hugo", "jekyll", "eleventy", "static-html"];
 function detectApp(dir, rel2 = ".") {
   const out = [];
-  const pkg = readJson(path11.join(dir, "package.json"));
+  const pkg = readJson(path12.join(dir, "package.json"));
   const deps = { ...pkg?.dependencies, ...pkg?.devDependencies };
   if (deps["next"]) {
     const appDir = has2(dir, "app", "src/app");
@@ -40774,7 +40837,7 @@ function detectApp(dir, rel2 = ".") {
   else if (deps["@11ty/eleventy"]) out.push({ framework: "eleventy", root: rel2, evidence: "@11ty/eleventy" });
   else if (deps["react-scripts"]) out.push({ framework: "cra-spa", root: rel2, evidence: "react-scripts (client-side rendering)" });
   else if (deps["vite"] && (deps["react"] || deps["vue"] || deps["svelte"] || deps["solid-js"])) out.push({ framework: "vite-spa", root: rel2, evidence: "vite + UI library without SSR framework" });
-  const composer = readJson(path11.join(dir, "composer.json"));
+  const composer = readJson(path12.join(dir, "composer.json"));
   if (composer?.require?.["laravel/framework"]) out.push({ framework: "laravel", root: rel2, evidence: `laravel/framework@${composer.require["laravel/framework"]}` });
   if (has2(dir, "style.css") && has2(dir, "functions.php")) out.push({ framework: "wordpress-theme", root: rel2, evidence: "style.css + functions.php" });
   if (has2(dir, "wp-content/themes")) out.push({ framework: "wordpress-theme", root: rel2, evidence: "wp-content/themes" });
@@ -40786,9 +40849,9 @@ var STATIC_DIRS = ["", "public", "dist", "out", "build", "_site"];
 function staticHtmlIndexes(dir) {
   const found = [];
   for (const d of STATIC_DIRS) {
-    const base = path11.join(dir, d);
-    if (fs10.existsSync(path11.join(base, "index.html"))) {
-      found.push(path11.posix.join(d, "index.html"));
+    const base = path12.join(dir, d);
+    if (fs10.existsSync(path12.join(base, "index.html"))) {
+      found.push(path12.posix.join(d, "index.html"));
       continue;
     }
     let subs = [];
@@ -40797,28 +40860,28 @@ function staticHtmlIndexes(dir) {
     } catch {
       continue;
     }
-    const locales = subs.filter((s) => s.isDirectory() && /^[a-z]{2,3}([-_][a-z0-9]{2,8})?$/i.test(s.name) && fs10.existsSync(path11.join(base, s.name, "index.html")));
-    if (locales.length) found.push(...locales.map((s) => path11.posix.join(d, s.name, "index.html")));
+    const locales = subs.filter((s) => s.isDirectory() && /^[a-z]{2,3}([-_][a-z0-9]{2,8})?$/i.test(s.name) && fs10.existsSync(path12.join(base, s.name, "index.html")));
+    if (locales.length) found.push(...locales.map((s) => path12.posix.join(d, s.name, "index.html")));
   }
   return found;
 }
 function detect(root2) {
   const candidates = detectApp(root2);
-  const pkg = readJson(path11.join(root2, "package.json"));
+  const pkg = readJson(path12.join(root2, "package.json"));
   const ws = Array.isArray(pkg?.workspaces) ? pkg.workspaces : pkg?.workspaces?.packages ?? [];
-  const pnpmWs = fs10.existsSync(path11.join(root2, "pnpm-workspace.yaml")) ? (fs10.readFileSync(path11.join(root2, "pnpm-workspace.yaml"), "utf8").match(/-\s*['"]?([^'"\n]+)['"]?/g) ?? []).map((l) => l.replace(/^-\s*['"]?|['"]?$/g, "")) : [];
+  const pnpmWs = fs10.existsSync(path12.join(root2, "pnpm-workspace.yaml")) ? (fs10.readFileSync(path12.join(root2, "pnpm-workspace.yaml"), "utf8").match(/-\s*['"]?([^'"\n]+)['"]?/g) ?? []).map((l) => l.replace(/^-\s*['"]?|['"]?$/g, "")) : [];
   const patterns = [...ws, ...pnpmWs];
   const workspaces = [];
   for (const pattern of patterns.length ? patterns : ["apps/*", "packages/*", "sites/*", "services/*"]) {
     const base = pattern.replace(/\/\*+$/, "");
-    const dir = path11.join(root2, base);
+    const dir = path12.join(root2, base);
     if (!fs10.existsSync(dir) || !fs10.statSync(dir).isDirectory()) continue;
-    const children2 = pattern.endsWith("*") ? fs10.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path11.posix.join(base, d.name)) : [base];
+    const children2 = pattern.endsWith("*") ? fs10.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path12.posix.join(base, d.name)) : [base];
     for (const c of children2) {
-      const found = detectApp(path11.join(root2, c), c);
+      const found = detectApp(path12.join(root2, c), c);
       if (!found.length) {
-        const idx = staticHtmlIndexes(path11.join(root2, c));
-        if (idx.length) found.push({ framework: "static-html", root: c, evidence: idx.slice(0, 3).map((f) => path11.posix.join(c, f)).join(", ") });
+        const idx = staticHtmlIndexes(path12.join(root2, c));
+        if (idx.length) found.push({ framework: "static-html", root: c, evidence: idx.slice(0, 3).map((f) => path12.posix.join(c, f)).join(", ") });
       }
       if (found.length) workspaces.push(c);
       candidates.push(...found);
@@ -41118,12 +41181,18 @@ function inheritedNoindex(chain) {
   return false;
 }
 var anyOf = (...xs) => xs.includes(true) ? true : xs.includes(null) ? null : false;
+function markPrivate(scan, why) {
+  for (const r of scan.routes) {
+    const reason = why(r.route, r.file);
+    if (reason) r.private = reason;
+  }
+}
 function scanNextApp(appRoot, files, read, sink, scan) {
   const appBase = files.some((f) => f.rel.startsWith(rel(appRoot, "src/app/"))) ? rel(appRoot, "src/app/") : rel(appRoot, "app/");
   const baseRe = new RegExp("^" + appBase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const pages = files.filter((f) => f.rel.startsWith(appBase) && /\/page\.(tsx|jsx|ts|js|mdx)$|^page\./.test(f.rel.slice(appBase.length - 1)) && !/\/(@[^/]+|\(\.+\)[^/]*)\//.test(f.rel));
   const layouts = /* @__PURE__ */ new Map();
-  for (const f of files.filter((f2) => f2.rel.startsWith(appBase) && /(^|\/)layout\.(tsx|jsx|ts|js)$/.test(f2.rel))) layouts.set(path12.posix.dirname(f.rel), metadataOf(read(f.rel), f.rel));
+  for (const f of files.filter((f2) => f2.rel.startsWith(appBase) && /(^|\/)layout\.(tsx|jsx|ts|js)$/.test(f2.rel))) layouts.set(path13.posix.dirname(f.rel), metadataOf(read(f.rel), f.rel));
   const rootLayoutPath = files.find((f) => new RegExp("^" + appBase + "layout\\.(tsx|jsx|ts|js)$").test(f.rel))?.rel ?? null;
   scan.locations.rootLayout = rootLayoutPath;
   scan.locations.layouts = [...layouts.keys()];
@@ -41131,12 +41200,12 @@ function scanNextApp(appRoot, files, read, sink, scan) {
   for (const p of pages) {
     const src = read(p.rel);
     const chain = [];
-    let dir = path12.posix.dirname(p.rel);
+    let dir = path13.posix.dirname(p.rel);
     while (dir.length >= appBase.length - 1) {
       const l = layouts.get(dir);
       if (l) chain.push(l);
       if (dir + "/" === appBase) break;
-      dir = path12.posix.dirname(dir);
+      dir = path13.posix.dirname(dir);
     }
     const meta = metadataOf(src, p.rel);
     const pageTitle = meta.exported ? meta.title : false;
@@ -41373,10 +41442,12 @@ function scanApp(root2, appRoot, framework, files, read, sink, opts) {
     case "nextjs-app":
       scanNextApp(appRoot, appFiles, read, sink, scan);
       if (/"next-sitemap"/.test(pkgText)) scan.locations.hasSitemapGenerator ??= "next-sitemap (package.json)";
+      markPrivate(scan, nextPrivacy(appRoot, appFiles, read));
       break;
     case "nextjs-pages":
       scanNextPages(appRoot, appFiles, read, sink, scan);
       if (/"next-sitemap"/.test(pkgText)) scan.locations.hasSitemapGenerator ??= "next-sitemap (package.json)";
+      markPrivate(scan, nextPrivacy(appRoot, appFiles, read));
       break;
     case "astro": {
       const layouts = find4(appFiles, /\/(layouts|components)\/[^/]*(Layout|Head|BaseHead|SEO)[^/]*\.astro$/i).map((f) => f.rel);
@@ -41413,9 +41484,11 @@ function scanApp(root2, appRoot, framework, files, read, sink, opts) {
       const routeFiles = appFiles.filter((f) => f.rel.startsWith(rel(appRoot, "routes") + "/") && /\.php$/.test(f.rel) && !/\/(api|console|channels)\.php$/.test(f.rel));
       for (const routes of routeFiles) {
         const src = read(routes.rel);
+        const authRanges = laravelAuthRanges(src);
         for (const m of src.matchAll(/Route::(get|view|match|any)\s*\(\s*['"]([^'"]+)['"]/g)) {
           const r = m[2].startsWith("/") ? m[2] : "/" + m[2];
-          scan.routes.push({ route: r, file: routes.rel, framework: "laravel", dynamic: /\{.+\}/.test(r), hasTitle: null, hasDescription: null, noindex: false });
+          const priv = laravelRoutePrivate(src, m.index, authRanges);
+          scan.routes.push({ route: r, file: routes.rel, framework: "laravel", dynamic: /\{.+\}/.test(r), hasTitle: null, hasDescription: null, noindex: false, ...priv ? { private: `${priv} (${routes.rel})` } : {} });
         }
       }
       if (/spatie\/laravel-sitemap/.test(composerText)) scan.locations.hasSitemapGenerator = "spatie/laravel-sitemap";
@@ -41512,7 +41585,7 @@ var emptyContent = { topTerms: [], pageTerms: [], clusters: [], cannibalization:
 function auditRepository(root2, opts = {}) {
   const kb = opts.kb ?? loadKnowledge();
   const sink = new FindingSink(kb);
-  const scan = scanRepository(path13.resolve(root2), sink, opts);
+  const scan = scanRepository(path14.resolve(root2), sink, opts);
   let geo = { bots: [], entityNames: {}, answerability: { average: 0, pages: [] }, snippetRestricted: [], citations: { measured: false, reason: "Repository mode does not observe AI systems." }, notes: [] };
   let content = emptyContent;
   let inventory = {
@@ -41552,8 +41625,19 @@ function auditRepository(root2, opts = {}) {
       );
     }
   }
-  const findings = sink.findings().filter((f) => !NETWORK_ONLY.has(f.ruleId));
-  prioritise(findings, (id) => sink.affected(id), void 0, Math.max(1, scan.routes.length));
+  const privateRoutes = scan.routes.filter((r) => r.private).map((r) => ({ route: r.route, file: r.file, reason: r.private }));
+  const privateFiles = new Set([...new Set(privateRoutes.map((r) => r.file))].filter((f) => scan.routes.filter((r) => r.file === f).every((r) => r.private)));
+  const visible = (id) => privateFiles.size && PRIVATE_SUPPRESSED.test(id) ? sink.affected(id).filter((f) => !privateFiles.has(f)) : sink.affected(id);
+  let suppressed = 0;
+  const findings = sink.findings().filter((f) => !NETWORK_ONLY.has(f.ruleId)).flatMap((f) => {
+    if (!privateFiles.size || !PRIVATE_SUPPRESSED.test(f.ruleId)) return [f];
+    const removed = sink.affected(f.ruleId).filter((x) => privateFiles.has(x)).length;
+    if (!removed) return [f];
+    suppressed += removed;
+    const count = f.count - removed;
+    return count > 0 ? [{ ...f, count, evidence: f.evidence.filter((e) => !e.file || !privateFiles.has(e.file)), affected: affectedSummary(visible(f.ruleId)) }] : [];
+  });
+  prioritise(findings, visible, void 0, Math.max(1, scan.routes.length));
   const limitations = [
     "Repository mode analyses source files statically. Values computed at runtime (CMS data, generateMetadata fetching, i18n) cannot be fully resolved; such cases are reported conservatively.",
     "HTTP behaviour (status codes, redirects, headers, compression, speed) requires website mode against a running deployment."
@@ -41565,6 +41649,10 @@ function auditRepository(root2, opts = {}) {
   }
   const nothingToAudit = !scan.routes.length && scan.apps.every((a) => a.framework === "unknown" && !a.staticSite) && !findings.some((f) => f.severity !== "info");
   if (nothingToAudit) limitations.unshift(NOTHING_TO_AUDIT);
+  if (privateRoutes.length) {
+    const why = [...new Set(privateRoutes.map((r) => r.reason))].slice(0, 3).join("; ");
+    limitations.push(`${privateRoutes.length} route(s) need a login (${why}). Search engines do not index pages behind a login, so ${suppressed} metadata/indexability finding(s) on them were not reported; the routes are listed under privateRoutes.`);
+  }
   if (scan.skipped.secrets) limitations.push(`${scan.skipped.secrets} secret-bearing file(s) (.env, keys, credentials) were skipped and never read.`);
   if (scan.skipped.symlinks) limitations.push(`${scan.skipped.symlinks} symlink(s) were not followed.`);
   if (scan.skipped.truncated) limitations.push("File limit reached; repository scan is partial.");
@@ -41572,7 +41660,7 @@ function auditRepository(root2, opts = {}) {
     schemaVersion: SCHEMA_VERSION,
     tool: toolInfo(kb, findings),
     mode: "repository",
-    target: path13.resolve(root2),
+    target: path14.resolve(root2),
     runId: "repository",
     generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
     crawl: {
@@ -41601,7 +41689,8 @@ function auditRepository(root2, opts = {}) {
       unmeasurable: findings.filter((f) => f.confidence === "unmeasurable").length
     },
     limitations,
-    affectedUrls: countAffected(findings, (id) => sink.affected(id))
+    affectedUrls: countAffected(findings, visible),
+    ...privateRoutes.length ? { privateRoutes: privateRoutes.slice(0, 200) } : {}
   };
   return { report, scan };
 }
@@ -41611,13 +41700,13 @@ async function commandRepo(flags) {
   const v = flags.values;
   const target = flags.positionals[1];
   if (!target) throw new UsageError("A repository path is required");
-  const root2 = path14.resolve(target);
+  const root2 = path15.resolve(target);
   const siteUrl = v["site-url"];
   if (siteUrl && !/^https?:\/\//.test(siteUrl)) throw new UsageError("--site-url must be an absolute http(s) URL");
   const kb = loadKnowledge();
   const { report, scan } = auditRepository(root2, { siteUrl, kb });
   if (v["compact"]) compactAffected(report);
-  const store2 = new RunStore(path14.resolve(String(v["out"] ?? root2)), RunStore.newRunId("repo"));
+  const store2 = new RunStore(path15.resolve(String(v["out"] ?? root2)), RunStore.newRunId("repo"));
   report.runId = store2.runId;
   store2.writeJson("meta.json", { kind: "repository", target: root2, framework: scan.detection.framework, startedAt: report.generatedAt });
   store2.writeJson("scan.json", { detection: scan.detection, apps: scan.apps.map((a) => ({ appRoot: a.appRoot, framework: a.framework, routes: a.routes, locations: a.locations, originSource: a.originSource })), skipped: scan.skipped });
@@ -41634,7 +41723,7 @@ Repository: ${root2} \xB7 ${framework} \xB7 ${scan.routes.length} routes/pages \
 // src/commands/optimize.ts
 import { execFileSync } from "node:child_process";
 import fs12 from "node:fs";
-import path16 from "node:path";
+import path17 from "node:path";
 import readline from "node:readline/promises";
 
 // src/optimize/diff.ts
@@ -41726,13 +41815,13 @@ function unifiedDiff(file2, before2, after2, context = 3) {
 // src/optimize/transaction.ts
 import crypto6 from "node:crypto";
 import fs11 from "node:fs";
-import path15 from "node:path";
+import path16 from "node:path";
 var sha = (s) => crypto6.createHash("sha256").update(s).digest("hex");
 function changesDir(root2) {
-  return path15.join(root2, ".searvex", "changes");
+  return path16.join(root2, ".searvex", "changes");
 }
 function atomicWrite(file2, content) {
-  fs11.mkdirSync(path15.dirname(file2), { recursive: true });
+  fs11.mkdirSync(path16.dirname(file2), { recursive: true });
   const mode = fs11.existsSync(file2) ? fs11.statSync(file2).mode & 4095 : void 0;
   const tmp = `${file2}.searvex-${process.pid}.tmp`;
   try {
@@ -41752,7 +41841,7 @@ var ConflictError = class extends Error {
 };
 function applyFixes(root2, fixes) {
   const changeId = `chg-${(/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").replace(/\..+/, "").replace("T", "-")}-${crypto6.randomBytes(3).toString("hex")}`;
-  const dir = path15.join(changesDir(root2), changeId);
+  const dir = path16.join(changesDir(root2), changeId);
   const finalByPath = /* @__PURE__ */ new Map();
   for (const f of fixes) for (const c of f.changes) {
     const prev2 = finalByPath.get(c.path);
@@ -41766,7 +41855,7 @@ function applyFixes(root2, fixes) {
     if (c.action === "create" && exists) throw new ConflictError(`File appeared since planning: ${p}`);
     if (c.action === "modify" && (!exists || fs11.readFileSync(abs, "utf8") !== c.before)) throw new ConflictError(`File changed since planning: ${p}`);
   }
-  fs11.mkdirSync(path15.join(dir, "backup"), { recursive: true });
+  fs11.mkdirSync(path16.join(dir, "backup"), { recursive: true });
   ensureSelfIgnored(root2);
   const manifest = { changeId, createdAt: (/* @__PURE__ */ new Date()).toISOString(), root: root2, fixes: fixes.map((f) => ({ id: f.id, ruleId: f.ruleId, title: f.title })), files: [], status: "applying" };
   let n = 0;
@@ -41774,7 +41863,7 @@ function applyFixes(root2, fixes) {
     let backup = null;
     if (c.action === "modify") {
       backup = `backup/${n++}`;
-      fs11.writeFileSync(path15.join(dir, backup), c.before ?? "");
+      fs11.writeFileSync(path16.join(dir, backup), c.before ?? "");
     }
     manifest.files.push({ path: p, action: c.action, beforeHash: c.before === null ? null : sha(c.before), afterHash: sha(c.after), backup });
   }
@@ -41801,21 +41890,21 @@ function applyFixes(root2, fixes) {
 function restoreEntry(root2, dir, e) {
   const abs = resolveInside(root2, e.path);
   if (e.action === "create") fs11.rmSync(abs, { force: true });
-  else if (e.backup) atomicWrite(abs, fs11.readFileSync(path15.join(dir, e.backup), "utf8"));
+  else if (e.backup) atomicWrite(abs, fs11.readFileSync(path16.join(dir, e.backup), "utf8"));
 }
 function readManifest(root2, changeId) {
   if (!/^chg-[\w-]+$/.test(changeId)) throw new Error(`Invalid change id: ${changeId}`);
-  const f = path15.join(changesDir(root2), changeId, "manifest.json");
+  const f = path16.join(changesDir(root2), changeId, "manifest.json");
   if (!fs11.existsSync(f)) throw new Error(`Unknown change: ${changeId}`);
   return JSON.parse(fs11.readFileSync(f, "utf8"));
 }
 function writeManifest(root2, m) {
-  fs11.writeFileSync(path15.join(changesDir(root2), m.changeId, "manifest.json"), JSON.stringify(m, null, 2));
+  fs11.writeFileSync(path16.join(changesDir(root2), m.changeId, "manifest.json"), JSON.stringify(m, null, 2));
 }
 function rollback(root2, changeId, opts = {}) {
   const m = readManifest(root2, changeId);
   if (m.status === "rolled-back") throw new Error(`Change ${changeId} was already rolled back`);
-  const dir = path15.join(changesDir(root2), changeId);
+  const dir = path16.join(changesDir(root2), changeId);
   const conflicts = [];
   const pending = [];
   for (const e of m.files) {
@@ -41837,7 +41926,7 @@ function rollback(root2, changeId, opts = {}) {
 function listChanges(root2) {
   const d = changesDir(root2);
   if (!fs11.existsSync(d)) return [];
-  return fs11.readdirSync(d).filter((x) => fs11.existsSync(path15.join(d, x, "manifest.json"))).sort().map((x) => readManifest(root2, x));
+  return fs11.readdirSync(d).filter((x) => fs11.existsSync(path16.join(d, x, "manifest.json"))).sort().map((x) => readManifest(root2, x));
 }
 
 // src/commands/optimize.ts
@@ -41960,7 +42049,7 @@ function reportUndo(rb, m, target) {
 }
 async function commandRollback(flags) {
   const id = flags.positionals[1];
-  const root2 = fs12.realpathSync(path16.resolve(flags.positionals[2] ?? process.cwd()));
+  const root2 = fs12.realpathSync(path17.resolve(flags.positionals[2] ?? process.cwd()));
   if (!id) throw new UsageError('rollback requires a change id (or "list")');
   if (id === "list") {
     for (const m of listChanges(root2)) console.log(`${m.changeId}  ${m.status.padEnd(20)} ${m.files.length} file(s)  ${m.fixes.map((f) => f.ruleId).join(", ")}`);
@@ -41978,7 +42067,7 @@ Re-run with --yes to overwrite those edits with the original content.`);
 
 // src/commands/gsc.ts
 import { spawn as spawn2 } from "node:child_process";
-import path18 from "node:path";
+import path19 from "node:path";
 
 // src/analyze/search-performance.ts
 function rowsToQueryPage(rows) {
@@ -42172,8 +42261,8 @@ function analyzeSearchPerformance(input, opts) {
 
 // src/integrations/preferences.ts
 import fs13 from "node:fs";
-import path17 from "node:path";
-var file = () => path17.join(configDir(), "search-data.json");
+import path18 from "node:path";
+var file = () => path18.join(configDir(), "search-data.json");
 function siteKey(urlOrHost) {
   let h = urlOrHost.trim().toLowerCase();
   try {
@@ -42361,7 +42450,7 @@ function spawnDetached(cmd, args) {
 async function commandGsc(flags) {
   const v = flags.values;
   const sub = flags.positionals[1];
-  const workspace = path18.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
   if (sub === "auth") {
     if (process.env["CI"]) throw new UsageError('gsc auth is interactive (browser consent) and is disabled in CI. Use "gsc import <export.zip>" or SEARVEX_GSC_TOKEN there.');
     const existing = getCredential("gsc");
@@ -42605,7 +42694,7 @@ async function bingReport(flags, key, api) {
     throw new UsageError(`${siteUrl} is ${site ? "not verified" : "not a site"} in this Bing Webmaster account.${similar.length ? ` Did you mean: ${similar.join(", ")}?` : sites.length ? ` Sites: ${sites.map((s) => s.url).join(", ")}` : " The account has no sites."}`);
   }
   const days = num(v["days"], 28, 1, 480);
-  const workspace = path18.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
   const sel = resolveAudit(flags, workspace, property);
   const { rows, pages } = await bingQueryPageRows2(site.url, k.key, { days, maxPages: num(v["max-pages"], 25, 1, 200) });
   const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
@@ -42703,7 +42792,7 @@ ${hint}`);
 }
 
 // src/commands/research.ts
-import path19 from "node:path";
+import path20 from "node:path";
 function profile(r) {
   return {
     url: r.target,
@@ -42759,7 +42848,7 @@ async function commandResearch(flags) {
   if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
   for (const c of competitors) if (!/^https?:\/\//i.test(c)) throw new UsageError(`Invalid competitor URL: ${c}`);
   const kb = loadKnowledge();
-  const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path20.resolve(String(v["out"] ?? process.cwd()));
   const store2 = new RunStore(workspace, RunStore.newRunId("research"));
   const perSite = num(v["max-pages"], 150, 1, 1e5);
   const base = { ...crawlOptionsFrom(v), siteUrl: void 0, maxPages: perSite };
@@ -42796,7 +42885,7 @@ async function commandResearch(flags) {
 
 // src/commands/run.ts
 import fs14 from "node:fs";
-import path20 from "node:path";
+import path21 from "node:path";
 var top = (r, n = 5) => r.findings.filter((f) => f.severity !== "info").slice(0, n);
 function renderRunSummary(s) {
   const L = ["# Searvex run summary", ""];
@@ -42864,7 +42953,7 @@ async function runWorkflow(flags, stop) {
   if (competitors.length && !url) throw new UsageError("--competitor requires a website URL");
   if (v["fail-on"] !== void 0) failOnIndex(v["fail-on"]);
   const kb = loadKnowledge();
-  const workspace = path20.resolve(String(v["out"] ?? (repo ?? process.cwd())));
+  const workspace = path21.resolve(String(v["out"] ?? (repo ?? process.cwd())));
   const opts = crawlOptionsFrom(v);
   const summary = { steps: [] };
   const step = (n, name, status, note) => {
@@ -42986,7 +43075,7 @@ Fix plan (dry run, nothing changed): ${summary.plan.fixes.length} automatic fix(
 
 // src/commands/ecosystem.ts
 import fs15 from "node:fs";
-import path21 from "node:path";
+import path22 from "node:path";
 var hostOf = (u) => new URL(u).hostname.replace(/^www\./, "");
 var norm3 = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 function snapshot(report, pages) {
@@ -43179,7 +43268,7 @@ async function commandEcosystem(flags) {
   if (urls.length > 20) throw new UsageError("At most 20 sites");
   for (const u of urls) if (!/^https?:\/\//i.test(u)) throw new UsageError(`Invalid URL: ${u}`);
   const kb = loadKnowledge();
-  const workspace = path21.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path22.resolve(String(v["out"] ?? process.cwd()));
   const opts = { ...crawlOptionsFrom(v), siteUrl: void 0, maxPages: num(v["max-pages"], 60, 1, 1e5) };
   const snaps = new Array(urls.length);
   let next2 = 0;
@@ -43619,6 +43708,7 @@ Searvex \u2014 ${report.target}`];
   } else L.push("No significant issues found.");
   const launch2 = report.findings.filter((f) => f.context === "launch-checklist");
   const env = report.findings.filter((f) => f.context === "environment");
+  if (report.privateRoutes?.length) L.push(`Private routes (login required; metadata and indexability not checked): ${report.privateRoutes.length} \u2014 ${report.privateRoutes.slice(0, 4).map((r) => r.route).join(", ")}${report.privateRoutes.length > 4 ? ", \u2026" : ""}`);
   if (launch2.length) L.push(`Launch checklist (change before going live, not scored): ${launch2.map((f) => `${f.title} (${f.count})`).join("; ")}`);
   if (env.length) L.push(`Environment-dependent (check on the production server, not scored): ${env.map((f) => f.title).join("; ")}`);
   if (auto.length) L.push(`Automatic fixes: ${auto.length} (${auto.map((f) => f.ruleId).join(", ")}) \u2014 preview with "searvex optimize ${report.mode === "repository" ? report.target : "<repo>"}"`);
@@ -43641,12 +43731,12 @@ function pagesLabel(report) {
 function withReportFiles(L, files) {
   const html3 = files.find((f) => f.endsWith(".html"));
   if (html3) {
-    const ws = path22.resolve(html3, "..", "..", "..", "..");
+    const ws = path23.resolve(html3, "..", "..", "..", "..");
     L.push(`
-Open the report: ${pathToFileURL(html3).href}`, `  (or run: searvex open ${path22.basename(path22.dirname(html3))}${ws === process.cwd() ? "" : ` --out "${ws}"`})`);
+Open the report: ${pathToFileURL(html3).href}`, `  (or run: searvex open ${path23.basename(path23.dirname(html3))}${ws === process.cwd() ? "" : ` --out "${ws}"`})`);
   }
   const others = files.filter((f) => f !== html3);
-  if (others.length) L.push(`Other files: ${others.map((f) => path22.basename(f)).join(", ")} in ${path22.dirname(others[0])}`);
+  if (others.length) L.push(`Other files: ${others.map((f) => path23.basename(f)).join(", ")} in ${path23.dirname(others[0])}`);
   return L.join("\n");
 }
 async function commandAudit(flags) {
@@ -43660,7 +43750,7 @@ async function commandAudit(flags) {
   assertSiteUrl(v);
   if (v["fail-on"] !== void 0) failOnIndex(v["fail-on"]);
   const kb = loadKnowledge();
-  const workspace = path22.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path23.resolve(String(v["out"] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
   const stop = interrupter(v);
   let render3;
@@ -43710,7 +43800,7 @@ async function commandGeo(flags) {
   const opts = crawlOptionsFrom({ ...v, "max-pages": v["max-pages"] ?? "50" });
   suggestPreLaunch(v, target);
   const stop = interrupter(v);
-  const { report, store: store2 } = await auditWebsite(target, { workspace: path22.resolve(String(v["out"] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal, onProgress: crawlProgress(v) }, onPhase: phaseProgress, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
+  const { report, store: store2 } = await auditWebsite(target, { workspace: path23.resolve(String(v["out"] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal, onProgress: crawlProgress(v) }, onPhase: phaseProgress, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
   assertTargetAllowed(report);
   reportInterrupted(report, !!v["json"]);
   const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
@@ -43812,9 +43902,9 @@ ${results.length} sources: ${attention.length} need review${v["update"] ? "; sna
 }
 async function commandReport(flags) {
   const v = flags.values;
-  const workspace = path22.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path23.resolve(String(v["out"] ?? process.cwd()));
   let id = flags.positionals[1] ?? "latest";
-  if (id === "latest") id = RunStore.list(workspace).filter((r) => fs16.existsSync(path22.join(workspace, ".searvex", "runs", r, "report.json"))).at(-1) ?? "";
+  if (id === "latest") id = RunStore.list(workspace).filter((r) => fs16.existsSync(path23.join(workspace, ".searvex", "runs", r, "report.json"))).at(-1) ?? "";
   if (!id) throw new UsageError("No stored runs found");
   const store2 = new RunStore(workspace, id);
   const report = store2.readJson("report.json");
@@ -43826,7 +43916,7 @@ async function commandReport(flags) {
 }
 function commandPrompt(flags) {
   const v = flags.values;
-  const workspace = path22.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path23.resolve(String(v["out"] ?? process.cwd()));
   const store2 = new RunStore(workspace, resolveRun(workspace, flags.positionals[1]));
   const report = store2.readJson("report.json");
   const lang = String(v["lang"] ?? "en");
@@ -43846,14 +43936,14 @@ function commandPrompt(flags) {
 function commandSchema(flags) {
   const name = flags.positionals[1] ?? "report";
   if (!["report", "events", "error"].includes(name)) throw new UsageError(`Unknown schema: ${name} (report, events or error)`);
-  const here = path22.dirname(fileURLToPath2(import.meta.url));
-  const file2 = [path22.resolve(here, "..", "schema", `${name}.schema.json`), path22.resolve(here, "..", "..", "schema", `${name}.schema.json`)].find((f) => fs16.existsSync(f));
+  const here = path23.dirname(fileURLToPath2(import.meta.url));
+  const file2 = [path23.resolve(here, "..", "schema", `${name}.schema.json`), path23.resolve(here, "..", "..", "schema", `${name}.schema.json`)].find((f) => fs16.existsSync(f));
   if (!file2) throw new Error(`schema/${name}.schema.json is missing from this installation`);
   process.stdout.write(fs16.readFileSync(file2, "utf8"));
   return EXIT.ok;
 }
 function commandRuns(flags) {
-  const workspace = path22.resolve(String(flags.values["out"] ?? process.cwd()));
+  const workspace = path23.resolve(String(flags.values["out"] ?? process.cwd()));
   for (const id of RunStore.list(workspace)) {
     const meta = new RunStore(workspace, id).readJson("meta.json");
     console.log(`${id}  ${meta?.kind ?? ""}  ${meta?.startUrl ?? meta?.target ?? ""}`);
@@ -43945,8 +44035,8 @@ async function runCommand(cmd, flags) {
     return EXIT.runtime;
   }
 }
-var invoked = process.argv[1] ? path22.resolve(process.argv[1]) : "";
-if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path22.sep}searvex`))) {
+var invoked = process.argv[1] ? path23.resolve(process.argv[1]) : "";
+if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path23.sep}searvex`))) {
   main().then((code) => {
     process.exitCode = code;
   });

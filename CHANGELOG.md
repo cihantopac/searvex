@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Login-protected routes in repository mode: Laravel routes behind `auth` / `auth:*` / `verified` middleware (groups,
+  nested groups, the legacy array form and route chains) and Next.js routes covered by an auth middleware matcher
+  (`config.matcher`, Clerk `createRouteMatcher`) or by a layout that redirects anonymous users to a login page.
+  Their metadata and indexability findings are not reported (pages behind a login are not indexed); the routes are
+  listed in `privateRoutes`, the summary and the limitations. Catch-all or regex matchers never make routes private.
+
+### Added
 - Upstream proxy support, as designed in `docs/design/proxy.md`: `--proxy <url|none>` and `HTTPS_PROXY` /
   `HTTP_PROXY` / `NO_PROXY`, `CONNECT` only with TLS end to end and Basic authentication. Private, loopback and
   reserved targets never go through the proxy. Host names are resolved and checked locally before `CONNECT`;

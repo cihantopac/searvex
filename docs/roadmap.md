@@ -25,7 +25,7 @@ Ordered by value; none is promised for a date.
 2. **Locale-adaptive root-cause view** in the HTML report: group consequences under their cause, not only in
    "Fix first". Planned for 1.4.0 (G1); the groups are in `report.json` since 1.3.0.
 3. **Login-protected routes in repository mode** (auth middleware in Laravel / Next.js) so metadata findings
-   on private layouts are suppressed. Planned for 1.4.0 (G4).
+   on private layouts are suppressed. Done in 1.4.0 (G4).
 4. **Astro, Vue SFC and Blade parsing** with real parsers instead of regexes. Planned for 1.4.0 (G5).
 5. **Disk-backed analysis** for sites above 50,000 pages. Planned for 1.4.0 (G7).
 6. **Optional integrations:** PageSpeed Insights / Lighthouse lab data, GA4 Data API, Yandex Webmaster —

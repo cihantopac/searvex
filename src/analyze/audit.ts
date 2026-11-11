@@ -70,6 +70,11 @@ export interface AuditReport {
   /** Whether JavaScript was executed for at least one page (`--render`). */
   rendered?: boolean;
   /**
+   * Repository mode: routes that need a login (auth middleware, a login-redirecting layout). Their metadata and
+   * indexability findings are not reported. Since schema 1.1.
+   */
+  privateRoutes?: Array<{ route: string; file: string; reason: string }>;
+  /**
    * Root-cause groups per rule id: occurrences of one rule split by URL template, source file, shared layout or
    * site (see `rootCauseGroups`). Since 1.3.0.
    */

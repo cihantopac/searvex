@@ -433,6 +433,29 @@
       "description": "Whether JavaScript was executed for at least one page (`--render`).",
       "type": "boolean"
     },
+    "privateRoutes": {
+      "description": "Repository mode: routes that need a login (auth middleware, a login-redirecting layout). Their metadata and indexability findings are not reported. Since schema 1.1.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "route": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "route",
+          "file",
+          "reason"
+        ]
+      }
+    },
     "rootCauseGroups": {
       "description": "Root-cause groups per rule id: occurrences of one rule split by URL template, source file, shared layout or site (see `rootCauseGroups`). Since 1.3.0.",
       "type": "object",

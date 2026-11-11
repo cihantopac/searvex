@@ -521,6 +521,7 @@ export function summaryText(report: AuditReport, files: string[], autoRules: str
   } else L.push('No significant issues found.');
   const launch = report.findings.filter((f) => f.context === 'launch-checklist');
   const env = report.findings.filter((f) => f.context === 'environment');
+  if (report.privateRoutes?.length) L.push(`Private routes (login required; metadata and indexability not checked): ${report.privateRoutes.length} — ${report.privateRoutes.slice(0, 4).map((r) => r.route).join(', ')}${report.privateRoutes.length > 4 ? ', …' : ''}`);
   if (launch.length) L.push(`Launch checklist (change before going live, not scored): ${launch.map((f) => `${f.title} (${f.count})`).join('; ')}`);
   if (env.length) L.push(`Environment-dependent (check on the production server, not scored): ${env.map((f) => f.title).join('; ')}`);
   if (auto.length) L.push(`Automatic fixes: ${auto.length} (${auto.map((f) => f.ruleId).join(', ')}) — preview with "searvex optimize ${report.mode === 'repository' ? report.target : '<repo>'}"`);
