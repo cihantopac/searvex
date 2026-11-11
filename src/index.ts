@@ -16,4 +16,9 @@ export { loadKnowledge, validateKnowledge, FindingSink, type Rule, type Knowledg
 export { renderMarkdown } from './report/markdown.js';
 export { renderHtml } from './report/html.js';
 export { renderSarif } from './report/sarif.js';
+export { buildRepairPrompt, type PromptInput, type PromptItem } from './report/prompt.js';
+export { repairPromptInput, type PromptSelection } from './report/prompt-input.js';
+export { annotateReport, findingRef, remediationOf, rootCauseGroups, type Remediation, type RootCauseGroup } from './report/remediation.js';
+export { diffReports, type MonitorDiff } from './commands/monitor.js';
+export { prioritise } from './analyze/priority.js';
 export type { Finding, Evidence, Severity, Confidence, Engine, Category, SourceRef } from './core/types.js';

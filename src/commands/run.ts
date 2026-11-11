@@ -9,7 +9,7 @@ import { planFixes, type FixPlan } from '../optimize/fixes.js';
 import { auditRepository } from '../repo/audit.js';
 import { loadKnowledge } from '../rules/engine.js';
 import { md, renderMarkdown } from '../report/markdown.js';
-import { assertTargetAllowed, crawlOptionsFrom, EXIT, failOnExit, failOnIndex, interrupter, log, num, reportError, reportInterrupted, reportNotAnalysed, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
+import { assertTargetAllowed, crawlOptionsFrom, crawlProgress, phaseProgress, EXIT, failOnExit, failOnIndex, interrupter, log, num, reportError, reportInterrupted, reportNotAnalysed, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
 import { diffReports, findBaseline, renderDiffMarkdown, type MonitorDiff } from './monitor.js';
 import { computeGaps, profile, renderResearchMarkdown, type ResearchReport } from './research.js';
 import { renderPlan } from './optimize.js';
@@ -126,7 +126,7 @@ async function runWorkflow(flags: GlobalFlags, stop: AbortSignal): Promise<numbe
   if (url) {
     log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)…`);
     suggestPreLaunch(v, url);
-    const { report, store } = await auditWebsite(url, { workspace, kb, crawl: { ...opts, stop }, compact: !!v['compact'], checkExternal: !!v['check-external'], cruxApiKey: cruxKey()?.key, preLaunch: !!v['pre-launch'] });
+    const { report, store } = await auditWebsite(url, { workspace, kb, crawl: { ...opts, stop, onProgress: crawlProgress(v) }, onPhase: phaseProgress, compact: !!v['compact'], checkExternal: !!v['check-external'], cruxApiKey: cruxKey()?.key, preLaunch: !!v['pre-launch'] });
     assertTargetAllowed(report);
     const files = writeReports(store, report, kb, ['json', 'md', 'html']);
     summary.website = { report, runId: store.runId, files };

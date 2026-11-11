@@ -30,6 +30,12 @@ All notable changes to this project are documented here. The format follows
 - `findings[].affected = { count, urls, truncated? }`: every affected URL or file of a finding (complete up to
   10,000), so consumers no longer derive counts from the 50-item evidence sample. `--compact` writes only the
   count.
+- `--progress ndjson`: structured progress on stderr, one JSON event per line (`start`, `phase`, `page`,
+  `finding-summary`, `signal`, `end` with exit code, report paths and interruption). Works with `--json` on stdout.
+- `searvex prompt <runId|latest> [--lang en|tr] [--rules a,b] [--format md|json]` prints the repair prompt the HTML
+  action center builds, outside the browser, with the same redaction.
+- Package exports: `buildRepairPrompt`, `repairPromptInput`, `annotateReport`, `rootCauseGroups`, `remediationOf`,
+  `findingRef`, `diffReports` and `prioritise`.
 - The crawl checkpoint is written at the start and every 25 pages or 10 seconds, so `--resume` works after an early
   kill; resuming no longer fetches pages stored after the last checkpoint again and still follows their links.
 - `--render`: Playwright no longer kills the browser on SIGINT/SIGTERM under pages that are still rendering;

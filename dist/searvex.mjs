@@ -876,7 +876,7 @@ async function safeFetch(rawUrl, options = {}) {
   };
   const started = Date.now();
   const redirects = [];
-  let current = rawUrl;
+  let current2 = rawUrl;
   const base = {
     requestedUrl: rawUrl,
     finalUrl: rawUrl,
@@ -891,7 +891,7 @@ async function safeFetch(rawUrl, options = {}) {
   };
   try {
     for (let hop = 0; ; hop++) {
-      const url = assertUrlAllowed(current, opts.policy);
+      const url = assertUrlAllowed(current2, opts.policy);
       const res = await requestOnce(url, opts);
       const location = res.headers["location"];
       if (res.status >= 300 && res.status < 400 && location && opts.followRedirects) {
@@ -903,7 +903,7 @@ async function safeFetch(rawUrl, options = {}) {
         if (redirects.slice(0, -1).some((r) => r.url === next2)) {
           return { ...base, finalUrl: next2, status: res.status, headers: res.headers, error: "Redirect loop", timingMs: Date.now() - started };
         }
-        current = next2;
+        current2 = next2;
         continue;
       }
       const contentType = res.headers["content-type"] ?? "";
@@ -922,7 +922,7 @@ async function safeFetch(rawUrl, options = {}) {
     }
   } catch (e) {
     const err = e;
-    return { ...base, finalUrl: current, error: `${err.name === "BlockedUrlError" ? "Blocked: " : ""}${err.message}`, timingMs: Date.now() - started };
+    return { ...base, finalUrl: current2, error: `${err.name === "BlockedUrlError" ? "Blocked: " : ""}${err.message}`, timingMs: Date.now() - started };
   }
 }
 var SEARVEX_VERSION, DEFAULT_USER_AGENT, DEFAULTS, HostRateLimiter;
@@ -2705,8 +2705,8 @@ var require_lib = __commonJS({
     function isKeyword(word) {
       return keywords.has(word);
     }
-    function isIteratorStart(current, next2, next22) {
-      return current === 64 && next2 === 64 && isIdentifierStart(next22);
+    function isIteratorStart(current2, next2, next22) {
+      return current2 === 64 && next2 === 64 && isIdentifierStart(next22);
     }
     var reservedWordLikeSet = /* @__PURE__ */ new Set(["break", "case", "catch", "continue", "debugger", "default", "do", "else", "finally", "for", "function", "if", "return", "switch", "throw", "try", "var", "const", "while", "with", "new", "this", "super", "class", "extends", "export", "import", "null", "true", "false", "in", "instanceof", "typeof", "void", "delete", "implements", "interface", "let", "package", "private", "protected", "public", "static", "yield", "eval", "arguments", "enum", "await"]);
     function canBeReservedWord(word) {
@@ -7886,11 +7886,11 @@ var require_lib = __commonJS({
       }
       exit() {
         const oldClassScope = this.stack.pop();
-        const current = this.current();
+        const current2 = this.current();
         for (const [name, loc] of Array.from(oldClassScope.undefinedPrivateNames)) {
-          if (current) {
-            if (!current.undefinedPrivateNames.has(name)) {
-              current.undefinedPrivateNames.set(name, loc);
+          if (current2) {
+            if (!current2.undefinedPrivateNames.has(name)) {
+              current2.undefinedPrivateNames.set(name, loc);
             }
           } else {
             this.parser.raise(Errors.InvalidPrivateFieldResolution, loc, {
@@ -17075,19 +17075,19 @@ var EntityDecoder = class {
    */
   stateNamedEntity(str, offset) {
     const { decodeTree } = this;
-    let current = decodeTree[this.treeIndex];
-    let valueLength = (current & BinTrieFlags.VALUE_LENGTH) >> 14;
+    let current2 = decodeTree[this.treeIndex];
+    let valueLength = (current2 & BinTrieFlags.VALUE_LENGTH) >> 14;
     for (; offset < str.length; offset++, this.excess++) {
       const char = str.charCodeAt(offset);
-      this.treeIndex = determineBranch(decodeTree, current, this.treeIndex + Math.max(1, valueLength), char);
+      this.treeIndex = determineBranch(decodeTree, current2, this.treeIndex + Math.max(1, valueLength), char);
       if (this.treeIndex < 0) {
         return this.result === 0 || // If we are parsing an attribute
         this.decodeMode === DecodingMode.Attribute && // We shouldn't have consumed any characters after the entity,
         (valueLength === 0 || // And there should be no invalid characters.
         isEntityInAttributeInvalidEnd(char)) ? 0 : this.emitNotTerminatedNamedEntity();
       }
-      current = decodeTree[this.treeIndex];
-      valueLength = (current & BinTrieFlags.VALUE_LENGTH) >> 14;
+      current2 = decodeTree[this.treeIndex];
+      valueLength = (current2 & BinTrieFlags.VALUE_LENGTH) >> 14;
       if (valueLength !== 0) {
         if (char === CharCodes.SEMI) {
           return this.emitNamedEntityData(this.treeIndex, valueLength, this.consumed + this.excess);
@@ -17187,9 +17187,9 @@ function getDecoder(decodeTree) {
     return result;
   };
 }
-function determineBranch(decodeTree, current, nodeIdx, char) {
-  const branchCount = (current & BinTrieFlags.BRANCH_LENGTH) >> 7;
-  const jumpOffset = current & BinTrieFlags.JUMP_TABLE;
+function determineBranch(decodeTree, current2, nodeIdx, char) {
+  const branchCount = (current2 & BinTrieFlags.BRANCH_LENGTH) >> 7;
+  const jumpOffset = current2 & BinTrieFlags.JUMP_TABLE;
   if (branchCount === 0) {
     return jumpOffset !== 0 && char === jumpOffset ? nodeIdx : -1;
   }
@@ -17894,15 +17894,15 @@ function compareDocumentPosition(nodeA, nodeB) {
   if (nodeA === nodeB) {
     return 0;
   }
-  let current = hasChildren(nodeA) ? nodeA : nodeA.parent;
-  while (current) {
-    aParents.unshift(current);
-    current = current.parent;
+  let current2 = hasChildren(nodeA) ? nodeA : nodeA.parent;
+  while (current2) {
+    aParents.unshift(current2);
+    current2 = current2.parent;
   }
-  current = hasChildren(nodeB) ? nodeB : nodeB.parent;
-  while (current) {
-    bParents.unshift(current);
-    current = current.parent;
+  current2 = hasChildren(nodeB) ? nodeB : nodeB.parent;
+  while (current2) {
+    bParents.unshift(current2);
+    current2 = current2.parent;
   }
   const maxIdx = Math.min(aParents.length, bParents.length);
   let idx = 0;
@@ -18512,13 +18512,13 @@ var EntityDecoder2 = class {
    */
   stateNamedEntity(input, offset) {
     const { decodeTree } = this;
-    let current = decodeTree[this.treeIndex];
-    let valueLength = (current & BinTrieFlags2.VALUE_LENGTH) >> 14;
+    let current2 = decodeTree[this.treeIndex];
+    let valueLength = (current2 & BinTrieFlags2.VALUE_LENGTH) >> 14;
     while (offset < input.length) {
-      if (valueLength === 0 && (current & BinTrieFlags2.FLAG13) !== 0) {
-        const runLength = (current & BinTrieFlags2.BRANCH_LENGTH) >> 7;
+      if (valueLength === 0 && (current2 & BinTrieFlags2.FLAG13) !== 0) {
+        const runLength = (current2 & BinTrieFlags2.BRANCH_LENGTH) >> 7;
         if (this.runConsumed === 0) {
-          const firstChar = current & BinTrieFlags2.JUMP_TABLE;
+          const firstChar = current2 & BinTrieFlags2.JUMP_TABLE;
           if (input.charCodeAt(offset) !== firstChar) {
             return this.result === 0 ? 0 : this.emitNotTerminatedNamedEntity();
           }
@@ -18543,29 +18543,29 @@ var EntityDecoder2 = class {
         }
         this.runConsumed = 0;
         this.treeIndex += 1 + (runLength >> 1);
-        current = decodeTree[this.treeIndex];
-        valueLength = (current & BinTrieFlags2.VALUE_LENGTH) >> 14;
+        current2 = decodeTree[this.treeIndex];
+        valueLength = (current2 & BinTrieFlags2.VALUE_LENGTH) >> 14;
       }
       if (offset >= input.length)
         break;
       const char = input.charCodeAt(offset);
-      if (char === CharCodes2.SEMI && valueLength !== 0 && (current & BinTrieFlags2.FLAG13) !== 0) {
+      if (char === CharCodes2.SEMI && valueLength !== 0 && (current2 & BinTrieFlags2.FLAG13) !== 0) {
         return this.emitNamedEntityData(this.treeIndex, valueLength, this.consumed + this.excess);
       }
-      this.treeIndex = determineBranch2(decodeTree, current, this.treeIndex + Math.max(1, valueLength), char);
+      this.treeIndex = determineBranch2(decodeTree, current2, this.treeIndex + Math.max(1, valueLength), char);
       if (this.treeIndex < 0) {
         return this.result === 0 || // If we are parsing an attribute
         this.decodeMode === DecodingMode2.Attribute && // We shouldn't have consumed any characters after the entity,
         (valueLength === 0 || // And there should be no invalid characters.
         isEntityInAttributeInvalidEnd2(char)) ? 0 : this.emitNotTerminatedNamedEntity();
       }
-      current = decodeTree[this.treeIndex];
-      valueLength = (current & BinTrieFlags2.VALUE_LENGTH) >> 14;
+      current2 = decodeTree[this.treeIndex];
+      valueLength = (current2 & BinTrieFlags2.VALUE_LENGTH) >> 14;
       if (valueLength !== 0) {
         if (char === CharCodes2.SEMI) {
           return this.emitNamedEntityData(this.treeIndex, valueLength, this.consumed + this.excess);
         }
-        if (this.decodeMode !== DecodingMode2.Strict && (current & BinTrieFlags2.FLAG13) === 0) {
+        if (this.decodeMode !== DecodingMode2.Strict && (current2 & BinTrieFlags2.FLAG13) === 0) {
           this.result = this.treeIndex;
           this.consumed += this.excess;
           this.excess = 0;
@@ -18636,9 +18636,9 @@ var EntityDecoder2 = class {
     }
   }
 };
-function determineBranch2(decodeTree, current, nodeIndex, char) {
-  const branchCount = (current & BinTrieFlags2.BRANCH_LENGTH) >> 7;
-  const jumpOffset = current & BinTrieFlags2.JUMP_TABLE;
+function determineBranch2(decodeTree, current2, nodeIndex, char) {
+  const branchCount = (current2 & BinTrieFlags2.BRANCH_LENGTH) >> 7;
+  const jumpOffset = current2 & BinTrieFlags2.JUMP_TABLE;
   if (branchCount === 0) {
     return jumpOffset !== 0 && char === jumpOffset ? nodeIndex : -1;
   }
@@ -20972,9 +20972,9 @@ function compileGeneralSelector(next2, selector, options, context, compileToken2
     case import_css_what3.SelectorType.Descendant: {
       if (options.cacheResults === false || typeof WeakSet === "undefined") {
         return function descendant(elem) {
-          let current = elem;
-          while (current = getElementParent(current, adapter2)) {
-            if (next2(current)) {
+          let current2 = elem;
+          while (current2 = getElementParent(current2, adapter2)) {
+            if (next2(current2)) {
               return true;
             }
           }
@@ -20983,13 +20983,13 @@ function compileGeneralSelector(next2, selector, options, context, compileToken2
       }
       const isFalseCache = /* @__PURE__ */ new WeakSet();
       return function cachedDescendant(elem) {
-        let current = elem;
-        while (current = getElementParent(current, adapter2)) {
-          if (!isFalseCache.has(current)) {
-            if (adapter2.isTag(current) && next2(current)) {
+        let current2 = elem;
+        while (current2 = getElementParent(current2, adapter2)) {
+          if (!isFalseCache.has(current2)) {
+            if (adapter2.isTag(current2) && next2(current2)) {
               return true;
             }
-            isFalseCache.add(current);
+            isFalseCache.add(current2);
           }
         }
         return false;
@@ -20997,11 +20997,11 @@ function compileGeneralSelector(next2, selector, options, context, compileToken2
     }
     case "_flexibleDescendant": {
       return function flexibleDescendant(elem) {
-        let current = elem;
+        let current2 = elem;
         do {
-          if (next2(current))
+          if (next2(current2))
             return true;
-        } while (current = getElementParent(current, adapter2));
+        } while (current2 = getElementParent(current2, adapter2));
         return false;
       };
     }
@@ -22990,19 +22990,19 @@ var EntityDecoder3 = class {
    */
   stateNamedEntity(input, offset) {
     const { decodeTree } = this;
-    let current = decodeTree[this.treeIndex];
-    let valueLength = (current & BinTrieFlags3.VALUE_LENGTH) >> 14;
+    let current2 = decodeTree[this.treeIndex];
+    let valueLength = (current2 & BinTrieFlags3.VALUE_LENGTH) >> 14;
     for (; offset < input.length; offset++, this.excess++) {
       const char = input.charCodeAt(offset);
-      this.treeIndex = determineBranch3(decodeTree, current, this.treeIndex + Math.max(1, valueLength), char);
+      this.treeIndex = determineBranch3(decodeTree, current2, this.treeIndex + Math.max(1, valueLength), char);
       if (this.treeIndex < 0) {
         return this.result === 0 || // If we are parsing an attribute
         this.decodeMode === DecodingMode3.Attribute && // We shouldn't have consumed any characters after the entity,
         (valueLength === 0 || // And there should be no invalid characters.
         isEntityInAttributeInvalidEnd3(char)) ? 0 : this.emitNotTerminatedNamedEntity();
       }
-      current = decodeTree[this.treeIndex];
-      valueLength = (current & BinTrieFlags3.VALUE_LENGTH) >> 14;
+      current2 = decodeTree[this.treeIndex];
+      valueLength = (current2 & BinTrieFlags3.VALUE_LENGTH) >> 14;
       if (valueLength !== 0) {
         if (char === CharCodes4.SEMI) {
           return this.emitNamedEntityData(this.treeIndex, valueLength, this.consumed + this.excess);
@@ -23076,9 +23076,9 @@ var EntityDecoder3 = class {
     }
   }
 };
-function determineBranch3(decodeTree, current, nodeIndex, char) {
-  const branchCount = (current & BinTrieFlags3.BRANCH_LENGTH) >> 7;
-  const jumpOffset = current & BinTrieFlags3.JUMP_TABLE;
+function determineBranch3(decodeTree, current2, nodeIndex, char) {
+  const branchCount = (current2 & BinTrieFlags3.BRANCH_LENGTH) >> 7;
+  const jumpOffset = current2 & BinTrieFlags3.JUMP_TABLE;
   if (branchCount === 0) {
     return jumpOffset !== 0 && char === jumpOffset ? nodeIndex : -1;
   }
@@ -27308,21 +27308,21 @@ var Parser2 = class {
     }
     (_b = (_a5 = this.treeAdapter).onItemPop) === null || _b === void 0 ? void 0 : _b.call(_a5, node, this.openElements.current);
     if (isTop) {
-      let current;
+      let current2;
       let currentTagId;
       if (this.openElements.stackTop === 0 && this.fragmentContext) {
-        current = this.fragmentContext;
+        current2 = this.fragmentContext;
         currentTagId = this.fragmentContextID;
       } else {
-        ({ current, currentTagId } = this.openElements);
+        ({ current: current2, currentTagId } = this.openElements);
       }
-      this._setContextModes(current, currentTagId);
+      this._setContextModes(current2, currentTagId);
     }
   }
-  _setContextModes(current, tid) {
-    const isHTML = current === this.document || current && this.treeAdapter.getNamespaceURI(current) === NS.HTML;
+  _setContextModes(current2, tid) {
+    const isHTML = current2 === this.document || current2 && this.treeAdapter.getNamespaceURI(current2) === NS.HTML;
     this.currentNotInHTML = !isHTML;
-    this.tokenizer.inForeignNode = !isHTML && current !== void 0 && tid !== void 0 && !this._isIntegrationPoint(tid, current);
+    this.tokenizer.inForeignNode = !isHTML && current2 !== void 0 && tid !== void 0 && !this._isIntegrationPoint(tid, current2);
   }
   /** @protected */
   _switchToTextParsing(currentToken, nextTokenizerState) {
@@ -27521,22 +27521,22 @@ var Parser2 = class {
   shouldProcessStartTagTokenInForeignContent(token) {
     if (!this.currentNotInHTML)
       return false;
-    let current;
+    let current2;
     let currentTagId;
     if (this.openElements.stackTop === 0 && this.fragmentContext) {
-      current = this.fragmentContext;
+      current2 = this.fragmentContext;
       currentTagId = this.fragmentContextID;
     } else {
-      ({ current, currentTagId } = this.openElements);
+      ({ current: current2, currentTagId } = this.openElements);
     }
-    if (token.tagID === TAG_ID.SVG && this.treeAdapter.getTagName(current) === TAG_NAMES.ANNOTATION_XML && this.treeAdapter.getNamespaceURI(current) === NS.MATHML) {
+    if (token.tagID === TAG_ID.SVG && this.treeAdapter.getTagName(current2) === TAG_NAMES.ANNOTATION_XML && this.treeAdapter.getNamespaceURI(current2) === NS.MATHML) {
       return false;
     }
     return (
       // Check that `current` is not an integration point for HTML or MathML elements.
       this.tokenizer.inForeignNode || // If it _is_ an integration point, then we might have to check that it is not an HTML
       // integration point.
-      (token.tagID === TAG_ID.MGLYPH || token.tagID === TAG_ID.MALIGNMARK) && currentTagId !== void 0 && !this._isIntegrationPoint(currentTagId, current, NS.HTML)
+      (token.tagID === TAG_ID.MGLYPH || token.tagID === TAG_ID.MALIGNMARK) && currentTagId !== void 0 && !this._isIntegrationPoint(currentTagId, current2, NS.HTML)
     );
   }
   /** @protected */
@@ -30154,8 +30154,8 @@ function startTagInForeignContent(p, token) {
     popUntilHtmlOrIntegrationPoint(p);
     p._startTagOutsideForeignContent(token);
   } else {
-    const current = p._getAdjustedCurrentElement();
-    const currentNs = p.treeAdapter.getNamespaceURI(current);
+    const current2 = p._getAdjustedCurrentElement();
+    const currentNs = p.treeAdapter.getNamespaceURI(current2);
     if (currentNs === NS.MATHML) {
       adjustTokenMathMLAttrs(token);
     } else if (currentNs === NS.SVG) {
@@ -32838,8 +32838,8 @@ var MatcherView = class {
   hasAttr(attrName) {
     const path23 = this._matcher.path;
     if (path23.length === 0) return false;
-    const current = path23[path23.length - 1];
-    return current.values !== void 0 && attrName in current.values;
+    const current2 = path23[path23.length - 1];
+    return current2.values !== void 0 && attrName in current2.values;
   }
   /**
    * Get the value of a "kept" attribute from the nearest ancestor (or
@@ -33010,9 +33010,9 @@ var Matcher = class {
    */
   updateCurrent(attrValues) {
     if (this.path.length > 0) {
-      const current = this.path[this.path.length - 1];
+      const current2 = this.path[this.path.length - 1];
       if (attrValues !== null && attrValues !== void 0) {
-        current.values = attrValues;
+        current2.values = attrValues;
       }
     }
   }
@@ -33046,8 +33046,8 @@ var Matcher = class {
    */
   hasAttr(attrName) {
     if (this.path.length === 0) return false;
-    const current = this.path[this.path.length - 1];
-    return current.values !== void 0 && attrName in current.values;
+    const current2 = this.path[this.path.length - 1];
+    return current2.values !== void 0 && attrName in current2.values;
   }
   /**
    * Get the value of a "kept" attribute from the nearest ancestor (or
@@ -35115,6 +35115,7 @@ async function crawl(startUrl, partial = {}, store2) {
       };
       pages.push(rec2);
       store2?.append("pages.jsonl", rec2);
+      opts.onProgress?.({ crawled: pages.length, fetched: fetchedCount, queued: queue.length, url: item.url, status: 0, blocked: true });
       return;
     }
     await limiter.wait(host, opts.stop);
@@ -35166,7 +35167,7 @@ async function crawl(startUrl, partial = {}, store2) {
     store2?.append("pages.jsonl", rec);
     crawledThisRun++;
     fetchedCount++;
-    opts.onProgress?.({ crawled: pages.length, fetched: fetchedCount, queued: queue.length, url: item.url, status: res.status });
+    opts.onProgress?.({ crawled: pages.length, fetched: fetchedCount, queued: queue.length, url: item.url, status: res.status, blocked: false });
     if (crawledThisRun % opts.checkpointEvery === 0 || Date.now() - lastPersist >= opts.checkpointMs) persist();
   };
   const workers = [];
@@ -37758,7 +37759,9 @@ function compactAffected(r) {
 async function auditWebsite(url, options = {}) {
   const kb = options.kb ?? loadKnowledge();
   const store2 = new RunStore(options.workspace ?? process.cwd(), options.resumeRunId ?? RunStore.newRunId("audit"));
+  options.onPhase?.("crawl");
   const result = await crawl(url, options.crawl, store2);
+  options.onPhase?.("analyze");
   const report = annotateReport(await analyzeCrawl(result, kb, { ...options.crawl, probes: options.probes ?? true, checkExternal: options.checkExternal, cruxApiKey: options.cruxApiKey, preLaunch: options.preLaunch }));
   if (options.compact) compactAffected(report);
   store2.writeJson("report.json", report);
@@ -37874,6 +37877,28 @@ async function analyzeCrawl(result, kb, opts = {}) {
 
 // src/cli.ts
 init_fetcher();
+
+// src/progress.ts
+var Progress = class {
+  constructor(write = (l) => process.stderr.write(l + "\n")) {
+    this.write = write;
+  }
+  write;
+  reports = [];
+  interrupted;
+  emit(e) {
+    this.write(JSON.stringify({ ...e, time: (/* @__PURE__ */ new Date()).toISOString() }));
+  }
+};
+var current = null;
+function progress() {
+  return current;
+}
+function setProgress(p) {
+  current = p;
+}
+
+// src/cli.ts
 init_ssrf();
 
 // src/report/client.ts
@@ -40000,7 +40025,7 @@ async function commandMonitor(flags) {
   log(v, `Re-auditing ${target}\u2026`);
   suggestPreLaunch(v, target);
   const stop = interrupter(v);
-  const { report, store: store2 } = await auditWebsite(target, { workspace, kb, crawl: { ...crawlOptionsFrom(v), stop: stop.signal }, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
+  const { report, store: store2 } = await auditWebsite(target, { workspace, kb, crawl: { ...crawlOptionsFrom(v), stop: stop.signal, onProgress: crawlProgress(v) }, onPhase: phaseProgress, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
   assertTargetAllowed(report);
   writeReports(store2, report, kb, ["json", "md", "html"]);
   if (notAnalysed(report)) {
@@ -40157,6 +40182,45 @@ function commandReview(flags) {
   return 0;
 }
 
+// src/report/prompt-input.ts
+function repairPromptInput(r, kb, extras, sel) {
+  const groups = rootCauseGroups(r);
+  const findings = sel.rules ? r.findings.filter((f) => sel.rules.includes(f.ruleId)) : r.findings.filter((f) => f.severity !== "info" && countsTowardScore(f));
+  const reviewOf = (ruleId) => [...extras.reviews ?? []].reverse().find((x) => x.ruleId === ruleId && !x.ref);
+  const repository = extras.repository ?? (r.mode === "repository" ? { path: r.target } : void 0);
+  return {
+    lang: sel.lang,
+    target: r.target,
+    mode: r.mode,
+    runId: r.runId,
+    generatedAt: r.generatedAt,
+    version: r.tool.version,
+    ...repository ? { repository } : {},
+    items: findings.map((f) => {
+      const rule = kb.rules.get(f.ruleId);
+      const tr = sel.lang === "tr" ? RULES_TR[f.ruleId] : void 0;
+      const rv = reviewOf(f.ruleId);
+      return {
+        ruleId: f.ruleId,
+        title: tr?.title ?? rule?.title ?? f.title,
+        severity: f.severity,
+        confidence: f.confidence,
+        remediation: remediationOf(f.ruleId, extras.plan),
+        fix: tr?.fix ?? rule?.fix ?? f.fix,
+        verify: rule?.verify,
+        sources: rule?.sources.map((s) => ({ title: s.title, url: s.url, checked: s.checked })) ?? [],
+        ...rv ? { review: rv.status + (rv.note ? ": " + rv.note : "") } : {},
+        groups: (groups[f.ruleId] ?? []).map((g) => ({
+          key: g.kind === "site" ? "site" : g.key,
+          kind: g.kind,
+          pages: g.pages,
+          evidence: g.evidence.map((i) => ({ ...f.evidence[i], ref: findingRef(f.ruleId, f.evidence[i]) }))
+        }))
+      };
+    })
+  };
+}
+
 // src/cli.ts
 import { pathToFileURL } from "node:url";
 
@@ -40281,10 +40345,10 @@ async function checkSources(kb, previous, opts = {}) {
   const worker = async () => {
     for (let url = queue.shift(); url; url = queue.shift()) {
       await limiter.wait(new URL(url).host);
-      const current = await fetchSourceSnapshot(url, opts);
+      const current2 = await fetchSourceSnapshot(url, opts);
       const prev2 = previous[url];
-      const { change, detail } = compareSnapshot(prev2, current);
-      results.push({ url, change, rules: [...new Set(byUrl.get(url))].sort(), previous: prev2, current, detail });
+      const { change, detail } = compareSnapshot(prev2, current2);
+      results.push({ url, change, rules: [...new Set(byUrl.get(url))].sort(), previous: prev2, current: current2, detail });
       opts.onProgress?.(++done, urls.length, url);
     }
   };
@@ -41479,10 +41543,10 @@ function rollback(root2, changeId, opts = {}) {
   const conflicts = [];
   const pending = [];
   for (const e of m.files) {
-    const current = hashOf(resolveInside(root2, e.path));
-    if (current === e.beforeHash) continue;
+    const current2 = hashOf(resolveInside(root2, e.path));
+    if (current2 === e.beforeHash) continue;
     pending.push(e);
-    if (current !== e.afterHash) conflicts.push(e.path);
+    if (current2 !== e.afterHash) conflicts.push(e.path);
   }
   if (conflicts.length && !opts.force) return { restored: [], conflicts };
   const restored = [];
@@ -42534,7 +42598,7 @@ async function runWorkflow(flags, stop) {
   if (url) {
     log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)\u2026`);
     suggestPreLaunch(v, url);
-    const { report, store: store3 } = await auditWebsite(url, { workspace, kb, crawl: { ...opts, stop }, compact: !!v["compact"], checkExternal: !!v["check-external"], cruxApiKey: cruxKey()?.key, preLaunch: !!v["pre-launch"] });
+    const { report, store: store3 } = await auditWebsite(url, { workspace, kb, crawl: { ...opts, stop, onProgress: crawlProgress(v) }, onPhase: phaseProgress, compact: !!v["compact"], checkExternal: !!v["check-external"], cruxApiKey: cruxKey()?.key, preLaunch: !!v["pre-launch"] });
     assertTargetAllowed(report);
     const files = writeReports(store3, report, kb, ["json", "md", "html"]);
     summary.website = { report, runId: store3.runId, files };
@@ -42913,6 +42977,8 @@ Commands
   open [runId|latest]   Open a stored HTML report in the default browser
   review <runId|latest> <ref|ruleId> <confirmed|rejected|fixed> [--note text]
                         Record an agent/human review of a finding next to the audit (evidence is kept)
+  prompt <runId|latest>  Print the repair prompt the HTML report builds, for every issue or --rules a,b
+                        (--lang en|tr, --format md|json); secrets are redacted the same way
   runs                  List stored runs
 
 Common options
@@ -42937,12 +43003,15 @@ Common options
                         (its canonical, hreflang, sitemap and link URLs map to the crawled origin).
                         Repository mode: base URL for canonical/sitemap fixes. monitor: also accepts
                         a Search Console property (sc-domain:\u2026)
-  --lang <tag>          Document language for fixes when the framework has no locale idiom
+  --lang <tag>          Document language for fixes when the framework has no locale idiom; prompt: en|tr
   --apply / --yes       optimize: write changes (after confirmation) / skip the prompt
   --only <ruleId>       optimize: restrict fixes to a rule (repeatable)
   --competitor <url>    research: competitor site to compare (repeatable, max 10)
+  --rules <a,b>         prompt: only these rule ids (comma-separated or repeatable)
   --open                Open the HTML report in the default browser when done
   --json                Print the JSON report to stdout
+  --progress ndjson     Progress as JSON events on stderr, one per line (start, phase, page,
+                        finding-summary, end); every stderr line is then JSON, errors included
   -q, --quiet           Less output
   -h, --help            Show help                         -v, --version      Print the version
 
@@ -42998,6 +43067,8 @@ var CLI_OPTIONS = {
   resume: { type: "string" },
   "max-duration": { type: "string" },
   compact: { type: "boolean" },
+  progress: { type: "string" },
+  rules: { type: "string", multiple: true },
   format: { type: "string" },
   out: { type: "string" },
   "fail-on": { type: "string" },
@@ -43046,10 +43117,21 @@ function errorJson(code, kind, message) {
   return JSON.stringify({ error: { code, kind, message } });
 }
 function reportError(code, kind, message, json, hint) {
-  console.error(`searvex: ${message}${hint ? `
+  if (!progress()) console.error(`searvex: ${message}${hint ? `
 ${hint}` : ""}`);
-  if (json) console.error(errorJson(code, kind, message));
+  if (json || progress()) console.error(errorJson(code, kind, message));
 }
+function crawlProgress(v) {
+  let last2 = 0;
+  return (p) => {
+    const pr = progress();
+    if (pr) return pr.emit({ event: "page", url: p.url, status: p.status, blocked: p.blocked, fetched: p.fetched, crawled: p.crawled, queued: p.queued });
+    if (p.blocked || !(p.fetched - last2 >= 10 || p.fetched === 1)) return;
+    last2 = p.fetched;
+    log(v, `  ${p.fetched} pages fetched \xB7 ${p.queued} queued \xB7 ${p.status} ${p.url}`);
+  };
+}
+var phaseProgress = (phase) => progress()?.emit({ event: "phase", phase });
 var EXIT = {
   ok: 0,
   /** --fail-on threshold reached (also: optimize verification failed, rollback conflict, integration not working). */
@@ -43086,7 +43168,8 @@ function interrupter(v) {
   timer?.unref();
   const onSignal = (sig) => {
     if (ac.signal.aborted) process.exit(sig === "SIGINT" ? 130 : 143);
-    console.error(`searvex: ${sig} received: finishing pages in flight and writing a partial report (send it again to exit at once)`);
+    if (progress()) progress().emit({ event: "signal", signal: sig });
+    else console.error(`searvex: ${sig} received: finishing pages in flight and writing a partial report (send it again to exit at once)`);
     ac.abort("signal");
   };
   process.on("SIGINT", onSignal);
@@ -43137,11 +43220,20 @@ function assertSiteUrl(v) {
   if (s !== void 0 && (typeof s !== "string" || !/^https?:\/\/[^/]/i.test(s))) throw new UsageError("--site-url must be an absolute http(s) URL (the public URL of the audited site)");
 }
 function log(v, ...args) {
-  if (!v["quiet"] && !v["json"]) console.error(...args);
+  if (!v["quiet"] && !v["json"] && !progress()) console.error(...args);
 }
 function writeReports(store2, report, kb, formats) {
   const out = [];
   annotateReport(report, planOf(store2));
+  const pr = progress();
+  if (pr) {
+    phaseProgress("report");
+    if (report.crawl.interrupted) pr.interrupted = report.crawl.interrupted;
+    const counted = report.findings.filter((f) => f.severity !== "info" && countsTowardScore(f));
+    const bySeverity = {};
+    for (const f of counted) bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1;
+    pr.emit({ event: "finding-summary", runId: report.runId, status: report.crawl.status ?? "complete", findings: counted.length, bySeverity, affectedUrls: report.affectedUrls ?? 0, score: report.scores.overall });
+  }
   for (const f of formats) {
     if (f === "json") out.push((store2.writeJson("report.json", report), store2.file("report.json")));
     else if (f === "md") out.push(store2.writeText("report.md", renderMarkdown(report)));
@@ -43149,6 +43241,7 @@ function writeReports(store2, report, kb, formats) {
     else if (f === "sarif") out.push(store2.writeText("report.sarif", JSON.stringify(renderSarif(report, kb), null, 2)));
     else throw new UsageError(`Unknown format: ${f}`);
   }
+  pr?.reports.push(...out.filter((f) => !pr.reports.includes(f)));
   return out;
 }
 function failOnIndex(failOn) {
@@ -43250,8 +43343,8 @@ async function commandAudit(flags) {
     if (v["render"]) render3 = await (await Promise.resolve().then(() => (init_render(), render_exports))).createRenderer(opts.policy);
     log(v, `Crawling ${target} (max ${opts.maxPages} pages, robots.txt respected)\u2026`);
     suggestPreLaunch(v, target);
-    let last2 = 0;
     const { report, store: store2 } = await auditWebsite(target, {
+      onPhase: phaseProgress,
       workspace,
       resumeRunId: v["resume"],
       kb,
@@ -43263,12 +43356,7 @@ async function commandAudit(flags) {
         ...opts,
         render: render3?.render,
         stop: stop.signal,
-        onProgress: (p) => {
-          if (p.fetched - last2 >= 10 || p.fetched === 1) {
-            last2 = p.fetched;
-            log(v, `  ${p.fetched} pages fetched \xB7 ${p.queued} queued \xB7 ${p.status} ${p.url}`);
-          }
-        }
+        onProgress: crawlProgress(v)
       }
     });
     if (render3) {
@@ -43297,7 +43385,7 @@ async function commandGeo(flags) {
   const opts = crawlOptionsFrom({ ...v, "max-pages": v["max-pages"] ?? "50" });
   suggestPreLaunch(v, target);
   const stop = interrupter(v);
-  const { report, store: store2 } = await auditWebsite(target, { workspace: path22.resolve(String(v["out"] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal }, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
+  const { report, store: store2 } = await auditWebsite(target, { workspace: path22.resolve(String(v["out"] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal, onProgress: crawlProgress(v) }, onPhase: phaseProgress, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
   assertTargetAllowed(report);
   reportInterrupted(report, !!v["json"]);
   const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
@@ -43411,6 +43499,25 @@ async function commandReport(flags) {
   console.log(files.join("\n"));
   return 0;
 }
+function commandPrompt(flags) {
+  const v = flags.values;
+  const workspace = path22.resolve(String(v["out"] ?? process.cwd()));
+  const store2 = new RunStore(workspace, resolveRun(workspace, flags.positionals[1]));
+  const report = store2.readJson("report.json");
+  const lang = String(v["lang"] ?? "en");
+  if (lang !== "en" && lang !== "tr") throw new UsageError("--lang must be en or tr for prompt");
+  const format = String(v["format"] ?? "md");
+  if (format !== "md" && format !== "json") throw new UsageError("--format must be md or json for prompt");
+  const rules = v["rules"]?.flatMap((x) => x.split(",")).map((x) => x.trim()).filter(Boolean);
+  const unknown = rules?.filter((id) => !report.findings.some((f) => f.ruleId === id)) ?? [];
+  if (unknown.length) throw new UsageError(`Not a finding of run ${report.runId}: ${unknown.join(", ")}`);
+  const input = repairPromptInput(report, loadKnowledge(), loadExtras(store2, report), { lang, rules });
+  if (!input.items.length) throw new UsageError(`Run ${report.runId} has no issues to repair (pass --rules to choose findings)`);
+  const prompt = buildRepairPrompt(input);
+  if (format === "json") process.stdout.write(JSON.stringify({ runId: report.runId, rules: input.items.map((i) => i.ruleId), prompt }, null, 2) + "\n");
+  else process.stdout.write(prompt.endsWith("\n") ? prompt : prompt + "\n");
+  return EXIT.ok;
+}
 function commandRuns(flags) {
   const workspace = path22.resolve(String(flags.values["out"] ?? process.cwd()));
   for (const id of RunStore.list(workspace)) {
@@ -43430,6 +43537,25 @@ async function main(argv = process.argv.slice(2)) {
   if (flags.values["version"]) return console.log(SEARVEX_VERSION), 0;
   const cmd = flags.positionals[0];
   if (!cmd || flags.values["help"]) return console.log(HELP), cmd || flags.values["help"] ? EXIT.ok : EXIT.usage;
+  const mode = flags.values["progress"];
+  if (mode !== void 0 && mode !== "ndjson") {
+    reportError(EXIT.usage, "usage", `--progress must be ndjson (got ${String(mode)})`, !!flags.values["json"], HELP_TRAILER);
+    return EXIT.usage;
+  }
+  if (mode !== "ndjson") return runCommand(cmd, flags);
+  const pr = new Progress();
+  setProgress(pr);
+  pr.emit({ event: "start", version: SEARVEX_VERSION, command: cmd, ...flags.positionals[1] ? { target: flags.positionals[1] } : {} });
+  let exitCode = EXIT.runtime;
+  try {
+    exitCode = await runCommand(cmd, flags);
+    return exitCode;
+  } finally {
+    pr.emit({ event: "end", exitCode, reports: pr.reports, ...pr.interrupted ? { interrupted: pr.interrupted } : {} });
+    setProgress(null);
+  }
+}
+async function runCommand(cmd, flags) {
   try {
     switch (cmd) {
       case "run":
@@ -43466,6 +43592,8 @@ async function main(argv = process.argv.slice(2)) {
         return commandOpen(flags);
       case "review":
         return commandReview(flags);
+      case "prompt":
+        return commandPrompt(flags);
       default:
         throw new UsageError(`Unknown command: ${cmd}`);
     }
@@ -43499,6 +43627,7 @@ export {
   assertTargetAllowed,
   auditExit,
   crawlOptionsFrom,
+  crawlProgress,
   errorJson,
   failOnExit,
   failOnIndex,
@@ -43508,6 +43637,7 @@ export {
   main,
   num,
   pagesLabel,
+  phaseProgress,
   printSummary,
   reportError,
   reportInterrupted,
