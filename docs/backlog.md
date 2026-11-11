@@ -3,6 +3,7 @@
 Prioritised list of what must be fixed, built or added. Status: ⬜ open · 🔄 in progress · ✅ done.
 Priority: **P0** correctness/reliability · **P1** core value · **P2** product experience · **P3** later.
 Each item lists how it will be verified; nothing is marked done without that verification.
+Open items name the release and milestone of the maintainer's release plan that covers them.
 
 ## Execution plan (current round)
 
@@ -22,22 +23,22 @@ Each item lists how it will be verified; nothing is marked done without that ver
 | 1 | Source revalidation tool with snapshots (status, final URL, title, "last updated" date, content hash) | ✅ first run found 14 moved sources (Google crawling docs moved to /crawling/); facts re-verified, URLs updated; weekly workflow |
 | 2 | Re-read `excerpt`/`url-resolved` sources and upgrade their verification level | ✅ |
 | 3 | Real-site `--render` validation round | ✅ found client-side locale switching (canonical → /en/) on 2 sites; new rule lang.locale-adaptive (+ server-side Accept-Language probe); raw-only duplicates kept in render mode |
-| 4 | Framework source checks via AST instead of regex (Next.js metadata, Astro props) | ✅ JS/TS/JSX/TSX via @babel/parser (Next.js metadata, JSX img/a/html); Astro, Vue, Blade stay regex-based |
-| 5 | Facet / pagination / parameter-explosion detection for large e-commerce | ⬜ |
+| 4 | Framework source checks via AST instead of regex (Next.js metadata, Astro props) | ✅ JS/TS/JSX/TSX via @babel/parser (Next.js metadata, JSX img/a/html); Astro, Vue, Blade stay regex-based — real parsers planned for 1.4.0 (G5) |
+| 5 | Facet / pagination / parameter-explosion detection for large e-commerce | ✅ `crawl.facet-explosion`, `pagination.canonical-to-first` |
 
 ### P1 — Search data & intelligence
 | # | Item | Status |
 |---|---|---|
 | 6 | GSC OAuth (loopback, read-only scope, refresh-token storage with 0600 permissions) | ✅ verified live 2026-11-01 (OAuth, refresh, sites, report, pagination) |
-| 7 | GSC analysis: top queries/pages, CTR vs position outliers, striking distance (pos 8–20), query→page mapping, multi-page queries (data-verified cannibalisation), pages without impressions | ✅ `gsc report` with `--audit` join; traffic-weighted priorities still open |
-| 8 | Bing Webmaster API (query/page stats) | ✅ `bing report`, mock-server tested; **live run pending an API key** |
-| 9 | GA4 Data API (landing-page sessions / conversions from organic search) | ⬜ |
-| 10 | Yandex Webmaster API | ⬜ |
-| 11 | Impact-based prioritisation (severity × affected share × page importance × traffic when available) | ✅ score/bucket/effort/reasons; "Fix first" table; traffic input pending GSC |
+| 7 | GSC analysis: top queries/pages, CTR vs position outliers, striking distance (pos 8–20), query→page mapping, multi-page queries (data-verified cannibalisation), pages without impressions | ✅ `gsc report` with `--audit` join; traffic-weighted priorities still open; traffic-weighted priorities planned for 1.4.0 (F1) |
+| 8 | Bing Webmaster API (query/page stats) | ✅ `bing report`, mock-server tested; **live run pending an API key**; live verification planned for 1.4.0 (F2) |
+| 9 | GA4 Data API (landing-page sessions / conversions from organic search) | ⬜ planned for 1.4.0 (F4) |
+| 10 | Yandex Webmaster API | ⬜ planned for 1.4.0 (F5) |
+| 11 | Impact-based prioritisation (severity × affected share × page importance × traffic when available) | ✅ score/bucket/effort/reasons; "Fix first" table; traffic input pending GSC; traffic input planned for 1.4.0 (F1) |
 | 12 | Search-intent classification of pages and queries (rules + agent), separate verified vs inferred | ✅ |
 | 13 | Internal-linking opportunities (topic-related pages that do not link to each other; orphans by topic) | ✅ |
-| 14 | Deeper competitor research: per-competitor topic clusters, page-type comparison per intent | ⬜ |
-| 15 | Bing AI Performance import (CSV) when exported by the user | ⬜ |
+| 14 | Deeper competitor research: per-competitor topic clusters, page-type comparison per intent | ⬜ planned for 1.4.0 (G3) |
+| 15 | Bing AI Performance import (CSV) when exported by the user | ⬜ planned for 1.4.0 (F3) |
 | 26 | Property-aware audit joins (GSC/Bing), multi-site regression tests | ✅ v0.7.0 |
 | 27 | Search Console CSV/ZIP import (localised headers, decimal commas, filters/period metadata, limits) | ✅ v0.7.0 — verified with real TR and EN exports (2026-11-01) |
 | 28 | Onboarding: `connect` with Google / CSV / skip, per-site preference, "Not measured" in summaries | ✅ v0.7.0 |
@@ -52,17 +53,17 @@ Each item lists how it will be verified; nothing is marked done without that ver
 ### P2 — Product experience
 | # | Item | Status |
 |---|---|---|
-| 16 | Template-level issue grouping (URL-pattern clusters) in reports | ✅ URL-pattern templates per finding (DOM-structure clustering still open) |
+| 16 | Template-level issue grouping (URL-pattern clusters) in reports | ✅ URL-pattern templates per finding (DOM-structure clustering still open); DOM-structure clustering planned for 1.4.0 (G2) |
 | 17 | HTML dashboard: charts, template view, monitor before/after, ecosystem view | ✅ |
-| 18 | Disk-backed analysis for >50k pages | ⬜ |
-| 19 | GitHub Action wrapper + SARIF upload example tested | ⬜ |
-| 20 | MCP server exposing the engine | ⬜ |
-| 21 | Plugin icon (512 px) for directory submission | ⬜ |
-| 22 | Lighthouse lab metrics on sampled templates (optional dependency) | ⬜ |
+| 18 | Disk-backed analysis for >50k pages | ⬜ planned for 1.4.0 (G7) |
+| 19 | GitHub Action wrapper + SARIF upload example tested | ⬜ planned for 1.5.0 (H1) |
+| 20 | MCP server exposing the engine | ⬜ planned for 1.5.0 (H2) |
+| 21 | Plugin icon (512 px) for directory submission | ⬜ planned for 1.5.0 (H3) |
+| 22 | Lighthouse lab metrics on sampled templates (optional dependency) | ⬜ planned for 1.4.0 (F6) |
 
 ### P3 — Later
 | # | Item | Status |
 |---|---|---|
-| 23 | WordPress block themes, SvelteKit, Remix adapters and fixes | ⬜ |
-| 24 | Localised report text | ⬜ |
-| 25 | Community rule packs with the same sourcing rules | ⬜ |
+| 23 | WordPress block themes, SvelteKit, Remix adapters and fixes | ⬜ planned for 1.4.0 (G6) |
+| 24 | Localised report text | ✅ English and Turkish since 1.1.0 |
+| 25 | Community rule packs with the same sourcing rules | ⬜ planned for 1.5.0 (H4) |

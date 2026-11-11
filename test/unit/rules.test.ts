@@ -17,7 +17,7 @@ function sourceTree(dir: string): string {
 
 describe('knowledge base', () => {
   it('validates with zero errors', () => {
-    const issues = validateKnowledge(kb, { implemented: IMPLEMENTED_RULES, today: new Date('2026-11-03') });
+    const issues = validateKnowledge(kb, { implemented: IMPLEMENTED_RULES, today: new Date('2026-11-11') });
     expect(issues.filter((i) => i.level === 'error')).toEqual([]);
   });
 

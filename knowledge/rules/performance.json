@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.03",
-  "updated": "2026-11-03",
+  "version": "2026.11.11",
+  "updated": "2026-11-11",
   "rules": [
     {
       "id": "perf.slow-ttfb",
@@ -18,7 +18,7 @@
         {
           "title": "web.dev: Time to First Byte (TTFB)",
           "url": "https://web.dev/articles/ttfb",
-          "checked": "2026-10-30",
+          "checked": "2026-11-11",
           "level": "fetched"
         }
       ],
@@ -63,7 +63,7 @@
         {
           "title": "web.dev: Web Vitals",
           "url": "https://web.dev/articles/vitals",
-          "checked": "2026-10-30",
+          "checked": "2026-11-11",
           "level": "fetched"
         },
         {
@@ -91,7 +91,7 @@
         {
           "title": "web.dev: Web Vitals",
           "url": "https://web.dev/articles/vitals",
-          "checked": "2026-10-30",
+          "checked": "2026-11-11",
           "level": "fetched"
         },
         {

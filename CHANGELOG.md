@@ -5,6 +5,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-11
+
+A run says honestly what it did, and its output is a contract. Release notes:
+[docs/release-notes-1.3.0.md](docs/release-notes-1.3.0.md).
+
 ### Added
 - `crawl.status: "robots-blocked"`: when robots.txt blocks every queued URL (it answered 5xx/429, which RFC 9309
   treats as a complete disallow, or it disallows them) no page is fetched, so the run is no longer reported as a
@@ -64,6 +69,14 @@ All notable changes to this project are documented here. The format follows
 - `--check-external` no longer reports links the network policy forbids (for example a private address) as
   broken; they are counted in `externalLinks.skippedByPolicy`.
 - `docs/cli.md` documents that a target blocked by the network policy (exit `2`) still writes `report.json`.
+- Findings that stand for a group (`duplicate.title`, `duplicate.description`, `duplicate.content`,
+  `content.cannibalization`) count every page of the group as affected, so `affectedUrls` and their priority reach
+  can be higher than in 1.2.0 for the same site.
+- Website progress lines say "pages fetched" and skip robots-blocked URLs.
+- `SECURITY.md`: security fixes for the latest 1.x minor.
+- Rule base `2026.11.11`: six sources re-read after the weekly source check (Anthropic crawler documentation,
+  Google Search Central updates, web.dev Core Web Vitals, TTFB and CLS). The cited facts are unchanged; their
+  `checked` dates and the source snapshots were updated.
 
 ## [1.2.0] - 2026-11-03
 

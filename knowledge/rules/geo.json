@@ -1,6 +1,6 @@
 {
-  "version": "2026.10.30",
-  "updated": "2026-10-30",
+  "version": "2026.11.11",
+  "updated": "2026-11-11",
   "rules": [
     {
       "id": "geo.search-bot-blocked",
@@ -59,7 +59,7 @@
         {
           "title": "Anthropic: Does Anthropic crawl data from the web",
           "url": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
-          "checked": "2026-10-30",
+          "checked": "2026-11-11",
           "level": "fetched"
         },
         {
@@ -100,7 +100,7 @@
         {
           "title": "Anthropic: Does Anthropic crawl data from the web",
           "url": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
-          "checked": "2026-10-30",
+          "checked": "2026-11-11",
           "level": "fetched"
         },
         {
