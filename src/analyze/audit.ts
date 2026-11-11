@@ -236,6 +236,8 @@ export interface AuditOptions {
   preLaunch?: boolean;
   /** --compact: write only the count of each finding's affected URLs (see `compactAffected`). */
   compact?: boolean;
+  /** Called when the run enters a phase (structured progress). */
+  onPhase?: (phase: 'crawl' | 'analyze') => void;
 }
 
 /** --compact: keep only `affected.count` per finding, for very large crawls. Mutates and returns `r`. */
@@ -247,7 +249,9 @@ export function compactAffected(r: AuditReport): AuditReport {
 export async function auditWebsite(url: string, options: AuditOptions = {}): Promise<{ report: AuditReport; store: RunStore }> {
   const kb = options.kb ?? loadKnowledge();
   const store = new RunStore(options.workspace ?? process.cwd(), options.resumeRunId ?? RunStore.newRunId('audit'));
+  options.onPhase?.('crawl');
   const result = await crawl(url, options.crawl, store);
+  options.onPhase?.('analyze');
   const report = annotateReport(await analyzeCrawl(result, kb, { ...options.crawl, probes: options.probes ?? true, checkExternal: options.checkExternal, cruxApiKey: options.cruxApiKey, preLaunch: options.preLaunch }));
   if (options.compact) compactAffected(report);
   store.writeJson('report.json', report);

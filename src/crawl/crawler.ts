@@ -23,8 +23,11 @@ export interface CrawlOptions {
   robotsAgent: string;
   /** Optional JS renderer (see render.ts). */
   render?: (url: string) => Promise<{ html: string; error?: string }>;
-  /** `crawled`: URLs processed (fetched + robots-blocked); `fetched`: URLs for which an HTTP request was made. */
-  onProgress?: (p: { crawled: number; fetched: number; queued: number; url: string; status: number }) => void;
+  /**
+   * Called after each URL. `crawled`: URLs processed (fetched + robots-blocked); `fetched`: URLs for which an
+   * HTTP request was made; `blocked`: this URL was disallowed by robots.txt and not requested.
+   */
+  onProgress?: (p: { crawled: number; fetched: number; queued: number; url: string; status: number; blocked: boolean }) => void;
   /** Persist progress every N pages… */
   checkpointEvery: number;
   /** …or every N milliseconds, whichever comes first, so `--resume` works after an early kill. */
@@ -272,6 +275,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
       };
       pages.push(rec);
       store?.append('pages.jsonl', rec);
+      opts.onProgress?.({ crawled: pages.length, fetched: fetchedCount, queued: queue.length, url: item.url, status: 0, blocked: true });
       return;
     }
     await limiter.wait(host, opts.stop);
@@ -325,7 +329,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
     store?.append('pages.jsonl', rec);
     crawledThisRun++;
     fetchedCount++;
-    opts.onProgress?.({ crawled: pages.length, fetched: fetchedCount, queued: queue.length, url: item.url, status: res.status });
+    opts.onProgress?.({ crawled: pages.length, fetched: fetchedCount, queued: queue.length, url: item.url, status: res.status, blocked: false });
     if (crawledThisRun % opts.checkpointEvery === 0 || Date.now() - lastPersist >= opts.checkpointMs) persist();
   };
 

@@ -9,7 +9,7 @@ import { querySearchConsole, type GscRow } from '../integrations/gsc.js';
 import { gscAccessToken } from '../integrations/google-oauth.js';
 import { GscImportError, importGscFiles, parseGscTable, type GscExport } from '../integrations/gsc-csv.js';
 import { assertAuditInProperty, matchAuditToProperty, parseProperty, propertyForExport, PropertyError, type SearchProperty } from '../integrations/property.js';
-import { assertTargetAllowed, crawlOptionsFrom, EXIT, interrupter, log, reportInterrupted, reportNotAnalysed, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
+import { assertTargetAllowed, crawlOptionsFrom, crawlProgress, phaseProgress, EXIT, interrupter, log, reportInterrupted, reportNotAnalysed, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
 
 export interface FindingDelta {
   ruleId: string;
@@ -156,7 +156,7 @@ export async function commandMonitor(flags: GlobalFlags): Promise<number> {
   log(v, `Re-auditing ${target}…`);
   suggestPreLaunch(v, target);
   const stop = interrupter(v);
-  const { report, store } = await auditWebsite(target, { workspace, kb, crawl: { ...crawlOptionsFrom(v), stop: stop.signal }, preLaunch: !!v['pre-launch'], compact: !!v['compact'] }).finally(stop.dispose);
+  const { report, store } = await auditWebsite(target, { workspace, kb, crawl: { ...crawlOptionsFrom(v), stop: stop.signal, onProgress: crawlProgress(v) }, onPhase: phaseProgress, preLaunch: !!v['pre-launch'], compact: !!v['compact'] }).finally(stop.dispose);
   assertTargetAllowed(report);
   writeReports(store, report, kb, ['json', 'md', 'html']);
   if (notAnalysed(report)) {

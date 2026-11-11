@@ -6,11 +6,15 @@ import { auditWebsite, countsTowardScore, indexableSummary, notAnalysed, notAnal
 import type { Severity } from './core/types.js';
 import { RunStore } from './crawl/store.js';
 import { SEARVEX_VERSION } from './net/fetcher.js';
+import { Progress, progress, setProgress, type ProgressPhase } from './progress.js';
+import type { CrawlOptions } from './crawl/crawler.js';
 import { classifyAddress, DEFAULT_POLICY } from './net/ssrf.js';
 import { renderHtml } from './report/html.js';
 import { loadExtras, planOf } from './report/extras.js';
 import { annotateReport, remediationOf } from './report/remediation.js';
-import { commandOpen, commandReview, openFile } from './commands/review.js';
+import { commandOpen, commandReview, openFile, resolveRun } from './commands/review.js';
+import { buildRepairPrompt } from './report/prompt.js';
+import { repairPromptInput } from './report/prompt-input.js';
 import { pathToFileURL } from 'node:url';
 import { renderMarkdown } from './report/markdown.js';
 import { renderSarif } from './report/sarif.js';
@@ -63,6 +67,8 @@ Commands
   open [runId|latest]   Open a stored HTML report in the default browser
   review <runId|latest> <ref|ruleId> <confirmed|rejected|fixed> [--note text]
                         Record an agent/human review of a finding next to the audit (evidence is kept)
+  prompt <runId|latest>  Print the repair prompt the HTML report builds, for every issue or --rules a,b
+                        (--lang en|tr, --format md|json); secrets are redacted the same way
   runs                  List stored runs
 
 Common options
@@ -87,12 +93,15 @@ Common options
                         (its canonical, hreflang, sitemap and link URLs map to the crawled origin).
                         Repository mode: base URL for canonical/sitemap fixes. monitor: also accepts
                         a Search Console property (sc-domain:…)
-  --lang <tag>          Document language for fixes when the framework has no locale idiom
+  --lang <tag>          Document language for fixes when the framework has no locale idiom; prompt: en|tr
   --apply / --yes       optimize: write changes (after confirmation) / skip the prompt
   --only <ruleId>       optimize: restrict fixes to a rule (repeatable)
   --competitor <url>    research: competitor site to compare (repeatable, max 10)
+  --rules <a,b>         prompt: only these rule ids (comma-separated or repeatable)
   --open                Open the HTML report in the default browser when done
   --json                Print the JSON report to stdout
+  --progress ndjson     Progress as JSON events on stderr, one per line (start, phase, page,
+                        finding-summary, end); every stderr line is then JSON, errors included
   -q, --quiet           Less output
   -h, --help            Show help                         -v, --version      Print the version
 
@@ -158,6 +167,8 @@ export const CLI_OPTIONS = {
   resume: { type: 'string' },
   'max-duration': { type: 'string' },
   compact: { type: 'boolean' },
+  progress: { type: 'string' },
+  rules: { type: 'string', multiple: true },
   format: { type: 'string' },
   out: { type: 'string' },
   'fail-on': { type: 'string' },
@@ -219,9 +230,25 @@ export function errorJson(code: number, kind: ErrorKind, message: string): strin
  * error object on the next line.
  */
 export function reportError(code: number, kind: ErrorKind, message: string, json: boolean, hint?: string): void {
-  console.error(`searvex: ${message}${hint ? `\n${hint}` : ''}`);
-  if (json) console.error(errorJson(code, kind, message));
+  // With --progress ndjson every stderr line is JSON: only the error object.
+  if (!progress()) console.error(`searvex: ${message}${hint ? `\n${hint}` : ''}`);
+  if (json || progress()) console.error(errorJson(code, kind, message));
 }
+
+/** Crawl progress: ndjson `page` events, or a plain line every 10 fetched pages. */
+export function crawlProgress(v: GlobalFlags['values']): NonNullable<CrawlOptions['onProgress']> {
+  let last = 0;
+  return (p) => {
+    const pr = progress();
+    if (pr) return pr.emit({ event: 'page', url: p.url, status: p.status, blocked: p.blocked, fetched: p.fetched, crawled: p.crawled, queued: p.queued });
+    if (p.blocked || !(p.fetched - last >= 10 || p.fetched === 1)) return;
+    last = p.fetched;
+    log(v, `  ${p.fetched} pages fetched · ${p.queued} queued · ${p.status} ${p.url}`);
+  };
+}
+
+/** ndjson `phase` event (no-op without --progress ndjson). */
+export const phaseProgress = (phase: ProgressPhase): void => progress()?.emit({ event: 'phase', phase });
 
 /** Process exit codes (documented in docs/cli.md and --help). */
 export const EXIT = {
@@ -286,7 +313,8 @@ export function interrupter(v: GlobalFlags['values']): Interrupter {
   timer?.unref();
   const onSignal = (sig: NodeJS.Signals) => {
     if (ac.signal.aborted) process.exit(sig === 'SIGINT' ? 130 : 143);
-    console.error(`searvex: ${sig} received: finishing pages in flight and writing a partial report (send it again to exit at once)`);
+    if (progress()) progress()!.emit({ event: 'signal', signal: sig });
+    else console.error(`searvex: ${sig} received: finishing pages in flight and writing a partial report (send it again to exit at once)`);
     ac.abort('signal');
   };
   process.on('SIGINT', onSignal);
@@ -350,12 +378,21 @@ export function assertSiteUrl(v: GlobalFlags['values']): void {
 }
 
 export function log(v: GlobalFlags['values'], ...args: unknown[]): void {
-  if (!v['quiet'] && !v['json']) console.error(...args);
+  if (!v['quiet'] && !v['json'] && !progress()) console.error(...args);
 }
 
 export function writeReports(store: RunStore, report: AuditReport, kb: KnowledgeBase, formats: string[]): string[] {
   const out: string[] = [];
   annotateReport(report, planOf(store) as never);
+  const pr = progress();
+  if (pr) {
+    phaseProgress('report');
+    if (report.crawl.interrupted) pr.interrupted = report.crawl.interrupted;
+    const counted = report.findings.filter((f) => f.severity !== 'info' && countsTowardScore(f));
+    const bySeverity: Record<string, number> = {};
+    for (const f of counted) bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1;
+    pr.emit({ event: 'finding-summary', runId: report.runId, status: report.crawl.status ?? 'complete', findings: counted.length, bySeverity, affectedUrls: report.affectedUrls ?? 0, score: report.scores.overall });
+  }
   for (const f of formats) {
     if (f === 'json') out.push((store.writeJson('report.json', report), store.file('report.json')));
     else if (f === 'md') out.push(store.writeText('report.md', renderMarkdown(report)));
@@ -363,6 +400,7 @@ export function writeReports(store: RunStore, report: AuditReport, kb: Knowledge
     else if (f === 'sarif') out.push(store.writeText('report.sarif', JSON.stringify(renderSarif(report, kb), null, 2)));
     else throw new UsageError(`Unknown format: ${f}`);
   }
+  pr?.reports.push(...out.filter((f) => !pr.reports.includes(f)));
   return out;
 }
 
@@ -475,8 +513,8 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
     if (v['render']) render = await (await import('./crawl/render.js')).createRenderer(opts.policy);
     log(v, `Crawling ${target} (max ${opts.maxPages} pages, robots.txt respected)…`);
     suggestPreLaunch(v, target);
-    let last = 0;
     const { report, store } = await auditWebsite(target, {
+      onPhase: phaseProgress,
       workspace,
       resumeRunId: v['resume'] as string | undefined,
       kb,
@@ -488,12 +526,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
         ...opts,
         render: render?.render,
         stop: stop.signal,
-        onProgress: (p) => {
-          if (p.fetched - last >= 10 || p.fetched === 1) {
-            last = p.fetched;
-            log(v, `  ${p.fetched} pages fetched · ${p.queued} queued · ${p.status} ${p.url}`);
-          }
-        },
+        onProgress: crawlProgress(v),
       },
     });
     if (render) {
@@ -523,7 +556,7 @@ async function commandGeo(flags: GlobalFlags): Promise<number> {
   const opts = crawlOptionsFrom({ ...v, 'max-pages': v['max-pages'] ?? '50' });
   suggestPreLaunch(v, target);
   const stop = interrupter(v);
-  const { report, store } = await auditWebsite(target, { workspace: path.resolve(String(v['out'] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal }, preLaunch: !!v['pre-launch'], compact: !!v['compact'] }).finally(stop.dispose);
+  const { report, store } = await auditWebsite(target, { workspace: path.resolve(String(v['out'] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal, onProgress: crawlProgress(v) }, onPhase: phaseProgress, preLaunch: !!v['pre-launch'], compact: !!v['compact'] }).finally(stop.dispose);
   assertTargetAllowed(report);
   reportInterrupted(report, !!v['json']);
   const files = writeReports(store, report, kb, String(v['format'] ?? 'md,html,json').split(','));
@@ -626,6 +659,27 @@ async function commandReport(flags: GlobalFlags): Promise<number> {
   return 0;
 }
 
+/** searvex prompt: the HTML action center's repair prompt, outside the browser. */
+function commandPrompt(flags: GlobalFlags): number {
+  const v = flags.values;
+  const workspace = path.resolve(String(v['out'] ?? process.cwd()));
+  const store = new RunStore(workspace, resolveRun(workspace, flags.positionals[1]));
+  const report = store.readJson<AuditReport>('report.json')!;
+  const lang = String(v['lang'] ?? 'en');
+  if (lang !== 'en' && lang !== 'tr') throw new UsageError('--lang must be en or tr for prompt');
+  const format = String(v['format'] ?? 'md');
+  if (format !== 'md' && format !== 'json') throw new UsageError('--format must be md or json for prompt');
+  const rules = (v['rules'] as string[] | undefined)?.flatMap((x) => x.split(',')).map((x) => x.trim()).filter(Boolean);
+  const unknown = rules?.filter((id) => !report.findings.some((f) => f.ruleId === id)) ?? [];
+  if (unknown.length) throw new UsageError(`Not a finding of run ${report.runId}: ${unknown.join(', ')}`);
+  const input = repairPromptInput(report, loadKnowledge(), loadExtras(store, report), { lang, rules });
+  if (!input.items.length) throw new UsageError(`Run ${report.runId} has no issues to repair (pass --rules to choose findings)`);
+  const prompt = buildRepairPrompt(input);
+  if (format === 'json') process.stdout.write(JSON.stringify({ runId: report.runId, rules: input.items.map((i) => i.ruleId), prompt }, null, 2) + '\n');
+  else process.stdout.write(prompt.endsWith('\n') ? prompt : prompt + '\n');
+  return EXIT.ok;
+}
+
 function commandRuns(flags: GlobalFlags): number {
   const workspace = path.resolve(String(flags.values['out'] ?? process.cwd()));
   for (const id of RunStore.list(workspace)) {
@@ -646,6 +700,26 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   if (flags.values['version']) return (console.log(SEARVEX_VERSION), 0);
   const cmd = flags.positionals[0];
   if (!cmd || flags.values['help']) return (console.log(HELP), cmd || flags.values['help'] ? EXIT.ok : EXIT.usage);
+  const mode = flags.values['progress'];
+  if (mode !== undefined && mode !== 'ndjson') {
+    reportError(EXIT.usage, 'usage', `--progress must be ndjson (got ${String(mode)})`, !!flags.values['json'], HELP_TRAILER);
+    return EXIT.usage;
+  }
+  if (mode !== 'ndjson') return runCommand(cmd, flags);
+  const pr = new Progress();
+  setProgress(pr);
+  pr.emit({ event: 'start', version: SEARVEX_VERSION, command: cmd, ...(flags.positionals[1] ? { target: flags.positionals[1] } : {}) });
+  let exitCode: number = EXIT.runtime;
+  try {
+    exitCode = await runCommand(cmd, flags);
+    return exitCode;
+  } finally {
+    pr.emit({ event: 'end', exitCode, reports: pr.reports, ...(pr.interrupted ? { interrupted: pr.interrupted } : {}) });
+    setProgress(null);
+  }
+}
+
+async function runCommand(cmd: string, flags: GlobalFlags): Promise<number> {
   try {
     switch (cmd) {
       case 'run':
@@ -682,6 +756,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         return commandOpen(flags);
       case 'review':
         return commandReview(flags);
+      case 'prompt':
+        return commandPrompt(flags);
       default:
         throw new UsageError(`Unknown command: ${cmd}`);
     }

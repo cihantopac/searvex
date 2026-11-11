@@ -54,6 +54,7 @@ With `--json`, the next stderr line is a JSON object:
 | `report <runId\|latest> [--format …]` | Re-render a stored report. |
 | `open [runId\|latest]` | Open a stored HTML report in the default browser (`open` / `xdg-open` / Explorer, no shell). |
 | `review <runId\|latest> <ref\|ruleId> <confirmed\|rejected\|fixed> [--note text]` | Record a review of a finding after an agent or person re-checked it. Stored in `reviews.json` next to the audit and shown separately in the HTML report; scanner evidence is never changed. `ref` is the stable occurrence reference shown in the report and in repair prompts (`ruleId#hash`). |
+| `prompt <runId\|latest>` | Print the repair prompt the HTML action center builds, outside the browser: every issue that counts toward the score, or `--rules a,b`. `--lang en\|tr` (default `en`), `--format md\|json` (default `md`; JSON: `{runId, rules, prompt}`). Evidence is redacted and bounded the same way as in the HTML. |
 | `runs` | List stored runs. |
 
 ## Options
@@ -78,7 +79,8 @@ With `--json`, the next stderr line is a JSON object:
 | `--allow-private` | off | Allow localhost/private network targets (local dev servers) |
 | `--pre-launch` | off | Pre-launch profile for a local or staging build (`audit`, `geo`, `monitor`, `run`). The site is audited as it will be once live: noindex pages are evaluated as indexable and their noindex goes to a **launch checklist**; findings of rules tagged `environment` (`https.not-used`, `perf.no-compression`, `canonical.http-https`, and the launch items `index.noindex`, `index.noindex-in-sitemap`, `robots.disallow-all`, `canonical.target-noindex`, `robots.sitemap-unreachable`) get `context` and are excluded from the score, `--fail-on`, priorities and monitor regressions. Score line: `(pre-launch profile)`. On a local or private target without the flag the CLI suggests it; it is never enabled silently. |
 | `--site-url <url>` | — | Public URL of the site. **URL mode** (`audit`, `geo`, `monitor`, `run`): audit a local or staging build as that site — canonical, hreflang, sitemap (`Sitemap:` directives, `<loc>`, sitemap indexes) and link URLs on the public origin are mapped to the crawled origin, so a canonical to the public URL of the same page counts as self and the declared sitemap is read from the build. Only the exact origin is mapped (`http://` or `www.` variants of it are not). The report header says "Audited `<crawled origin>` as `<site URL>`". Not applied to `research`, `ecosystem` or competitor crawls. **Repository mode:** base URL for fixes (canonical, sitemap). **monitor:** a value on the target's own origin, or `sc-domain:…`, is the Search Console property; a URL on another origin is an origin mapping only. |
-| `--lang <tag>` | — | Document language for `html lang` fixes when the framework has no locale idiom |
+| `--lang <tag>` | — | Document language for `html lang` fixes when the framework has no locale idiom; `prompt`: `en` or `tr` |
+| `--rules <a,b>` | — | `prompt`: only these rule ids (comma-separated or repeatable) |
 | `--only <ruleId>` | — | Restrict optimize to specific rules (repeatable) |
 | `--apply`, `--yes` | — | Optimize: write changes / skip confirmation |
 | `--competitor <url>` | — | Research: competitor site (repeatable) |
@@ -87,6 +89,7 @@ With `--json`, the next stderr line is a JSON object:
 | `--open` | off | Open the HTML report when the command finishes |
 | `--note <text>` | — | Review: short reason, e.g. why a finding is a false positive |
 | `--json` | — | Print JSON to stdout |
+| `--progress ndjson` | — | Progress as JSON events on stderr, one per line: `start`, `phase` (`crawl`/`analyze`/`report`), `page` (url, status, blocked, fetched, crawled, queued), `finding-summary`, `signal`, `end` (exit code, report paths, `interrupted`). Every stderr line is then a JSON object: plain log lines are suppressed and errors are written as the JSON error object. Works together with `--json` on stdout |
 | `-q, --quiet` | — | Less output |
 
 ## Environment
