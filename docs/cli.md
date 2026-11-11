@@ -70,6 +70,7 @@ With `--json`, the next stderr line is a JSON object:
 | `--no-sitemap` | — | Do not seed from sitemaps |
 | `--check-external` | off | Check outbound links (HEAD, robots-aware, max 200) |
 | `--resume <runId>` | — | Continue an interrupted crawl from its checkpoint (written every 25 pages or 10 seconds, and at the start) |
+| `--compact` | off | `report.json`: write only the count of each finding's affected URLs (for very large crawls) |
 | `--max-duration <s>` | — | Stop crawling after `s` seconds (1–604800) and write a partial report (exit `5`) |
 | `--format <list>` | md,html,json | Any of `md,html,json,sarif` |
 | `--out <dir>` | cwd (repo root for repo audits) | Workspace that receives `.searvex/` |
@@ -126,6 +127,10 @@ With `--json`, the next stderr line is a JSON object:
 | `crawl.blocked` | URLs not requested because robots.txt disallows them |
 | `scores.overall` | 0–100, or `null` when `scores.notApplicable` says why nothing was audited (since 1.3.0; was `100`) |
 | `inventory.pages` | HTML pages that answered 200 without a redirect |
+| `findings[].ref` / `.remediation` | Stable finding reference (its rule id) and how it gets fixed: `auto` (a concrete patch exists in the linked repository), `agent` or `manual` (since 1.3.0) |
+| `findings[].evidence[].ref` | Stable occurrence reference `<ruleId>#<hash>`, the one the HTML report, repair prompts and `searvex review` use (since 1.3.0) |
+| `findings[].affected` | `{ count, urls, truncated? }`: every affected URL (website) or file (repository), sorted; complete up to 10,000, `truncated` counts the rest. Evidence stays a sample of at most 50. robots.txt and llms.txt are not listed. With `--compact`, only `count` (since 1.3.0) |
+| `rootCauseGroups` | Per rule id: occurrences grouped by URL template, source file, shared layout or site, with page counts (since 1.3.0) |
 | `inventory.unfetched` | Every other crawled URL with `status` and `reason` (`robots-blocked`, `error`, `redirect`, `non-200`, `not-html`), capped at 10,000; `inventory.unfetchedTotal` is the full count (since 1.3.0) |
 
 The CLI summary and the Markdown/HTML reports show *pages fetched*, plus *blocked by robots.txt* when that count is

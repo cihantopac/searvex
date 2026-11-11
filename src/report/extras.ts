@@ -19,6 +19,12 @@ export function writeContext(store: RunStore, ctx: RunContext): void {
   store.writeJson('context.json', ctx);
 }
 
+/** Rules with a concrete automatic patch in the linked repository's dry-run plan, or null when none is linked. */
+export function planOf(store: RunStore): { fixes: Array<{ ruleId: string }> } | null {
+  const ctx = store.readJson<RunContext>('context.json');
+  return ctx?.autoRules ? { fixes: ctx.autoRules.map((ruleId) => ({ ruleId })) } : null;
+}
+
 /** Everything the HTML action center shows besides the audit itself, read from the workspace. */
 export function loadExtras(store: RunStore, report: AuditReport): ReportExtras {
   const ctx = store.readJson<RunContext>('context.json') ?? {};

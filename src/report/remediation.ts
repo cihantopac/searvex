@@ -46,6 +46,22 @@ export function findingRef(ruleId: string, e: Evidence): string {
   return `${ruleId}#${shortHash(`${e.url ?? ''}|${e.file ?? ''}|${e.line ?? ''}`)}`;
 }
 
+/**
+ * Add the machine-readable fields the HTML report and CLI compute, so `report.json` carries them too: finding
+ * `ref` and `remediation`, evidence `ref`, and the report's `rootCauseGroups`. Mutates and returns `r`.
+ * `plan` (rules with a concrete patch) is known only when a repository is linked to the audit.
+ */
+export function annotateReport(r: AuditReport, plan?: Pick<FixPlan, 'fixes'> | null): AuditReport {
+  for (const f of r.findings) {
+    f.ref = f.ruleId;
+    f.remediation = remediationOf(f.ruleId, plan);
+    // Copies: one evidence object can be shared by several rules' findings.
+    f.evidence = f.evidence.map((e) => ({ ...e, ref: findingRef(f.ruleId, e) }));
+  }
+  r.rootCauseGroups = rootCauseGroups(r);
+  return r;
+}
+
 export interface RootCauseGroup {
   /** `<ruleId>@<key>`; stable for the same rule and template/file. */
   id: string;

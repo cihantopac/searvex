@@ -35436,6 +35436,12 @@ function validateKnowledge(kb, opts = {}) {
   }
   return issues;
 }
+var AFFECTED_URL_CAP = 1e4;
+var SITE_FILE = /\/(robots|llms)\.txt$/;
+function affectedSummary(locations) {
+  const list = locations.filter((u) => !SITE_FILE.test(u)).sort();
+  return { count: list.length, urls: list.slice(0, AFFECTED_URL_CAP), ...list.length > AFFECTED_URL_CAP ? { truncated: list.length - AFFECTED_URL_CAP } : {} };
+}
 var FindingSink = class {
   constructor(kb, maxEvidence = 50) {
     this.kb = kb;
@@ -35484,7 +35490,9 @@ var FindingSink = class {
   }
   findings() {
     const order = (s) => SEVERITIES.indexOf(s);
-    return [...this.byRule.values()].sort((a, b) => order(a.severity) - order(b.severity) || a.ruleId.localeCompare(b.ruleId));
+    const out = [...this.byRule.values()].sort((a, b) => order(a.severity) - order(b.severity) || a.ruleId.localeCompare(b.ruleId));
+    for (const f of out) f.affected = affectedSummary(this.affected(f.ruleId));
+    return out;
   }
 };
 
@@ -37090,6 +37098,556 @@ function failingMetrics(m) {
   return out;
 }
 
+// src/optimize/fixes.ts
+import path4 from "node:path";
+
+// src/repo/fs-safe.ts
+import fs3 from "node:fs";
+import path3 from "node:path";
+var SKIP_DIRS = /* @__PURE__ */ new Set([
+  "node_modules",
+  ".git",
+  ".hg",
+  ".svn",
+  "vendor",
+  ".next",
+  ".nuxt",
+  ".output",
+  ".svelte-kit",
+  ".astro",
+  ".vercel",
+  ".netlify",
+  ".turbo",
+  ".cache",
+  "coverage",
+  ".searvex",
+  "__pycache__",
+  ".venv",
+  "venv",
+  "target",
+  "storage",
+  "bootstrap/cache",
+  ".idea",
+  ".vscode"
+]);
+var SECRET_PATTERNS = [
+  /(^|[\\/])\.env(\..*)?$/i,
+  /\.pem$/i,
+  /\.key$/i,
+  /\.p12$/i,
+  /\.pfx$/i,
+  /(^|[\\/])id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$/i,
+  /(^|[\\/])\.npmrc$/i,
+  /(^|[\\/])\.pypirc$/i,
+  /(^|[\\/])\.netrc$/i,
+  /(^|[\\/])credentials(\.json)?$/i,
+  /secrets?\.(json|ya?ml|toml)$/i,
+  /(^|[\\/])wp-config\.php$/i,
+  /(^|[\\/])\.htpasswd$/i,
+  /service-account.*\.json$/i,
+  /(^|[\\/])auth\.json$/i
+];
+function isSecretPath(p) {
+  return SECRET_PATTERNS.some((re) => re.test(p));
+}
+var PathEscapeError = class extends Error {
+};
+function resolveInside(root2, rel2) {
+  const realRoot = fs3.realpathSync(root2);
+  const abs = path3.resolve(realRoot, rel2);
+  const relative = path3.relative(realRoot, abs);
+  if (relative.startsWith("..") || path3.isAbsolute(relative)) throw new PathEscapeError(`Path escapes repository root: ${rel2}`);
+  let probe = abs;
+  while (!fs3.existsSync(probe)) probe = path3.dirname(probe);
+  const realProbe = fs3.realpathSync(probe);
+  const r2 = path3.relative(realRoot, realProbe);
+  if (r2.startsWith("..") || path3.isAbsolute(r2)) throw new PathEscapeError(`Path resolves outside repository root via symlink: ${rel2}`);
+  return abs;
+}
+function walk(root2, opts = {}) {
+  const maxFiles = opts.maxFiles ?? 5e4;
+  const maxBytes = opts.maxFileBytes ?? 2 * 1024 * 1024;
+  const realRoot = fs3.realpathSync(root2);
+  const files = [];
+  const skipped = { symlinks: 0, secrets: 0, large: 0, truncated: false };
+  const stack = [""];
+  while (stack.length) {
+    const relDir = stack.pop();
+    let entries;
+    try {
+      entries = fs3.readdirSync(path3.join(realRoot, relDir), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      const rel2 = relDir ? `${relDir}/${e.name}` : e.name;
+      if (e.isSymbolicLink()) {
+        skipped.symlinks++;
+        continue;
+      }
+      if (e.isDirectory()) {
+        if (SKIP_DIRS.has(e.name) || SKIP_DIRS.has(rel2)) continue;
+        if (e.name.startsWith(".") && e.name !== ".well-known" && e.name !== ".vitepress") continue;
+        stack.push(rel2);
+        continue;
+      }
+      if (!e.isFile()) continue;
+      if (isSecretPath(rel2)) {
+        skipped.secrets++;
+        continue;
+      }
+      if (opts.include && !opts.include(rel2)) continue;
+      const abs = path3.join(realRoot, rel2);
+      const size = fs3.statSync(abs).size;
+      if (size > maxBytes) {
+        skipped.large++;
+        continue;
+      }
+      files.push({ rel: rel2, abs, size });
+      if (files.length >= maxFiles) {
+        skipped.truncated = true;
+        return { files, skipped };
+      }
+    }
+  }
+  files.sort((a, b) => a.rel.localeCompare(b.rel));
+  return { files, skipped };
+}
+function readText(root2, rel2) {
+  if (isSecretPath(rel2)) throw new Error(`Refusing to read secret-bearing file: ${rel2}`);
+  const abs = resolveInside(root2, rel2);
+  const st = fs3.lstatSync(abs);
+  if (st.isSymbolicLink()) throw new PathEscapeError(`Refusing to read symlink: ${rel2}`);
+  return fs3.readFileSync(abs, "utf8");
+}
+function lineOf(text4, index2) {
+  let line = 1;
+  for (let i = 0; i < index2 && i < text4.length; i++) if (text4.charCodeAt(i) === 10) line++;
+  return line;
+}
+
+// src/optimize/fixes.ts
+var AUTOFIX_RULES = /* @__PURE__ */ new Set([
+  "html.lang-missing",
+  "mobile.viewport-missing",
+  "canonical.relative",
+  "canonical.missing",
+  "canonical.multiple",
+  "sd.missing-context",
+  "hreflang.invalid-code",
+  "title.missing",
+  "robots.no-sitemap",
+  "title.multiple",
+  "description.multiple",
+  "hreflang.relative"
+]);
+var VIEWPORT = '<meta name="viewport" content="width=device-width, initial-scale=1">';
+function indentOf(src, index2) {
+  const lineStart = src.lastIndexOf("\n", index2 - 1) + 1;
+  return /^[\t ]*/.exec(src.slice(lineStart))[0];
+}
+function insertInHead(src, line) {
+  const charset = /<meta\s+charset=[^>]*>/i.exec(src);
+  const head = /<head\b[^>]*>/i.exec(src);
+  const anchor = charset ?? head;
+  if (!anchor) return null;
+  const at = anchor.index + anchor[0].length;
+  const childIndent = charset ? indentOf(src, charset.index) : indentOf(src, head.index) + "  ";
+  return src.slice(0, at) + "\n" + childIndent + line + src.slice(at);
+}
+var HREFLANG_FIXES = { "en-uk": "en-GB", uk: "uk", jp: "ja", "ja-jp": "ja-JP", cn: "zh", "zh-cn": "zh-CN", gr: "el", cz: "cs", dk: "da", se: "sv", kr: "ko", "pt-br": "pt-BR" };
+function planFixes(report, scan, opts = {}) {
+  const root2 = scan.root;
+  const plan = { fixes: [], files: [], tasks: [], skipped: [] };
+  const wanted = (ruleId) => !opts.only?.length || opts.only.includes(ruleId);
+  const pending = /* @__PURE__ */ new Map();
+  const read = (f) => pending.get(f)?.after ?? readText(root2, f);
+  const original = (f) => {
+    try {
+      return readText(root2, f);
+    } catch {
+      return null;
+    }
+  };
+  const stage = (ruleId, title, rationale, file2, after0, action = "modify") => {
+    const prev2 = pending.get(file2);
+    const original0 = prev2 ? prev2.before : action === "create" ? null : original(file2);
+    const after2 = original0 !== null && usesCrlf(original0) ? after0.replace(/\r?\n/g, "\r\n") : after0;
+    const stepBefore = prev2 ? prev2.after : original0;
+    if (stepBefore === after2) return;
+    pending.set(file2, { path: file2, action: original0 === null ? "create" : "modify", before: original0, after: after2 });
+    plan.fixes.push({ id: `fix-${plan.fixes.length + 1}`, ruleId, title, rationale, changes: [{ path: file2, action: stepBefore === null ? "create" : "modify", before: stepBefore, after: after2 }] });
+  };
+  const byRule = new Map(report.findings.map((f) => [f.ruleId, f]));
+  const appOf = (file2) => [...scan.apps].sort((a, b) => b.appRoot.length - a.appRoot.length).find((a) => a.appRoot === "." || (file2 ?? "").startsWith(a.appRoot + "/"));
+  const fwOf = (file2) => appOf(file2)?.framework ?? "unknown";
+  const lang = byRule.get("html.lang-missing");
+  if (lang && wanted("html.lang-missing")) {
+    for (const e of lang.evidence) {
+      if (!e.file || !/\.(php|html?|tsx|jsx|astro|vue)$/.test(e.file)) continue;
+      const src = read(e.file);
+      const fw = fwOf(e.file);
+      let idiom = null;
+      if (fw === "laravel" && e.file.endsWith(".blade.php")) idiom = `lang="{{ str_replace('_', '-', app()->getLocale()) }}"`;
+      else if (fw === "wordpress-theme" && e.file.endsWith(".php")) idiom = "<?php language_attributes(); ?>";
+      else if (opts.lang) idiom = `lang="${opts.lang}"`;
+      if (!idiom) {
+        plan.skipped.push({ ruleId: "html.lang-missing", reason: `${e.file}: language unknown \u2014 pass --lang <code>` });
+        continue;
+      }
+      const tag = fw === "nextjs-pages" ? /<Html\b(?![^>]*\blang=)/ : /<html\b(?![^>]*\b(lang=|language_attributes))/i;
+      const m = tag.exec(src);
+      if (!m) continue;
+      const after2 = src.slice(0, m.index + m[0].length) + " " + idiom + src.slice(m.index + m[0].length);
+      stage("html.lang-missing", "Declare the document language", fw === "laravel" ? "Uses the Laravel app locale (Laravel starter-kit idiom)." : fw === "wordpress-theme" ? "Uses language_attributes(), the WordPress core idiom." : `Sets lang="${opts.lang}" as provided.`, e.file, after2);
+    }
+  }
+  const vp = byRule.get("mobile.viewport-missing");
+  if (vp && wanted("mobile.viewport-missing")) {
+    for (const e of vp.evidence) {
+      if (!e.file || !/\.(php|html?|astro|hbs|njk|liquid|twig)$/.test(e.file)) continue;
+      const after2 = insertInHead(read(e.file), VIEWPORT);
+      if (after2) stage("mobile.viewport-missing", "Add responsive viewport meta tag", "Standard responsive viewport; required for mobile-friendly rendering.", e.file, after2);
+      else plan.skipped.push({ ruleId: "mobile.viewport-missing", reason: `${e.file}: no <head> found` });
+    }
+  }
+  for (const ruleId of ["canonical.relative", "canonical.missing", "canonical.multiple"]) {
+    const f = byRule.get(ruleId);
+    if (!f || !wanted(ruleId)) continue;
+    for (const e of f.evidence) {
+      if (!e.file || !/\.html?$/.test(e.file)) {
+        if (ruleId === "canonical.missing" && e.file) plan.tasks.push({ ruleId, title: "Add canonical URL", instruction: frameworkCanonicalHint(fwOf(e.file)), locations: [{ file: e.file, observed: e.observed }] });
+        continue;
+      }
+      const src = read(e.file);
+      if (ruleId === "canonical.multiple") {
+        const all2 = [...src.matchAll(/^[ \t]*<link\b[^>]*rel=["']?canonical["']?[^>]*>[ \t]*\r?\n?/gim)];
+        const hrefs = new Set(all2.map((m) => /href=["']([^"']+)/i.exec(m[0])?.[1]));
+        if (hrefs.size !== 1) {
+          plan.tasks.push({ ruleId, title: "Resolve conflicting canonicals", instruction: "Multiple canonical links point to different URLs; keep the one for the preferred URL and remove the others (check templates/plugins injecting a second one).", locations: [{ file: e.file, observed: [...hrefs].join(" vs ") }] });
+          continue;
+        }
+        let after2 = src;
+        for (const m of all2.slice(1).reverse()) after2 = after2.slice(0, m.index) + after2.slice(m.index + m[0].length);
+        stage(ruleId, "Remove duplicate identical canonical links", "Duplicates had the same href; keeping exactly one.", e.file, after2);
+        continue;
+      }
+      if (!opts.siteUrl) {
+        plan.skipped.push({ ruleId, reason: `${e.file}: site URL unknown \u2014 pass --site-url https://example.com` });
+        continue;
+      }
+      const url = urlForFile(e.file, scan, opts.siteUrl);
+      if (!url) continue;
+      if (ruleId === "canonical.relative") {
+        const after2 = src.replace(/(<link\b[^>]*rel=["']?canonical["']?[^>]*href=["'])([^"']+)(["'])/i, (_, a, href, c) => a + new URL(href, url).toString() + c);
+        stage(ruleId, "Make canonical URL absolute", `Resolved against ${url}.`, e.file, after2);
+      } else {
+        const after2 = insertInHead(src, `<link rel="canonical" href="${url}">`);
+        if (after2) stage(ruleId, "Add self-referencing canonical", `Canonical for ${url} derived from file path and --site-url.`, e.file, after2);
+      }
+    }
+  }
+  const ctx = byRule.get("sd.missing-context");
+  if (ctx && wanted("sd.missing-context")) {
+    for (const e of ctx.evidence) {
+      if (!e.file || !/\.html?$/.test(e.file)) continue;
+      const src = read(e.file);
+      const after2 = src.replace(/(<script[^>]*application\/ld\+json[^>]*>\s*\{)(?![\s\S]*?"@context")/i, '$1"@context":"https://schema.org",');
+      if (after2 !== src) stage("sd.missing-context", "Add schema.org @context to JSON-LD", "JSON-LD needs @context to resolve types.", e.file, after2);
+    }
+  }
+  const DUP = {
+    "title.multiple": { re: /^[ \t]*<title\b[^>]*>[\s\S]*?<\/title>[ \t]*\r?\n?/gim, value: (m) => m.replace(/<\/?title\b[^>]*>/gi, ""), what: "<title>" },
+    "description.multiple": { re: /^[ \t]*<meta\b(?=[^>]*\bname=["']?description["'\s>])[^>]*>[ \t]*\r?\n?/gim, value: (m) => /content=(["'])([\s\S]*?)\1/i.exec(m)?.[2] ?? "", what: "meta description" }
+  };
+  for (const ruleId of ["title.multiple", "description.multiple"]) {
+    const f = byRule.get(ruleId);
+    if (!f || !wanted(ruleId)) continue;
+    const { re, value, what } = DUP[ruleId];
+    for (const e of f.evidence) {
+      if (!e.file) continue;
+      const conflict = (observed) => plan.tasks.push({ ruleId, title: `Keep exactly one ${what}`, instruction: `Keep one ${what} per page. Usually a layout and a page-level head component (Inertia <Head>, next/head, react-helmet, an SEO plugin) both emit one: remove the layout copy or let the head manager replace it (Inertia: add the \`inertia\` attribute to the template tag).`, locations: [{ file: e.file, line: e.line, url: e.url, observed: observed ?? e.observed }] });
+      if (!/\.html?$/.test(e.file)) {
+        conflict();
+        continue;
+      }
+      const src = read(e.file);
+      const headEnd = src.search(/<\/head\s*>/i);
+      const all2 = [...src.matchAll(re)].filter((m) => headEnd < 0 || m.index < headEnd);
+      const norm4 = (x) => x.replace(/\s+/g, " ").trim();
+      const values = new Set(all2.map((m) => norm4(value(m[0]))));
+      if (all2.length < 2 || values.size !== 1) {
+        conflict(all2.length >= 2 ? [...values].map((x) => `"${x.slice(0, 80)}"`).join(" vs ") : void 0);
+        continue;
+      }
+      let after2 = src;
+      for (const m of all2.slice(1).reverse()) after2 = after2.slice(0, m.index) + after2.slice(m.index + m[0].length);
+      stage(ruleId, `Remove duplicate identical ${what}`, `All ${all2.length} copies were identical; keeping the first one.`, e.file, after2);
+    }
+  }
+  const hrel = byRule.get("hreflang.relative");
+  if (hrel && wanted("hreflang.relative")) {
+    for (const e of hrel.evidence) {
+      if (!e.file || !/\.html?$/.test(e.file)) continue;
+      if (!opts.siteUrl) {
+        plan.skipped.push({ ruleId: "hreflang.relative", reason: `${e.file}: site URL unknown \u2014 pass --site-url https://example.com` });
+        continue;
+      }
+      const pageUrl = urlForFile(e.file, scan, opts.siteUrl);
+      if (!pageUrl) continue;
+      const src = read(e.file);
+      const after2 = src.replace(
+        /<link\b[^>]*\bhreflang=[^>]*>/gi,
+        (tag) => tag.replace(/(\bhref=)(["'])([^"']*)\2/i, (m, a, q, href) => /^[a-z][a-z0-9+.-]*:/i.test(href) || !href ? m : a + q + new URL(href, pageUrl).toString() + q)
+      );
+      if (after2 !== src) stage("hreflang.relative", "Make hreflang URLs absolute", `Resolved against ${pageUrl}.`, e.file, after2);
+    }
+  }
+  const hl = byRule.get("hreflang.invalid-code");
+  if (hl && wanted("hreflang.invalid-code")) {
+    for (const e of hl.evidence) {
+      if (!e.file || !e.observed) continue;
+      const fixd = HREFLANG_FIXES[e.observed.toLowerCase()];
+      if (!fixd) {
+        plan.skipped.push({ ruleId: "hreflang.invalid-code", reason: `${e.file}: no safe mapping for "${e.observed}"` });
+        continue;
+      }
+      const src = read(e.file);
+      const after2 = src.replace(new RegExp(`hreflang=(["'])${e.observed.replace(/[-]/g, "\\-")}\\1`, "gi"), `hreflang="${fixd}"`);
+      stage("hreflang.invalid-code", `Correct hreflang "${e.observed}" \u2192 "${fixd}"`, "ISO 639-1 language / ISO 3166-1 region codes.", e.file, after2);
+    }
+  }
+  const wpTitle = byRule.get("title.missing")?.evidence.find((e) => e.file?.endsWith("functions.php") && fwOf(e.file) === "wordpress-theme");
+  if (wpTitle?.file && wanted("title.missing")) {
+    const src = read(wpTitle.file);
+    const snippet = "\n\n// Let WordPress manage the document title (added by Searvex).\nadd_action( 'after_setup_theme', function () {\n	add_theme_support( 'title-tag' );\n} );\n";
+    stage("title.missing", "Enable add_theme_support('title-tag')", "WordPress core generates <title> via wp_head() when title-tag support is declared.", wpTitle.file, src.replace(/\s*(\?>\s*)?$/, "") + snippet);
+  }
+  const noSitemap = byRule.get("robots.no-sitemap");
+  if (noSitemap && wanted("robots.no-sitemap")) {
+    const owners = new Set(noSitemap.evidence.map((e) => e.file ? appOf(e.file) : scan.apps.length === 1 ? scan.apps[0] : void 0));
+    for (const app of scan.apps) {
+      if (!owners.has(app) || app.locations.sitemapFiles.length || app.locations.hasSitemapGenerator) continue;
+      if (scan.apps.length > 1) {
+        plan.tasks.push({ ruleId: "robots.no-sitemap", title: `Add a sitemap for ${app.appRoot}`, instruction: `This repository has ${scan.apps.length} apps (${scan.apps.map((a) => a.appRoot).join(", ")}). Check which host and paths "${app.appRoot}" serves publicly (proxy/deploy config) and whether those URLs belong in another app's sitemap. If it serves indexable public pages on its own host, run "searvex optimize ${app.appRoot} --site-url <that host>" or add a sitemap generator; routes behind login do not belong in a sitemap.`, locations: [{ file: app.locations.publicDir ?? app.appRoot }] });
+        continue;
+      }
+      planSitemap(app, opts, plan, stage, read, report);
+    }
+  }
+  const TASKS = {
+    "title.missing": "Write a unique, descriptive title that reflects the page's actual content (no keyword stuffing).",
+    "description.missing": "Write a concise, accurate summary of the page. Use only facts present on the page.",
+    "duplicate.title": "Give each page its own title (in frameworks: set per-route metadata; a layout title.template plus page titles avoids duplicates).",
+    "img.alt-missing": 'Describe what each informative image shows; use alt="" for decorative images.',
+    "links.uncrawlable": 'Use <a href="/path"> for navigation (framework Link components render real hrefs).',
+    "h1.missing": "Add a visible main heading that matches the page purpose.",
+    "geo.organization-missing": "Add Organization JSON-LD (name, url, logo, sameAs) on the homepage for a company or brand, or ProfilePage with a Person mainEntity for a personal site, using only verifiable facts.",
+    "index.client-rendered": "Render primary content on the server (SSR/SSG/prerender) so crawlers that do not execute JavaScript can read it.",
+    "sd.missing-required": "Add the required properties listed in the evidence, using values visible on the page.",
+    "content.low-text": "Review whether the page serves its purpose; expand with useful, original content, consolidate, or noindex placeholders."
+  };
+  for (const [ruleId, instruction] of Object.entries(TASKS)) {
+    const f = byRule.get(ruleId);
+    if (!f || !wanted(ruleId)) continue;
+    const locs = f.evidence.filter((e) => !(ruleId === "title.missing" && e.file?.endsWith("functions.php") && fwOf(e.file) === "wordpress-theme"));
+    if (locs.length) plan.tasks.push({ ruleId, title: f.title, instruction, locations: locs.map((e) => ({ file: e.file, line: e.line, url: e.url, observed: e.observed })) });
+  }
+  plan.files = [...pending.values()];
+  return plan;
+}
+function frameworkCanonicalHint(fw) {
+  switch (fw) {
+    case "nextjs-app":
+      return 'Set metadataBase in the root layout and `alternates: { canonical: "/path" }` in each route\'s metadata/generateMetadata.';
+    case "nextjs-pages":
+      return 'Add <link rel="canonical" href={absoluteUrl}> inside next/head for each page.';
+    case "astro":
+      return 'In the base layout: <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} /> (requires `site` in astro.config).';
+    case "nuxt":
+      return 'Use useHead({ link: [{ rel: "canonical", href: absoluteUrl }] }) or the @nuxtjs/seo module.';
+    case "laravel":
+      return 'In the layout <head>: <link rel="canonical" href="{{ url()->current() }}"> (adjust if query strings must be kept).';
+    case "wordpress-theme":
+      return "WordPress core outputs rel=canonical for singular content via wp_head(); ensure header.php calls wp_head().";
+    default:
+      return 'Add <link rel="canonical" href="https://absolute-url"> to the page head.';
+  }
+}
+function urlForFile(file2, scan, siteUrl) {
+  for (const [url, f] of scan.apps.flatMap((a) => [...a.urlToFile])) {
+    if (f === file2) {
+      const u = new URL(url);
+      return new URL(u.pathname + u.search, siteUrl).toString();
+    }
+  }
+  return null;
+}
+function planSitemap(scan, opts, plan, stage, read, report) {
+  const fw = scan.framework;
+  if (!opts.siteUrl) {
+    plan.skipped.push({ ruleId: "robots.no-sitemap", reason: "site URL unknown \u2014 pass --site-url to generate sitemap/robots files" });
+    return;
+  }
+  const origin = new URL(opts.siteUrl).origin;
+  const staticRoutes = [...new Set(scan.routes.filter((r) => !r.dynamic && !r.noindex).map((r) => r.route.replace(/\/+$/, "") || "/"))].sort();
+  let sitemapPath = null;
+  if (scan.staticSite) {
+    const excluded = new Set(report.findings.filter((f) => ["index.noindex", "index.sitemap-non-canonical", "index.soft-404"].includes(f.ruleId)).flatMap((f) => f.evidence.map((e) => e.file)));
+    const urls = [...scan.urlToFile.entries()].filter(([, file2]) => !excluded.has(file2)).map(([u]) => new URL(new URL(u).pathname, origin).toString()).sort();
+    const dir = path4.posix.dirname([...scan.urlToFile.values()].sort((a, b) => a.split("/").length - b.split("/").length || a.length - b.length)[0]);
+    sitemapPath = (dir === "." ? "" : dir + "/") + "sitemap.xml";
+    stage("robots.no-sitemap", "Generate sitemap.xml", `Lists ${urls.length} indexable static pages (noindex/non-canonical pages excluded).`, sitemapPath, sitemapXml(urls), "create");
+  } else if (fw === "nextjs-app") {
+    const appBase = scan.locations.rootLayout ? path4.posix.dirname(scan.locations.rootLayout) : "app";
+    const file2 = `${appBase}/sitemap.ts`;
+    const body = `import type { MetadataRoute } from 'next';
+
+// Generated by Searvex from static routes. Add dynamic routes (e.g. from your CMS) below.
+const BASE_URL = '${origin}';
+
+export default function sitemap(): MetadataRoute.Sitemap {
+  const routes = ${JSON.stringify(staticRoutes)};
+  return routes.map((route) => ({ url: \`\${BASE_URL}\${route === '/' ? '' : route}\` }));
+}
+`;
+    stage("robots.no-sitemap", "Add app/sitemap.ts (Next.js metadata route)", `Uses the Next.js MetadataRoute.Sitemap convention with ${staticRoutes.length} static routes; dynamic routes need data sources.`, file2, body, "create");
+    if (!scan.locations.hasRobotsGenerator && !scan.locations.robotsFile) {
+      stage("robots.no-sitemap", "Add app/robots.ts referencing the sitemap", "Next.js MetadataRoute.Robots convention; allows all crawlers.", `${appBase}/robots.ts`, `import type { MetadataRoute } from 'next';
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: { userAgent: '*', allow: '/' },
+    sitemap: '${origin}/sitemap.xml',
+  };
+}
+`, "create");
+    }
+    return;
+  } else if (scan.locations.publicDir && ["laravel", "nextjs-pages", "vite-spa", "cra-spa", "nuxt", "astro"].includes(fw) && staticRoutes.length) {
+    if (fw === "astro" || fw === "nuxt") {
+      plan.tasks.push({ ruleId: "robots.no-sitemap", title: "Add a sitemap integration", instruction: fw === "astro" ? "Install @astrojs/sitemap and add it to integrations in astro.config (requires `site`)." : "Install @nuxtjs/sitemap (or @nuxtjs/seo) and configure site.url.", locations: [{ file: scan.locations.publicDir }] });
+      return;
+    }
+    sitemapPath = `${scan.locations.publicDir}/sitemap.xml`;
+    stage("robots.no-sitemap", "Generate static sitemap.xml", `Static routes from ${fw === "laravel" ? "routes/web.php" : "the router"} (${staticRoutes.length}); regenerate when routes change or adopt a generator package.`, sitemapPath, sitemapXml(staticRoutes.map((r) => new URL(r, origin).toString())), "create");
+  }
+  if (!sitemapPath) return;
+  const robotsPath = scan.locations.robotsFile ?? (scan.locations.publicDir ? `${scan.locations.publicDir}/robots.txt` : path4.posix.join(path4.posix.dirname(sitemapPath), "robots.txt"));
+  const sitemapUrl = new URL("/" + path4.posix.basename(sitemapPath), origin).toString();
+  let robots = null;
+  try {
+    robots = read(robotsPath);
+  } catch {
+    robots = null;
+  }
+  if (robots === null) stage("robots.no-sitemap", "Create robots.txt with Sitemap directive", "Allows all crawlers and declares the sitemap location.", robotsPath, `User-agent: *
+Allow: /
+
+Sitemap: ${sitemapUrl}
+`, "create");
+  else if (!/^\s*sitemap\s*:/im.test(robots)) stage("robots.no-sitemap", "Add Sitemap directive to robots.txt", "Declares the sitemap location; existing rules are unchanged.", robotsPath, robots.replace(/\s*$/, "") + `
+
+Sitemap: ${sitemapUrl}
+`);
+}
+function usesCrlf(text4) {
+  const crlf = (text4.match(/\r\n/g) ?? []).length;
+  return crlf > 0 && crlf >= (text4.match(/\n/g) ?? []).length - crlf;
+}
+function sitemapXml(urls) {
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.map((u) => `  <url><loc>${esc(u)}</loc></url>`).join("\n")}
+</urlset>
+`;
+}
+
+// src/report/remediation.ts
+var MANUAL = /* @__PURE__ */ new Set([
+  "http.start-url-error",
+  "robots.unreachable",
+  "http.server-error",
+  "http.fetch-error",
+  "canonical.http-https",
+  "canonical.www-duplicate",
+  "https.not-used",
+  "redirect.loop",
+  "redirect.chain",
+  "perf.slow-ttfb",
+  "perf.no-compression",
+  "perf.cwv-poor",
+  "perf.cwv-unmeasured",
+  "geo.citations-unmeasured",
+  "geo.search-bot-blocked",
+  "geo.ai-search-bot-blocked",
+  "geo.training-bots",
+  "geo.snippet-restricted",
+  "content.cannibalization"
+]);
+function remediationOf(ruleId, plan) {
+  if (plan?.fixes.some((f) => f.ruleId === ruleId)) return "auto";
+  return MANUAL.has(ruleId) ? "manual" : "agent";
+}
+var optimizerAvailable = (ruleId) => AUTOFIX_RULES.has(ruleId);
+function shortHash(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h.toString(36).padStart(7, "0");
+}
+function findingRef(ruleId, e) {
+  return `${ruleId}#${shortHash(`${e.url ?? ""}|${e.file ?? ""}|${e.line ?? ""}`)}`;
+}
+function annotateReport(r, plan) {
+  for (const f of r.findings) {
+    f.ref = f.ruleId;
+    f.remediation = remediationOf(f.ruleId, plan);
+    f.evidence = f.evidence.map((e) => ({ ...e, ref: findingRef(f.ruleId, e) }));
+  }
+  r.rootCauseGroups = rootCauseGroups(r);
+  return r;
+}
+function rootCauseGroups(r) {
+  const langOf = new Map(r.inventory.pages.map((p) => [p.url, p.lang ?? ""]));
+  const pageCount = Math.max(1, r.inventory.pages.filter((p) => p.indexable).length || r.crawl.crawled);
+  const out = {};
+  for (const f of r.findings) {
+    const by = /* @__PURE__ */ new Map();
+    const add2 = (key, kind, i) => {
+      let g = by.get(key);
+      if (!g) by.set(key, g = { id: `${f.ruleId}@${key}`, ruleId: f.ruleId, key, kind, pages: 0, evidence: [], langs: [] });
+      if (i !== null) {
+        g.evidence.push(i);
+        const l = f.evidence[i].url ? langOf.get(f.evidence[i].url) : "";
+        if (l && !g.langs.includes(l)) g.langs.push(l);
+      }
+      return g;
+    };
+    f.evidence.forEach((e, i) => {
+      if (e.file) add2(e.file, "file", i);
+      else if (e.url && !/\/robots\.txt$/.test(e.url)) add2(urlPattern(e.url), "template", i);
+      else add2("site", "site", i);
+    });
+    if (!f.evidence.length) add2("site", "site", null);
+    const totals = new Map((f.templates ?? []).map((t) => [t.pattern, t.pages]));
+    for (const g of by.values()) g.pages = g.kind === "template" ? Math.max(totals.get(g.key) ?? 0, g.evidence.length) : Math.max(1, g.evidence.length);
+    const listed = [...by.values()].reduce((n, g) => n + (g.kind === "template" ? g.pages : 0), 0);
+    for (const [pattern, pages] of totals) if (!by.has(pattern) && listed < f.count) by.set(pattern, { id: `${f.ruleId}@${pattern}`, ruleId: f.ruleId, key: pattern, kind: "template", pages, evidence: [], langs: [] });
+    let groups = [...by.values()].sort((a, b) => b.pages - a.pages);
+    const templ = groups.filter((g) => g.kind === "template");
+    if (templ.length >= 3 && f.count >= Math.max(5, 0.6 * pageCount)) {
+      const merged = { id: `${f.ruleId}@layout`, ruleId: f.ruleId, key: `${templ.length} URL templates`, kind: "layout", pages: f.count, evidence: templ.flatMap((g) => g.evidence), langs: [...new Set(templ.flatMap((g) => g.langs))] };
+      groups = [merged, ...groups.filter((g) => g.kind !== "template")];
+    }
+    out[f.ruleId] = groups;
+  }
+  return out;
+}
+
 // src/analyze/audit.ts
 function notAnalysed(r) {
   return r.crawl.status === "unreachable" || r.crawl.status === "robots-blocked";
@@ -37104,7 +37662,7 @@ function countsTowardScore(f) {
 function countAffected(findings, affected) {
   const all2 = /* @__PURE__ */ new Set();
   for (const f of findings) if (f.severity !== "info" && countsTowardScore(f)) {
-    for (const u of affected(f.ruleId)) if (!/\/(robots|llms)\.txt$/.test(u)) all2.add(u);
+    for (const u of affected(f.ruleId)) if (!SITE_FILE.test(u)) all2.add(u);
   }
   return all2.size;
 }
@@ -37193,11 +37751,16 @@ function crawlSummary(result, robotsAgent = DEFAULT_CRAWL.robotsAgent) {
     sitemapIssues: result.sitemap.issues.slice(0, 100)
   };
 }
+function compactAffected(r) {
+  for (const f of r.findings) if (f.affected) f.affected = { count: f.affected.count };
+  return r;
+}
 async function auditWebsite(url, options = {}) {
   const kb = options.kb ?? loadKnowledge();
   const store2 = new RunStore(options.workspace ?? process.cwd(), options.resumeRunId ?? RunStore.newRunId("audit"));
   const result = await crawl(url, options.crawl, store2);
-  const report = await analyzeCrawl(result, kb, { ...options.crawl, probes: options.probes ?? true, checkExternal: options.checkExternal, cruxApiKey: options.cruxApiKey, preLaunch: options.preLaunch });
+  const report = annotateReport(await analyzeCrawl(result, kb, { ...options.crawl, probes: options.probes ?? true, checkExternal: options.checkExternal, cruxApiKey: options.cruxApiKey, preLaunch: options.preLaunch }));
+  if (options.compact) compactAffected(report);
   store2.writeJson("report.json", report);
   return { report, store: store2 };
 }
@@ -38225,547 +38788,6 @@ function buildRepairPrompt(input) {
 // src/report/brand.ts
 var LOGO_SVG = '<svg class="logo" role="img" aria-label="Searvex" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 681.32 123.57"><g fill-rule="evenodd"><path class="m" d="M31.287 1.88.133 10.186c22.846 29.77 42.23 62.654 58.154 104.885C74.21 73.532 94.98 37.533 111.595.148L91.518 4.994C81.825 27.84 69.364 60.725 61.056 89.11c-9-24.923-20.77-59.539-29.77-87.23"/><path class="c" d="M34.796 95.918H3.595l-2.309 10.961h38.248a441 441 0 0 0-2.52-5.94 383 383 0 0 0-2.218-5.021m42.322 10.961h30.9l2.307-10.961H81.843q-.248.557-.493 1.116a562 562 0 0 0-4.232 9.845"/></g><g fill-rule="evenodd"><path class="m" d="m253.224 87.86 45.715-11.906c0-17.62-10.953-30.476-30.477-30.476s-34.286 13.81-34.286 35.238c0 20.477 13.81 35.953 34.762 35.953 14.763 0 25.239-7.38 29.525-19.286 1.428-6.19-5.715-7.143-8.096-2.857-3.81 8.572-10 13.81-19.048 13.81-10 0-16.667-5.715-18.095-20.477m346.673-11.906L554.182 87.86c1.429 14.763 8.096 20.477 18.096 20.477 9.048 0 15.238-5.238 19.048-13.81 2.38-4.286 9.524-3.333 8.095 2.857-4.286 11.905-14.762 19.286-29.524 19.286-20.953 0-34.763-15.476-34.763-35.953 0-21.429 14.762-35.238 34.286-35.238s30.477 12.857 30.477 30.476m-185.36-13.88-.715-11.43a10 10 0 0 0-.347-1.902c-.734-2.412-2.558-2.464-4.67-1.967-1.09.255-2.157.612-3.214.976-.63.217-1.283.45-1.912.679l-12.357 4.429c-.91.34-1.986.76-2.6 1.557a2.35 2.35 0 0 0-.472 1.443c-.01 1.473 1.057 2.069 2.357 2.357l4.286.214c1.905.336 2.357 1.65 2.357 3.429v42.572c0 2.129-.547 3.745-2.714 4.429l-3.071.714c-.8.252-1.658.629-2.15 1.343-.789 1.14-.465 2.883.75 3.59.711.415 1.592.496 2.4.496h31.786c.93 0 1.952-.131 2.714-.715 1.196-.914 1.253-2.919.143-3.928-.638-.579-1.524-.815-2.357-.929l-6.286-.928c-2.529-.436-3.643-1.531-3.643-4.143V77.288c0-5.87.862-13.134 5.05-17.65 1.65-1.777 3.85-3.022 6.308-3.065 1.971-.036 3.628.598 4.26 2.588.209.664.29 1.362.311 2.055v2.5c0 1.769.36 3.59 1.414 5.05 2.324 3.214 7.689 3.65 10.872 1.552 2.774-1.826 3.831-5.06 4.076-8.228.246-3.193-.071-6.598-1.552-9.486-3.212-6.265-11.343-7.817-17.577-5.638-6.124 2.14-10.255 7.466-12.733 13.25zM193.102 51.93c-2.873-.014-5.873.65-8.071 2.607-.933.831-1.698 1.843-2.195 2.99-1.22 2.81-.993 6.553.892 9.037 1.531 2.016 3.98 3.278 6.28 4.193 3.244 1.29 6.642 1.962 10.014 2.821 7.55 1.929 16.998 5.257 20.974 12.567.78 1.436 1.36 3 1.74 4.59.393 1.632.624 3.372.581 5.053-.076 2.962-.476 5.822-1.688 8.555-3.64 8.205-12.017 11.529-20.455 12.214-3.121.255-6.388.281-9.5-.204-1.91-.3-3.784-.896-5.603-1.536-.88-.312-1.733-.7-2.628-.964-1.222-.365-2.667-.579-3.857.014-1.048.526-1.693 1.617-2.62 2.305-.414.31-.916.471-1.428.524-1.336.138-2.122-.35-2.712-1.534a11 11 0 0 1-.581-1.445l-5-14.715c-.365-1.254-.731-2.814-.274-4.095.624-1.755 3.138-2.317 4.602-1.33 1.308.88 1.948 2.4 2.734 3.694 1.307 2.16 2.79 4.231 4.524 6.072 5.16 5.479 11.86 8.005 19.348 7.443 3.597-.271 7.352-1.42 9.424-4.593.733-1.126 1.169-2.412 1.338-3.74a10.4 10.4 0 0 0-.06-3.158c-.94-5.14-6.21-7.4-10.655-8.88-2.933-.98-5.943-1.613-8.928-2.396-6.6-1.731-14.15-4.536-18.136-10.458-.924-1.371-1.617-2.897-2.115-4.471-.716-2.26-1.028-4.65-1.016-7.017.009-1.883.228-3.757.75-5.571 3.395-11.805 16.702-15.453 27.643-14.215 2.31.262 4.533.936 6.686 1.802.857.343 1.674.789 2.547 1.086 1.267.436 2.793.634 4.034 0 1.74-.888 2.314-3.088 4.555-3.102a2.23 2.23 0 0 1 1.607.678c.257.265.44.581.58.92.187.447.3.926.384 1.402l3.786 14c.324 1.293.679 2.898.25 4.214-.421 1.296-2.071 2.077-3.37 1.746-.432-.11-.804-.35-1.142-.634-1.498-1.257-2.305-3.176-3.326-4.771a31.5 31.5 0 0 0-3.126-4.143c-4.241-4.703-10.444-7.526-16.787-7.555M312.83 92.226c1.39-2.53 3.466-4.607 5.812-6.26 3.843-2.71 8.44-4.147 13.048-4.857 6.974-1.074 13.962-.874 20.702 1.179V62.573c0-5.252-2.093-10.098-7.614-11.376-3.876-.898-9.405-.336-11.917 3.145a5.85 5.85 0 0 0-1.112 3.445v6c0 5.789-4.421 7.993-9.643 8-4.062.005-7.6-1.752-8.086-6.135-.15-1.35-.014-2.738.34-4.048.422-1.557 1.163-3.012 2.084-4.333 5.988-8.574 18.59-11.222 28.377-11.127 2.716.026 5.038.138 7.71.588 7.762 1.303 14.462 5.358 16.605 13.334.48 1.795.685 3.65.685 5.507v37.93c0 1.09.143 2.304.857 3.178 1 1.224 3.284 1.398 4.546.49.974-.7 1.69-2.414 2.857-2.802a1.7 1.7 0 0 1 1.007-.017c1.617.47 1.055 3.293.707 4.339a10 10 0 0 1-.683 1.554c-3.129 5.777-10.281 7.243-16.298 6.162-4.622-.83-8.393-3.583-9.136-8.404-5.731 5.73-14.024 8.771-22.072 8.714-3.671-.026-7.36-.533-10.745-2.017-2.907-1.271-5.596-3.25-7.415-5.88-3.29-4.765-3.378-11.57-.616-16.594m368.02-45.558-13.095 3.333c-5.953 6.667-11.667 13.303-19.596 20.572-6.326-7.702-12.564-15.307-18.738-22.714l-20.953 5.714c8.638 10.417 17.955 21.105 27.37 32.172-10.594 10.507-19.808 20.99-30.942 31.52l12.62-3.215c6.612-8.267 13.569-16.36 21.724-24.293 7.112 8.414 14.238 17.053 21.134 25.96l20.953-5.476c-10.213-11.827-20.125-23.803-29.815-35.591 10.2-9.56 19.726-18.88 29.338-27.982m-228.576 7.857 23.334-6.19c6.19 19.048 13.81 44.762 20.477 64.287 6.19-20.953 13.333-45.716 19.762-61.668l15.476-4.048c-11.904 25.239-26.667 49.525-37.62 76.668-10.476-27.143-24.762-48.572-41.429-69.049M284.177 70.716l-31.43 8.096c.477-16.667 6.191-26.191 16.191-26.191 9.048 0 14.763 6.19 15.239 18.095m269.529 8.096 31.43-8.096c-.477-11.905-6.191-18.095-15.24-18.095-10 0-15.714 9.523-16.19 26.19m-201.314 8.19c-2.912-1.09-5.88-1.802-9.007-1.864-7.255-.145-14.929 3.912-14.493 12.079.148 2.778.578 5.407 2.362 7.662 5.219 6.602 15.79 3.662 21.138-1.09z"/><path class="c" d="M476.847 110.788h-22.12l-1.642 7.31h27.143c-.595-1.31-1.19-2.643-1.786-3.952a200 200 0 0 0-1.595-3.358m30.025 7.31h21.905l1.643-7.31h-20.191c-.12.262-.238.5-.357.762a325 325 0 0 0-3 6.548"/></g></svg>';
 var FAVICON_URI = "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20data-markilo-role%3D%22small%22%20viewBox%3D%220%200%201024%201024%22%3E%3Cstyle%3E%40media%20(prefers-color-scheme%3Adark)%7B.d0%7Bfill%3A%23f6f1e7%7D.d1%7Bfill%3A%23bf4933%7D%7D%3C%2Fstyle%3E%3Ctitle%3ESearvex%20%E2%80%94%20small%3C%2Ftitle%3E%3Cpath%20fill%3D%22%230e4f55%22%20fill-rule%3D%22evenodd%22%20d%3D%22M342.43%2051.32%2059.8%20124.81c186.53%20243.05%20350.46%20511.54%20486.11%20856.35C681.57%20642.01%20839.84%20348.08%20969.85%2042.84L766.36%2088.06C704.18%20274.6%20613.74%20523.3%20551.57%20735.27c-62.18-183.7-146.97-452.2-209.14-683.95%22%20class%3D%22d0%22%20data-layer%3D%22layer-1%22%2F%3E%3Cpath%20fill%3D%22%23b8432d%22%20fill-rule%3D%22evenodd%22%20d%3D%22M313.43%20801.22H64.51L40.96%20942.53h336.46a3492%203492%200%200%200-28.31-64.63%203267%203267%200%200%200-35.68-76.68m401.12%20141.31h244.94l23.55-141.31H776.02c-8.27%2018.48-16.48%2036.99-24.6%2055.53-12.48%2028.5-24.79%2057.09-36.87%2085.78%22%20class%3D%22d1%22%20data-layer%3D%22layer-2%22%2F%3E%3C%2Fsvg%3E";
-
-// src/optimize/fixes.ts
-import path4 from "node:path";
-
-// src/repo/fs-safe.ts
-import fs3 from "node:fs";
-import path3 from "node:path";
-var SKIP_DIRS = /* @__PURE__ */ new Set([
-  "node_modules",
-  ".git",
-  ".hg",
-  ".svn",
-  "vendor",
-  ".next",
-  ".nuxt",
-  ".output",
-  ".svelte-kit",
-  ".astro",
-  ".vercel",
-  ".netlify",
-  ".turbo",
-  ".cache",
-  "coverage",
-  ".searvex",
-  "__pycache__",
-  ".venv",
-  "venv",
-  "target",
-  "storage",
-  "bootstrap/cache",
-  ".idea",
-  ".vscode"
-]);
-var SECRET_PATTERNS = [
-  /(^|[\\/])\.env(\..*)?$/i,
-  /\.pem$/i,
-  /\.key$/i,
-  /\.p12$/i,
-  /\.pfx$/i,
-  /(^|[\\/])id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$/i,
-  /(^|[\\/])\.npmrc$/i,
-  /(^|[\\/])\.pypirc$/i,
-  /(^|[\\/])\.netrc$/i,
-  /(^|[\\/])credentials(\.json)?$/i,
-  /secrets?\.(json|ya?ml|toml)$/i,
-  /(^|[\\/])wp-config\.php$/i,
-  /(^|[\\/])\.htpasswd$/i,
-  /service-account.*\.json$/i,
-  /(^|[\\/])auth\.json$/i
-];
-function isSecretPath(p) {
-  return SECRET_PATTERNS.some((re) => re.test(p));
-}
-var PathEscapeError = class extends Error {
-};
-function resolveInside(root2, rel2) {
-  const realRoot = fs3.realpathSync(root2);
-  const abs = path3.resolve(realRoot, rel2);
-  const relative = path3.relative(realRoot, abs);
-  if (relative.startsWith("..") || path3.isAbsolute(relative)) throw new PathEscapeError(`Path escapes repository root: ${rel2}`);
-  let probe = abs;
-  while (!fs3.existsSync(probe)) probe = path3.dirname(probe);
-  const realProbe = fs3.realpathSync(probe);
-  const r2 = path3.relative(realRoot, realProbe);
-  if (r2.startsWith("..") || path3.isAbsolute(r2)) throw new PathEscapeError(`Path resolves outside repository root via symlink: ${rel2}`);
-  return abs;
-}
-function walk(root2, opts = {}) {
-  const maxFiles = opts.maxFiles ?? 5e4;
-  const maxBytes = opts.maxFileBytes ?? 2 * 1024 * 1024;
-  const realRoot = fs3.realpathSync(root2);
-  const files = [];
-  const skipped = { symlinks: 0, secrets: 0, large: 0, truncated: false };
-  const stack = [""];
-  while (stack.length) {
-    const relDir = stack.pop();
-    let entries;
-    try {
-      entries = fs3.readdirSync(path3.join(realRoot, relDir), { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const e of entries) {
-      const rel2 = relDir ? `${relDir}/${e.name}` : e.name;
-      if (e.isSymbolicLink()) {
-        skipped.symlinks++;
-        continue;
-      }
-      if (e.isDirectory()) {
-        if (SKIP_DIRS.has(e.name) || SKIP_DIRS.has(rel2)) continue;
-        if (e.name.startsWith(".") && e.name !== ".well-known" && e.name !== ".vitepress") continue;
-        stack.push(rel2);
-        continue;
-      }
-      if (!e.isFile()) continue;
-      if (isSecretPath(rel2)) {
-        skipped.secrets++;
-        continue;
-      }
-      if (opts.include && !opts.include(rel2)) continue;
-      const abs = path3.join(realRoot, rel2);
-      const size = fs3.statSync(abs).size;
-      if (size > maxBytes) {
-        skipped.large++;
-        continue;
-      }
-      files.push({ rel: rel2, abs, size });
-      if (files.length >= maxFiles) {
-        skipped.truncated = true;
-        return { files, skipped };
-      }
-    }
-  }
-  files.sort((a, b) => a.rel.localeCompare(b.rel));
-  return { files, skipped };
-}
-function readText(root2, rel2) {
-  if (isSecretPath(rel2)) throw new Error(`Refusing to read secret-bearing file: ${rel2}`);
-  const abs = resolveInside(root2, rel2);
-  const st = fs3.lstatSync(abs);
-  if (st.isSymbolicLink()) throw new PathEscapeError(`Refusing to read symlink: ${rel2}`);
-  return fs3.readFileSync(abs, "utf8");
-}
-function lineOf(text4, index2) {
-  let line = 1;
-  for (let i = 0; i < index2 && i < text4.length; i++) if (text4.charCodeAt(i) === 10) line++;
-  return line;
-}
-
-// src/optimize/fixes.ts
-var AUTOFIX_RULES = /* @__PURE__ */ new Set([
-  "html.lang-missing",
-  "mobile.viewport-missing",
-  "canonical.relative",
-  "canonical.missing",
-  "canonical.multiple",
-  "sd.missing-context",
-  "hreflang.invalid-code",
-  "title.missing",
-  "robots.no-sitemap",
-  "title.multiple",
-  "description.multiple",
-  "hreflang.relative"
-]);
-var VIEWPORT = '<meta name="viewport" content="width=device-width, initial-scale=1">';
-function indentOf(src, index2) {
-  const lineStart = src.lastIndexOf("\n", index2 - 1) + 1;
-  return /^[\t ]*/.exec(src.slice(lineStart))[0];
-}
-function insertInHead(src, line) {
-  const charset = /<meta\s+charset=[^>]*>/i.exec(src);
-  const head = /<head\b[^>]*>/i.exec(src);
-  const anchor = charset ?? head;
-  if (!anchor) return null;
-  const at = anchor.index + anchor[0].length;
-  const childIndent = charset ? indentOf(src, charset.index) : indentOf(src, head.index) + "  ";
-  return src.slice(0, at) + "\n" + childIndent + line + src.slice(at);
-}
-var HREFLANG_FIXES = { "en-uk": "en-GB", uk: "uk", jp: "ja", "ja-jp": "ja-JP", cn: "zh", "zh-cn": "zh-CN", gr: "el", cz: "cs", dk: "da", se: "sv", kr: "ko", "pt-br": "pt-BR" };
-function planFixes(report, scan, opts = {}) {
-  const root2 = scan.root;
-  const plan = { fixes: [], files: [], tasks: [], skipped: [] };
-  const wanted = (ruleId) => !opts.only?.length || opts.only.includes(ruleId);
-  const pending = /* @__PURE__ */ new Map();
-  const read = (f) => pending.get(f)?.after ?? readText(root2, f);
-  const original = (f) => {
-    try {
-      return readText(root2, f);
-    } catch {
-      return null;
-    }
-  };
-  const stage = (ruleId, title, rationale, file2, after0, action = "modify") => {
-    const prev2 = pending.get(file2);
-    const original0 = prev2 ? prev2.before : action === "create" ? null : original(file2);
-    const after2 = original0 !== null && usesCrlf(original0) ? after0.replace(/\r?\n/g, "\r\n") : after0;
-    const stepBefore = prev2 ? prev2.after : original0;
-    if (stepBefore === after2) return;
-    pending.set(file2, { path: file2, action: original0 === null ? "create" : "modify", before: original0, after: after2 });
-    plan.fixes.push({ id: `fix-${plan.fixes.length + 1}`, ruleId, title, rationale, changes: [{ path: file2, action: stepBefore === null ? "create" : "modify", before: stepBefore, after: after2 }] });
-  };
-  const byRule = new Map(report.findings.map((f) => [f.ruleId, f]));
-  const appOf = (file2) => [...scan.apps].sort((a, b) => b.appRoot.length - a.appRoot.length).find((a) => a.appRoot === "." || (file2 ?? "").startsWith(a.appRoot + "/"));
-  const fwOf = (file2) => appOf(file2)?.framework ?? "unknown";
-  const lang = byRule.get("html.lang-missing");
-  if (lang && wanted("html.lang-missing")) {
-    for (const e of lang.evidence) {
-      if (!e.file || !/\.(php|html?|tsx|jsx|astro|vue)$/.test(e.file)) continue;
-      const src = read(e.file);
-      const fw = fwOf(e.file);
-      let idiom = null;
-      if (fw === "laravel" && e.file.endsWith(".blade.php")) idiom = `lang="{{ str_replace('_', '-', app()->getLocale()) }}"`;
-      else if (fw === "wordpress-theme" && e.file.endsWith(".php")) idiom = "<?php language_attributes(); ?>";
-      else if (opts.lang) idiom = `lang="${opts.lang}"`;
-      if (!idiom) {
-        plan.skipped.push({ ruleId: "html.lang-missing", reason: `${e.file}: language unknown \u2014 pass --lang <code>` });
-        continue;
-      }
-      const tag = fw === "nextjs-pages" ? /<Html\b(?![^>]*\blang=)/ : /<html\b(?![^>]*\b(lang=|language_attributes))/i;
-      const m = tag.exec(src);
-      if (!m) continue;
-      const after2 = src.slice(0, m.index + m[0].length) + " " + idiom + src.slice(m.index + m[0].length);
-      stage("html.lang-missing", "Declare the document language", fw === "laravel" ? "Uses the Laravel app locale (Laravel starter-kit idiom)." : fw === "wordpress-theme" ? "Uses language_attributes(), the WordPress core idiom." : `Sets lang="${opts.lang}" as provided.`, e.file, after2);
-    }
-  }
-  const vp = byRule.get("mobile.viewport-missing");
-  if (vp && wanted("mobile.viewport-missing")) {
-    for (const e of vp.evidence) {
-      if (!e.file || !/\.(php|html?|astro|hbs|njk|liquid|twig)$/.test(e.file)) continue;
-      const after2 = insertInHead(read(e.file), VIEWPORT);
-      if (after2) stage("mobile.viewport-missing", "Add responsive viewport meta tag", "Standard responsive viewport; required for mobile-friendly rendering.", e.file, after2);
-      else plan.skipped.push({ ruleId: "mobile.viewport-missing", reason: `${e.file}: no <head> found` });
-    }
-  }
-  for (const ruleId of ["canonical.relative", "canonical.missing", "canonical.multiple"]) {
-    const f = byRule.get(ruleId);
-    if (!f || !wanted(ruleId)) continue;
-    for (const e of f.evidence) {
-      if (!e.file || !/\.html?$/.test(e.file)) {
-        if (ruleId === "canonical.missing" && e.file) plan.tasks.push({ ruleId, title: "Add canonical URL", instruction: frameworkCanonicalHint(fwOf(e.file)), locations: [{ file: e.file, observed: e.observed }] });
-        continue;
-      }
-      const src = read(e.file);
-      if (ruleId === "canonical.multiple") {
-        const all2 = [...src.matchAll(/^[ \t]*<link\b[^>]*rel=["']?canonical["']?[^>]*>[ \t]*\r?\n?/gim)];
-        const hrefs = new Set(all2.map((m) => /href=["']([^"']+)/i.exec(m[0])?.[1]));
-        if (hrefs.size !== 1) {
-          plan.tasks.push({ ruleId, title: "Resolve conflicting canonicals", instruction: "Multiple canonical links point to different URLs; keep the one for the preferred URL and remove the others (check templates/plugins injecting a second one).", locations: [{ file: e.file, observed: [...hrefs].join(" vs ") }] });
-          continue;
-        }
-        let after2 = src;
-        for (const m of all2.slice(1).reverse()) after2 = after2.slice(0, m.index) + after2.slice(m.index + m[0].length);
-        stage(ruleId, "Remove duplicate identical canonical links", "Duplicates had the same href; keeping exactly one.", e.file, after2);
-        continue;
-      }
-      if (!opts.siteUrl) {
-        plan.skipped.push({ ruleId, reason: `${e.file}: site URL unknown \u2014 pass --site-url https://example.com` });
-        continue;
-      }
-      const url = urlForFile(e.file, scan, opts.siteUrl);
-      if (!url) continue;
-      if (ruleId === "canonical.relative") {
-        const after2 = src.replace(/(<link\b[^>]*rel=["']?canonical["']?[^>]*href=["'])([^"']+)(["'])/i, (_, a, href, c) => a + new URL(href, url).toString() + c);
-        stage(ruleId, "Make canonical URL absolute", `Resolved against ${url}.`, e.file, after2);
-      } else {
-        const after2 = insertInHead(src, `<link rel="canonical" href="${url}">`);
-        if (after2) stage(ruleId, "Add self-referencing canonical", `Canonical for ${url} derived from file path and --site-url.`, e.file, after2);
-      }
-    }
-  }
-  const ctx = byRule.get("sd.missing-context");
-  if (ctx && wanted("sd.missing-context")) {
-    for (const e of ctx.evidence) {
-      if (!e.file || !/\.html?$/.test(e.file)) continue;
-      const src = read(e.file);
-      const after2 = src.replace(/(<script[^>]*application\/ld\+json[^>]*>\s*\{)(?![\s\S]*?"@context")/i, '$1"@context":"https://schema.org",');
-      if (after2 !== src) stage("sd.missing-context", "Add schema.org @context to JSON-LD", "JSON-LD needs @context to resolve types.", e.file, after2);
-    }
-  }
-  const DUP = {
-    "title.multiple": { re: /^[ \t]*<title\b[^>]*>[\s\S]*?<\/title>[ \t]*\r?\n?/gim, value: (m) => m.replace(/<\/?title\b[^>]*>/gi, ""), what: "<title>" },
-    "description.multiple": { re: /^[ \t]*<meta\b(?=[^>]*\bname=["']?description["'\s>])[^>]*>[ \t]*\r?\n?/gim, value: (m) => /content=(["'])([\s\S]*?)\1/i.exec(m)?.[2] ?? "", what: "meta description" }
-  };
-  for (const ruleId of ["title.multiple", "description.multiple"]) {
-    const f = byRule.get(ruleId);
-    if (!f || !wanted(ruleId)) continue;
-    const { re, value, what } = DUP[ruleId];
-    for (const e of f.evidence) {
-      if (!e.file) continue;
-      const conflict = (observed) => plan.tasks.push({ ruleId, title: `Keep exactly one ${what}`, instruction: `Keep one ${what} per page. Usually a layout and a page-level head component (Inertia <Head>, next/head, react-helmet, an SEO plugin) both emit one: remove the layout copy or let the head manager replace it (Inertia: add the \`inertia\` attribute to the template tag).`, locations: [{ file: e.file, line: e.line, url: e.url, observed: observed ?? e.observed }] });
-      if (!/\.html?$/.test(e.file)) {
-        conflict();
-        continue;
-      }
-      const src = read(e.file);
-      const headEnd = src.search(/<\/head\s*>/i);
-      const all2 = [...src.matchAll(re)].filter((m) => headEnd < 0 || m.index < headEnd);
-      const norm4 = (x) => x.replace(/\s+/g, " ").trim();
-      const values = new Set(all2.map((m) => norm4(value(m[0]))));
-      if (all2.length < 2 || values.size !== 1) {
-        conflict(all2.length >= 2 ? [...values].map((x) => `"${x.slice(0, 80)}"`).join(" vs ") : void 0);
-        continue;
-      }
-      let after2 = src;
-      for (const m of all2.slice(1).reverse()) after2 = after2.slice(0, m.index) + after2.slice(m.index + m[0].length);
-      stage(ruleId, `Remove duplicate identical ${what}`, `All ${all2.length} copies were identical; keeping the first one.`, e.file, after2);
-    }
-  }
-  const hrel = byRule.get("hreflang.relative");
-  if (hrel && wanted("hreflang.relative")) {
-    for (const e of hrel.evidence) {
-      if (!e.file || !/\.html?$/.test(e.file)) continue;
-      if (!opts.siteUrl) {
-        plan.skipped.push({ ruleId: "hreflang.relative", reason: `${e.file}: site URL unknown \u2014 pass --site-url https://example.com` });
-        continue;
-      }
-      const pageUrl = urlForFile(e.file, scan, opts.siteUrl);
-      if (!pageUrl) continue;
-      const src = read(e.file);
-      const after2 = src.replace(
-        /<link\b[^>]*\bhreflang=[^>]*>/gi,
-        (tag) => tag.replace(/(\bhref=)(["'])([^"']*)\2/i, (m, a, q, href) => /^[a-z][a-z0-9+.-]*:/i.test(href) || !href ? m : a + q + new URL(href, pageUrl).toString() + q)
-      );
-      if (after2 !== src) stage("hreflang.relative", "Make hreflang URLs absolute", `Resolved against ${pageUrl}.`, e.file, after2);
-    }
-  }
-  const hl = byRule.get("hreflang.invalid-code");
-  if (hl && wanted("hreflang.invalid-code")) {
-    for (const e of hl.evidence) {
-      if (!e.file || !e.observed) continue;
-      const fixd = HREFLANG_FIXES[e.observed.toLowerCase()];
-      if (!fixd) {
-        plan.skipped.push({ ruleId: "hreflang.invalid-code", reason: `${e.file}: no safe mapping for "${e.observed}"` });
-        continue;
-      }
-      const src = read(e.file);
-      const after2 = src.replace(new RegExp(`hreflang=(["'])${e.observed.replace(/[-]/g, "\\-")}\\1`, "gi"), `hreflang="${fixd}"`);
-      stage("hreflang.invalid-code", `Correct hreflang "${e.observed}" \u2192 "${fixd}"`, "ISO 639-1 language / ISO 3166-1 region codes.", e.file, after2);
-    }
-  }
-  const wpTitle = byRule.get("title.missing")?.evidence.find((e) => e.file?.endsWith("functions.php") && fwOf(e.file) === "wordpress-theme");
-  if (wpTitle?.file && wanted("title.missing")) {
-    const src = read(wpTitle.file);
-    const snippet = "\n\n// Let WordPress manage the document title (added by Searvex).\nadd_action( 'after_setup_theme', function () {\n	add_theme_support( 'title-tag' );\n} );\n";
-    stage("title.missing", "Enable add_theme_support('title-tag')", "WordPress core generates <title> via wp_head() when title-tag support is declared.", wpTitle.file, src.replace(/\s*(\?>\s*)?$/, "") + snippet);
-  }
-  const noSitemap = byRule.get("robots.no-sitemap");
-  if (noSitemap && wanted("robots.no-sitemap")) {
-    const owners = new Set(noSitemap.evidence.map((e) => e.file ? appOf(e.file) : scan.apps.length === 1 ? scan.apps[0] : void 0));
-    for (const app of scan.apps) {
-      if (!owners.has(app) || app.locations.sitemapFiles.length || app.locations.hasSitemapGenerator) continue;
-      if (scan.apps.length > 1) {
-        plan.tasks.push({ ruleId: "robots.no-sitemap", title: `Add a sitemap for ${app.appRoot}`, instruction: `This repository has ${scan.apps.length} apps (${scan.apps.map((a) => a.appRoot).join(", ")}). Check which host and paths "${app.appRoot}" serves publicly (proxy/deploy config) and whether those URLs belong in another app's sitemap. If it serves indexable public pages on its own host, run "searvex optimize ${app.appRoot} --site-url <that host>" or add a sitemap generator; routes behind login do not belong in a sitemap.`, locations: [{ file: app.locations.publicDir ?? app.appRoot }] });
-        continue;
-      }
-      planSitemap(app, opts, plan, stage, read, report);
-    }
-  }
-  const TASKS = {
-    "title.missing": "Write a unique, descriptive title that reflects the page's actual content (no keyword stuffing).",
-    "description.missing": "Write a concise, accurate summary of the page. Use only facts present on the page.",
-    "duplicate.title": "Give each page its own title (in frameworks: set per-route metadata; a layout title.template plus page titles avoids duplicates).",
-    "img.alt-missing": 'Describe what each informative image shows; use alt="" for decorative images.',
-    "links.uncrawlable": 'Use <a href="/path"> for navigation (framework Link components render real hrefs).',
-    "h1.missing": "Add a visible main heading that matches the page purpose.",
-    "geo.organization-missing": "Add Organization JSON-LD (name, url, logo, sameAs) on the homepage for a company or brand, or ProfilePage with a Person mainEntity for a personal site, using only verifiable facts.",
-    "index.client-rendered": "Render primary content on the server (SSR/SSG/prerender) so crawlers that do not execute JavaScript can read it.",
-    "sd.missing-required": "Add the required properties listed in the evidence, using values visible on the page.",
-    "content.low-text": "Review whether the page serves its purpose; expand with useful, original content, consolidate, or noindex placeholders."
-  };
-  for (const [ruleId, instruction] of Object.entries(TASKS)) {
-    const f = byRule.get(ruleId);
-    if (!f || !wanted(ruleId)) continue;
-    const locs = f.evidence.filter((e) => !(ruleId === "title.missing" && e.file?.endsWith("functions.php") && fwOf(e.file) === "wordpress-theme"));
-    if (locs.length) plan.tasks.push({ ruleId, title: f.title, instruction, locations: locs.map((e) => ({ file: e.file, line: e.line, url: e.url, observed: e.observed })) });
-  }
-  plan.files = [...pending.values()];
-  return plan;
-}
-function frameworkCanonicalHint(fw) {
-  switch (fw) {
-    case "nextjs-app":
-      return 'Set metadataBase in the root layout and `alternates: { canonical: "/path" }` in each route\'s metadata/generateMetadata.';
-    case "nextjs-pages":
-      return 'Add <link rel="canonical" href={absoluteUrl}> inside next/head for each page.';
-    case "astro":
-      return 'In the base layout: <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} /> (requires `site` in astro.config).';
-    case "nuxt":
-      return 'Use useHead({ link: [{ rel: "canonical", href: absoluteUrl }] }) or the @nuxtjs/seo module.';
-    case "laravel":
-      return 'In the layout <head>: <link rel="canonical" href="{{ url()->current() }}"> (adjust if query strings must be kept).';
-    case "wordpress-theme":
-      return "WordPress core outputs rel=canonical for singular content via wp_head(); ensure header.php calls wp_head().";
-    default:
-      return 'Add <link rel="canonical" href="https://absolute-url"> to the page head.';
-  }
-}
-function urlForFile(file2, scan, siteUrl) {
-  for (const [url, f] of scan.apps.flatMap((a) => [...a.urlToFile])) {
-    if (f === file2) {
-      const u = new URL(url);
-      return new URL(u.pathname + u.search, siteUrl).toString();
-    }
-  }
-  return null;
-}
-function planSitemap(scan, opts, plan, stage, read, report) {
-  const fw = scan.framework;
-  if (!opts.siteUrl) {
-    plan.skipped.push({ ruleId: "robots.no-sitemap", reason: "site URL unknown \u2014 pass --site-url to generate sitemap/robots files" });
-    return;
-  }
-  const origin = new URL(opts.siteUrl).origin;
-  const staticRoutes = [...new Set(scan.routes.filter((r) => !r.dynamic && !r.noindex).map((r) => r.route.replace(/\/+$/, "") || "/"))].sort();
-  let sitemapPath = null;
-  if (scan.staticSite) {
-    const excluded = new Set(report.findings.filter((f) => ["index.noindex", "index.sitemap-non-canonical", "index.soft-404"].includes(f.ruleId)).flatMap((f) => f.evidence.map((e) => e.file)));
-    const urls = [...scan.urlToFile.entries()].filter(([, file2]) => !excluded.has(file2)).map(([u]) => new URL(new URL(u).pathname, origin).toString()).sort();
-    const dir = path4.posix.dirname([...scan.urlToFile.values()].sort((a, b) => a.split("/").length - b.split("/").length || a.length - b.length)[0]);
-    sitemapPath = (dir === "." ? "" : dir + "/") + "sitemap.xml";
-    stage("robots.no-sitemap", "Generate sitemap.xml", `Lists ${urls.length} indexable static pages (noindex/non-canonical pages excluded).`, sitemapPath, sitemapXml(urls), "create");
-  } else if (fw === "nextjs-app") {
-    const appBase = scan.locations.rootLayout ? path4.posix.dirname(scan.locations.rootLayout) : "app";
-    const file2 = `${appBase}/sitemap.ts`;
-    const body = `import type { MetadataRoute } from 'next';
-
-// Generated by Searvex from static routes. Add dynamic routes (e.g. from your CMS) below.
-const BASE_URL = '${origin}';
-
-export default function sitemap(): MetadataRoute.Sitemap {
-  const routes = ${JSON.stringify(staticRoutes)};
-  return routes.map((route) => ({ url: \`\${BASE_URL}\${route === '/' ? '' : route}\` }));
-}
-`;
-    stage("robots.no-sitemap", "Add app/sitemap.ts (Next.js metadata route)", `Uses the Next.js MetadataRoute.Sitemap convention with ${staticRoutes.length} static routes; dynamic routes need data sources.`, file2, body, "create");
-    if (!scan.locations.hasRobotsGenerator && !scan.locations.robotsFile) {
-      stage("robots.no-sitemap", "Add app/robots.ts referencing the sitemap", "Next.js MetadataRoute.Robots convention; allows all crawlers.", `${appBase}/robots.ts`, `import type { MetadataRoute } from 'next';
-
-export default function robots(): MetadataRoute.Robots {
-  return {
-    rules: { userAgent: '*', allow: '/' },
-    sitemap: '${origin}/sitemap.xml',
-  };
-}
-`, "create");
-    }
-    return;
-  } else if (scan.locations.publicDir && ["laravel", "nextjs-pages", "vite-spa", "cra-spa", "nuxt", "astro"].includes(fw) && staticRoutes.length) {
-    if (fw === "astro" || fw === "nuxt") {
-      plan.tasks.push({ ruleId: "robots.no-sitemap", title: "Add a sitemap integration", instruction: fw === "astro" ? "Install @astrojs/sitemap and add it to integrations in astro.config (requires `site`)." : "Install @nuxtjs/sitemap (or @nuxtjs/seo) and configure site.url.", locations: [{ file: scan.locations.publicDir }] });
-      return;
-    }
-    sitemapPath = `${scan.locations.publicDir}/sitemap.xml`;
-    stage("robots.no-sitemap", "Generate static sitemap.xml", `Static routes from ${fw === "laravel" ? "routes/web.php" : "the router"} (${staticRoutes.length}); regenerate when routes change or adopt a generator package.`, sitemapPath, sitemapXml(staticRoutes.map((r) => new URL(r, origin).toString())), "create");
-  }
-  if (!sitemapPath) return;
-  const robotsPath = scan.locations.robotsFile ?? (scan.locations.publicDir ? `${scan.locations.publicDir}/robots.txt` : path4.posix.join(path4.posix.dirname(sitemapPath), "robots.txt"));
-  const sitemapUrl = new URL("/" + path4.posix.basename(sitemapPath), origin).toString();
-  let robots = null;
-  try {
-    robots = read(robotsPath);
-  } catch {
-    robots = null;
-  }
-  if (robots === null) stage("robots.no-sitemap", "Create robots.txt with Sitemap directive", "Allows all crawlers and declares the sitemap location.", robotsPath, `User-agent: *
-Allow: /
-
-Sitemap: ${sitemapUrl}
-`, "create");
-  else if (!/^\s*sitemap\s*:/im.test(robots)) stage("robots.no-sitemap", "Add Sitemap directive to robots.txt", "Declares the sitemap location; existing rules are unchanged.", robotsPath, robots.replace(/\s*$/, "") + `
-
-Sitemap: ${sitemapUrl}
-`);
-}
-function usesCrlf(text4) {
-  const crlf = (text4.match(/\r\n/g) ?? []).length;
-  return crlf > 0 && crlf >= (text4.match(/\n/g) ?? []).length - crlf;
-}
-function sitemapXml(urls) {
-  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map((u) => `  <url><loc>${esc(u)}</loc></url>`).join("\n")}
-</urlset>
-`;
-}
-
-// src/report/remediation.ts
-var MANUAL = /* @__PURE__ */ new Set([
-  "http.start-url-error",
-  "robots.unreachable",
-  "http.server-error",
-  "http.fetch-error",
-  "canonical.http-https",
-  "canonical.www-duplicate",
-  "https.not-used",
-  "redirect.loop",
-  "redirect.chain",
-  "perf.slow-ttfb",
-  "perf.no-compression",
-  "perf.cwv-poor",
-  "perf.cwv-unmeasured",
-  "geo.citations-unmeasured",
-  "geo.search-bot-blocked",
-  "geo.ai-search-bot-blocked",
-  "geo.training-bots",
-  "geo.snippet-restricted",
-  "content.cannibalization"
-]);
-function remediationOf(ruleId, plan) {
-  if (plan?.fixes.some((f) => f.ruleId === ruleId)) return "auto";
-  return MANUAL.has(ruleId) ? "manual" : "agent";
-}
-var optimizerAvailable = (ruleId) => AUTOFIX_RULES.has(ruleId);
-function shortHash(s) {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return h.toString(36).padStart(7, "0");
-}
-function findingRef(ruleId, e) {
-  return `${ruleId}#${shortHash(`${e.url ?? ""}|${e.file ?? ""}|${e.line ?? ""}`)}`;
-}
-function rootCauseGroups(r) {
-  const langOf = new Map(r.inventory.pages.map((p) => [p.url, p.lang ?? ""]));
-  const pageCount = Math.max(1, r.inventory.pages.filter((p) => p.indexable).length || r.crawl.crawled);
-  const out = {};
-  for (const f of r.findings) {
-    const by = /* @__PURE__ */ new Map();
-    const add2 = (key, kind, i) => {
-      let g = by.get(key);
-      if (!g) by.set(key, g = { id: `${f.ruleId}@${key}`, ruleId: f.ruleId, key, kind, pages: 0, evidence: [], langs: [] });
-      if (i !== null) {
-        g.evidence.push(i);
-        const l = f.evidence[i].url ? langOf.get(f.evidence[i].url) : "";
-        if (l && !g.langs.includes(l)) g.langs.push(l);
-      }
-      return g;
-    };
-    f.evidence.forEach((e, i) => {
-      if (e.file) add2(e.file, "file", i);
-      else if (e.url && !/\/robots\.txt$/.test(e.url)) add2(urlPattern(e.url), "template", i);
-      else add2("site", "site", i);
-    });
-    if (!f.evidence.length) add2("site", "site", null);
-    const totals = new Map((f.templates ?? []).map((t) => [t.pattern, t.pages]));
-    for (const g of by.values()) g.pages = g.kind === "template" ? Math.max(totals.get(g.key) ?? 0, g.evidence.length) : Math.max(1, g.evidence.length);
-    const listed = [...by.values()].reduce((n, g) => n + (g.kind === "template" ? g.pages : 0), 0);
-    for (const [pattern, pages] of totals) if (!by.has(pattern) && listed < f.count) by.set(pattern, { id: `${f.ruleId}@${pattern}`, ruleId: f.ruleId, key: pattern, kind: "template", pages, evidence: [], langs: [] });
-    let groups = [...by.values()].sort((a, b) => b.pages - a.pages);
-    const templ = groups.filter((g) => g.kind === "template");
-    if (templ.length >= 3 && f.count >= Math.max(5, 0.6 * pageCount)) {
-      const merged = { id: `${f.ruleId}@layout`, ruleId: f.ruleId, key: `${templ.length} URL templates`, kind: "layout", pages: f.count, evidence: templ.flatMap((g) => g.evidence), langs: [...new Set(templ.flatMap((g) => g.langs))] };
-      groups = [merged, ...groups.filter((g) => g.kind !== "template")];
-    }
-    out[f.ruleId] = groups;
-  }
-  return out;
-}
 
 // src/report/html.ts
 init_fetcher();
@@ -39978,7 +40000,7 @@ async function commandMonitor(flags) {
   log(v, `Re-auditing ${target}\u2026`);
   suggestPreLaunch(v, target);
   const stop = interrupter(v);
-  const { report, store: store2 } = await auditWebsite(target, { workspace, kb, crawl: { ...crawlOptionsFrom(v), stop: stop.signal }, preLaunch: !!v["pre-launch"] }).finally(stop.dispose);
+  const { report, store: store2 } = await auditWebsite(target, { workspace, kb, crawl: { ...crawlOptionsFrom(v), stop: stop.signal }, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
   assertTargetAllowed(report);
   writeReports(store2, report, kb, ["json", "md", "html"]);
   if (notAnalysed(report)) {
@@ -40036,6 +40058,10 @@ Saved: ${out}`);
 // src/report/extras.ts
 function writeContext(store2, ctx) {
   store2.writeJson("context.json", ctx);
+}
+function planOf(store2) {
+  const ctx = store2.readJson("context.json");
+  return ctx?.autoRules ? { fixes: ctx.autoRules.map((ruleId) => ({ ruleId })) } : null;
 }
 function loadExtras(store2, report) {
   const ctx = store2.readJson("context.json") ?? {};
@@ -41250,6 +41276,7 @@ async function commandRepo(flags) {
   if (siteUrl && !/^https?:\/\//.test(siteUrl)) throw new UsageError("--site-url must be an absolute http(s) URL");
   const kb = loadKnowledge();
   const { report, scan } = auditRepository(root2, { siteUrl, kb });
+  if (v["compact"]) compactAffected(report);
   const store2 = new RunStore(path14.resolve(String(v["out"] ?? root2)), RunStore.newRunId("repo"));
   report.runId = store2.runId;
   store2.writeJson("meta.json", { kind: "repository", target: root2, framework: scan.detection.framework, startedAt: report.generatedAt });
@@ -42507,7 +42534,7 @@ async function runWorkflow(flags, stop) {
   if (url) {
     log(v, `1. Auditing ${url} (max ${opts.maxPages} pages)\u2026`);
     suggestPreLaunch(v, url);
-    const { report, store: store3 } = await auditWebsite(url, { workspace, kb, crawl: { ...opts, stop }, checkExternal: !!v["check-external"], cruxApiKey: cruxKey()?.key, preLaunch: !!v["pre-launch"] });
+    const { report, store: store3 } = await auditWebsite(url, { workspace, kb, crawl: { ...opts, stop }, compact: !!v["compact"], checkExternal: !!v["check-external"], cruxApiKey: cruxKey()?.key, preLaunch: !!v["pre-launch"] });
     assertTargetAllowed(report);
     const files = writeReports(store3, report, kb, ["json", "md", "html"]);
     summary.website = { report, runId: store3.runId, files };
@@ -42565,7 +42592,7 @@ async function runWorkflow(flags, stop) {
     if (summary.website) {
       const ws = new RunStore(workspace, summary.website.runId);
       writeContext(ws, { repository: { path: root2, framework: summary.repository.framework, siteUrl, lang: v["lang"] }, autoRules: [...new Set(summary.plan.fixes.map((f) => f.ruleId))] });
-      writeReports(ws, summary.website.report, kb, ["html"]);
+      writeReports(ws, summary.website.report, kb, ["json", "html"]);
     }
   } else {
     step(5, "Repository audit", "skipped", "no repository path given");
@@ -42584,7 +42611,7 @@ async function runWorkflow(flags, stop) {
   });
   if (summary.plan) store2.writeText("plan.patch", summary.plan.files.map((c) => unifiedDiff(c.path, c.before, c.after)).join("\n") + "\n");
   if (summary.repository) {
-    const rr = summary.repository.report;
+    const rr = annotateReport(summary.repository.report, summary.plan);
     rr.runId = store2.runId;
     store2.writeText("repository-report.md", renderMarkdown(rr));
     store2.writeJson("repository-report.json", rr);
@@ -42899,6 +42926,7 @@ Common options
   --max-duration <s>    Stop crawling after s seconds and write a partial report (exit 5). SIGINT/SIGTERM
                         do the same; a second signal exits at once (130/143)
   --format <list>       md,html,json,sarif (default md,html,json)
+  --compact             report.json: only the count of each finding's affected URLs (very large crawls)
   --out <dir>           Workspace for .searvex/ (default: current directory)
   --fail-on <severity>  Exit 1 if findings at/above severity exist (critical|high|medium|low)
   --allow-private       Allow localhost/private network targets (local dev servers only)
@@ -42969,6 +42997,7 @@ var CLI_OPTIONS = {
   "no-sitemap": { type: "boolean" },
   resume: { type: "string" },
   "max-duration": { type: "string" },
+  compact: { type: "boolean" },
   format: { type: "string" },
   out: { type: "string" },
   "fail-on": { type: "string" },
@@ -43112,6 +43141,7 @@ function log(v, ...args) {
 }
 function writeReports(store2, report, kb, formats) {
   const out = [];
+  annotateReport(report, planOf(store2));
   for (const f of formats) {
     if (f === "json") out.push((store2.writeJson("report.json", report), store2.file("report.json")));
     else if (f === "md") out.push(store2.writeText("report.md", renderMarkdown(report)));
@@ -43228,6 +43258,7 @@ async function commandAudit(flags) {
       checkExternal: !!v["check-external"],
       cruxApiKey: cruxKey()?.key,
       preLaunch: !!v["pre-launch"],
+      compact: !!v["compact"],
       crawl: {
         ...opts,
         render: render3?.render,
@@ -43266,7 +43297,7 @@ async function commandGeo(flags) {
   const opts = crawlOptionsFrom({ ...v, "max-pages": v["max-pages"] ?? "50" });
   suggestPreLaunch(v, target);
   const stop = interrupter(v);
-  const { report, store: store2 } = await auditWebsite(target, { workspace: path22.resolve(String(v["out"] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal }, preLaunch: !!v["pre-launch"] }).finally(stop.dispose);
+  const { report, store: store2 } = await auditWebsite(target, { workspace: path22.resolve(String(v["out"] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal }, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
   assertTargetAllowed(report);
   reportInterrupted(report, !!v["json"]);
   const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
