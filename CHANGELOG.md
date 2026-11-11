@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Deeper competitor research (`research --competitor`, `run --competitor`): each site's topic clusters with a
+  covered / not covered mark against the target, and a pages-per-search-intent table with the page types most
+  competitors use for an intent the target lacks. Both are labelled as hypotheses about coverage, not demand.
+
+### Added
 - Upstream proxy support, as designed in `docs/design/proxy.md`: `--proxy <url|none>` and `HTTPS_PROXY` /
   `HTTP_PROXY` / `NO_PROXY`, `CONNECT` only with TLS end to end and Basic authentication. Private, loopback and
   reserved targets never go through the proxy. Host names are resolved and checked locally before `CONNECT`;
