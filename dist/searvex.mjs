@@ -30732,6 +30732,44 @@ function loadHtml(html3) {
   const doc = parse6(html3, { treeAdapter: adapter, scriptingEnabled: false });
   return load(doc);
 }
+function stableClass(c) {
+  const first2 = (c ?? "").trim().split(/\s+/)[0] ?? "";
+  return first2.toLowerCase().replace(/[-_]?[0-9a-f]*\d[0-9a-z]*$/i, "").slice(0, 30);
+}
+function layoutSkeleton($2) {
+  const landmarks = [];
+  $2('header, nav, main, aside, footer, [role="main"], [role="navigation"]').each((_, el) => {
+    const name = "tagName" in el ? String(el.tagName).toLowerCase() : "";
+    const role = $2(el).attr("role");
+    const tag = role ? `${name}[${role}]` : name;
+    if (landmarks.at(-1) !== tag) landmarks.push(tag);
+  });
+  const children2 = (sel, limit) => {
+    const out = [];
+    $2(sel).first().children().each((_, el) => {
+      const tag = "tagName" in el ? String(el.tagName).toLowerCase() : "";
+      if (!tag || tag === "script" || tag === "style" || tag === "noscript" || tag === "template") return;
+      const sig2 = `${tag}.${stableClass($2(el).attr("class"))}`;
+      if (out.at(-1) !== sig2 && out.length < limit) out.push(sig2);
+    });
+    return out;
+  };
+  const body = children2("body", 12);
+  const main2 = children2('main, [role="main"], article', 20);
+  const levels = [];
+  $2("h1, h2, h3, h4").each((_, el) => {
+    if ($2(el).closest("header, nav, footer, aside").length) return;
+    const l = Number(String("tagName" in el ? el.tagName : "h0").slice(1));
+    if (!levels.includes(l)) levels.push(l);
+  });
+  const sig = [landmarks.join(">"), body.join("|"), main2.join("|"), levels.join(",")].join(";");
+  let h = 2166136261;
+  for (let i = 0; i < sig.length; i++) {
+    h ^= sig.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h.toString(36);
+}
 function extractPage(html3, pageUrl) {
   const $2 = loadHtml(html3);
   const baseHref = $2("base[href]").attr("href");
@@ -30814,6 +30852,7 @@ function extractPage(html3, pageUrl) {
   const hasNoscriptContent = collapse($2("noscript").text()).length > 20;
   const formsCount = $2("form").length;
   const iframes = $2("iframe").length;
+  const skeleton = layoutSkeleton($2);
   const docTitles = $2("title").filter((_, el) => $2(el).closest("svg").length === 0);
   const titles = docTitles.first();
   const titleCount = docTitles.length;
@@ -30881,6 +30920,7 @@ function extractPage(html3, pageUrl) {
     hasNoscriptContent,
     likelyClientRendered,
     formsCount,
+    skeleton,
     iframes,
     generator: $2('script[src*="/_next/static/"]').length || $2("#__next").length ? "next.js" : $2("[data-inertia]").length || $2('[data-page][id="app"]').length ? "inertia" : $2('meta[name="generator" i]').attr("content")?.slice(0, 60) ?? null,
     structure,
@@ -37176,6 +37216,15 @@ function templatesOf(urls) {
   for (const u of urls) m.set(urlPattern(u), (m.get(urlPattern(u)) ?? 0) + 1);
   return [...m.entries()].map(([pattern, pages]) => ({ pattern, pages })).sort((a, b) => b.pages - a.pages);
 }
+function structuresOf(urls, ctx) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const u of urls) {
+    const p = ctx.byUrl?.get(u);
+    const sk = p ? factsOf(p)?.skeleton : void 0;
+    if (sk) groups.set(sk, [...groups.get(sk) ?? [], u]);
+  }
+  return [...groups.entries()].filter(([, us]) => us.length >= 2).map(([id, us]) => ({ id, pages: us.length, example: us[0] })).sort((a, b) => b.pages - a.pages || a.id.localeCompare(b.id));
+}
 function pageImportance(ctx) {
   const imp = /* @__PURE__ */ new Map();
   for (const p of ctx.indexable) {
@@ -37206,13 +37255,18 @@ function prioritise(findings, affected, ctx, totalUnits) {
     reasons.unshift(`${Math.round(reach * 100)}% importance-weighted reach (${f.count} affected)`);
     const templates = templatesOf(urls).slice(0, 8);
     if (urls.length >= 5) f.templates = templates;
+    const structures = ctx && urls.length >= 5 ? structuresOf(urls, ctx) : [];
+    if (structures.length) f.structures = structures.slice(0, 8);
+    const structured = structures.reduce((a, s) => a + s.pages, 0);
+    const sameStructure = templates.length > 2 && structures.length > 0 && structures.length <= 2 && structured >= urls.length * 0.8;
     const content = f.category === "content";
     const indexableCount = ctx?.indexable.length ?? totalUnits ?? 0;
     const layoutWide = !content && indexableCount >= 5 && pageUrls.length >= indexableCount * 0.5;
-    const concentrated = !content && urls.length >= 5 && templates.length <= 2;
+    const concentrated = !content && urls.length >= 5 && (templates.length <= 2 || sameStructure);
     const effort = f.autofixable || layoutWide || concentrated ? "low" : urls.length > 20 ? "high" : "medium";
     if (f.autofixable) reasons.push("auto-fixable in repository mode");
     else if (layoutWide) reasons.push("on most pages \u2014 likely one shared layout/template fix");
+    else if (concentrated && sameStructure) reasons.push(`one page structure behind ${templates.length} URL patterns (${structures.length} layout${structures.length > 1 ? "s" : ""}) \u2014 fix once`);
     else if (concentrated) reasons.push(`concentrated in ${templates.length} template${templates.length > 1 ? "s" : ""} \u2014 fix once`);
     const confidence = f.confidence === "verified" ? 1 : f.confidence === "heuristic" ? 0.6 : 0;
     const effortFactor = effort === "low" ? 1 : effort === "medium" ? 1.25 : 1.6;

@@ -76,6 +76,11 @@ export interface Finding {
   /** URL-pattern templates the affected pages belong to ("fix once" signal). */
   templates?: Array<{ pattern: string; pages: number }>;
   /**
+   * Page-structure templates of the affected pages (layout skeleton hash, see PageData.skeleton) with an example
+   * URL: finds one template behind unrelated URLs (flat slugs) that URL patterns miss. Since schema 1.1.
+   */
+  structures?: Array<{ id: string; pages: number; example: string }>;
+  /**
    * Pre-launch profile only: `environment` = depends on the test server, `launch-checklist` = a deliberate
    * pre-launch state to change before going live. Either way the finding does not count toward the score,
    * --fail-on or monitor regressions.

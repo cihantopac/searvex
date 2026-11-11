@@ -1,5 +1,5 @@
 import type { Finding, Priority, Severity } from '../core/types.js';
-import type { SiteContext } from './context.js';
+import { factsOf, type SiteContext } from './context.js';
 
 /**
  * Impact-based prioritisation.
@@ -35,6 +35,20 @@ export function templatesOf(urls: string[]): Array<{ pattern: string; pages: num
   return [...m.entries()].map(([pattern, pages]) => ({ pattern, pages })).sort((a, b) => b.pages - a.pages);
 }
 
+/** Affected pages grouped by layout skeleton; groups of one page are not templates. */
+export function structuresOf(urls: string[], ctx: SiteContext): Array<{ id: string; pages: number; example: string }> {
+  const groups = new Map<string, string[]>();
+  for (const u of urls) {
+    const p = ctx.byUrl?.get(u);
+    const sk = p ? factsOf(p)?.skeleton : undefined;
+    if (sk) groups.set(sk, [...(groups.get(sk) ?? []), u]);
+  }
+  return [...groups.entries()]
+    .filter(([, us]) => us.length >= 2)
+    .map(([id, us]) => ({ id, pages: us.length, example: us[0]! }))
+    .sort((a, b) => b.pages - a.pages || a.id.localeCompare(b.id));
+}
+
 export function pageImportance(ctx: SiteContext): Map<string, number> {
   const imp = new Map<string, number>();
   for (const p of ctx.indexable) {
@@ -66,15 +80,21 @@ export function prioritise(findings: Array<Finding & { count: number }>, affecte
     reasons.unshift(`${Math.round(reach * 100)}% importance-weighted reach (${f.count} affected)`);
     const templates = templatesOf(urls).slice(0, 8);
     if (urls.length >= 5) f.templates = templates;
+    // Page-structure templates: one layout behind unrelated URLs (flat slugs) is still one fix.
+    const structures = ctx && urls.length >= 5 ? structuresOf(urls, ctx) : [];
+    if (structures.length) f.structures = structures.slice(0, 8);
+    const structured = structures.reduce((a, s) => a + s.pages, 0);
+    const sameStructure = templates.length > 2 && structures.length > 0 && structures.length <= 2 && structured >= urls.length * 0.8;
     // Markup/technical issues on most pages, or in few templates, are usually one shared-layout fix.
     // Content issues are fixed page by page, so template concentration does not lower their effort.
     const content = f.category === 'content';
     const indexableCount = ctx?.indexable.length ?? totalUnits ?? 0;
     const layoutWide = !content && indexableCount >= 5 && pageUrls.length >= indexableCount * 0.5;
-    const concentrated = !content && urls.length >= 5 && templates.length <= 2;
+    const concentrated = !content && urls.length >= 5 && (templates.length <= 2 || sameStructure);
     const effort: Priority['effort'] = f.autofixable || layoutWide || concentrated ? 'low' : urls.length > 20 ? 'high' : 'medium';
     if (f.autofixable) reasons.push('auto-fixable in repository mode');
     else if (layoutWide) reasons.push('on most pages — likely one shared layout/template fix');
+    else if (concentrated && sameStructure) reasons.push(`one page structure behind ${templates.length} URL patterns (${structures.length} layout${structures.length > 1 ? 's' : ''}) — fix once`);
     else if (concentrated) reasons.push(`concentrated in ${templates.length} template${templates.length > 1 ? 's' : ''} — fix once`);
     const confidence = f.confidence === 'verified' ? 1 : f.confidence === 'heuristic' ? 0.6 : 0;
     const effortFactor = effort === 'low' ? 1 : effort === 'medium' ? 1.25 : 1.6;
