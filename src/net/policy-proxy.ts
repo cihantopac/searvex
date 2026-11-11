@@ -4,6 +4,7 @@ import net from 'node:net';
 import type { AddressInfo } from 'node:net';
 import type { Duplex, Readable } from 'node:stream';
 import { guardedLookup } from './fetcher.js';
+import { openTunnel, routeFor } from './proxy.js';
 import { assertUrlAllowed, BlockedUrlError, type NetPolicy } from './ssrf.js';
 
 /**
@@ -112,33 +113,65 @@ export async function startPolicyProxy(policy: NetPolicy, opts: PolicyProxyOptio
     }
     const headers: http.OutgoingHttpHeaders = {};
     for (const [k, val] of Object.entries(req.headers)) if (!HOP_BY_HOP.has(k.toLowerCase()) && val !== undefined) headers[k] = val;
-    const upstream = http.request(
-      { host: u.hostname.replace(/^\[|\]$/g, ''), port: u.port || 80, path: `${u.pathname}${u.search}`, method: req.method, headers, lookup: guardedLookup(policy), agent: false, timeout: idle },
-      (up) => {
-        const out: http.OutgoingHttpHeaders = {};
-        for (const [k, val] of Object.entries(up.headers)) if (!HOP_BY_HOP.has(k.toLowerCase()) && val !== undefined) out[k] = val;
-        res.writeHead(up.statusCode ?? 502, out);
-        meter(up, res.socket ?? up);
-        up.pipe(res);
-      },
-    );
-    upstream.on('timeout', () => upstream.destroy(new Error('upstream timeout')));
-    upstream.on('error', (e) => {
+    const host = u.hostname.replace(/^\[|\]$/g, '');
+    const port = Number(u.port) || 80;
+    const fail = (e: Error) => {
       if (e instanceof BlockedUrlError) block(u.host);
       if (!res.headersSent) res.writeHead(e instanceof BlockedUrlError ? 403 : 502, { connection: 'close' });
       res.end();
-    });
-    req.pipe(upstream);
+    };
+    // Through the upstream proxy (if any) as a CONNECT tunnel, else direct with the guarded lookup.
+    routeFor(host, port, policy)
+      .then(async (route) => {
+        const via = route.via === 'proxy' ? await openTunnel(route.proxy, route.connectHost, port, idle) : null;
+        if (via) track(via);
+        forward(via ? { agent: undefined, createConnection: () => via } : { lookup: guardedLookup(policy), agent: false as const });
+      })
+      .catch(fail);
+    const forward = (connection: http.RequestOptions) => {
+      const upstream = http.request(
+        { host, port, path: `${u.pathname}${u.search}`, method: req.method, headers, ...connection, timeout: idle },
+        (up) => {
+          const out: http.OutgoingHttpHeaders = {};
+          for (const [k, val] of Object.entries(up.headers)) if (!HOP_BY_HOP.has(k.toLowerCase()) && val !== undefined) out[k] = val;
+          res.writeHead(up.statusCode ?? 502, out);
+          meter(up, res.socket ?? up);
+          up.pipe(res);
+        },
+      );
+      upstream.on('timeout', () => upstream.destroy(new Error('upstream timeout')));
+      upstream.on('error', fail);
+      req.pipe(upstream);
+    };
   });
+
+  /** A connection to `host:port`: through the upstream proxy (CONNECT) when it applies, else direct. */
+  const connectUpstream = async (host: string, port: number): Promise<net.Socket> => {
+    const route = await routeFor(host, port, policy);
+    if (route.via === 'proxy') return openTunnel(route.proxy, route.connectHost, port, idle);
+    return new Promise((resolve, reject) => {
+      const s = net.connect({ host, port, lookup: guardedLookup(policy) });
+      track(s);
+      s.once('connect', () => {
+        s.off('error', reject);
+        resolve(s);
+      });
+      s.once('error', reject);
+    });
+  };
 
   const tunnel = (target: URL, client: Duplex, head: Buffer, preamble: string | null) => {
     stats.tunnels++;
     track(client);
     const host = target.hostname.replace(/^\[|\]$/g, '');
     const port = Number(target.port) || (target.protocol === 'https:' ? 443 : 80);
-    const upstream = net.connect({ host, port, lookup: guardedLookup(policy) });
-    track(upstream);
-    upstream.on('connect', () => {
+    const deny = (e: Error) => {
+      if (e instanceof BlockedUrlError) block(target.host);
+      if (client.writable) rawDeny(client, e instanceof BlockedUrlError ? '403 Forbidden' : '502 Bad Gateway');
+      client.destroy();
+    };
+    connectUpstream(host, port).then((upstream) => {
+      track(upstream);
       if (preamble === null) client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
       else upstream.write(preamble);
       if (head.length) upstream.write(head);
@@ -146,13 +179,9 @@ export async function startPolicyProxy(policy: NetPolicy, opts: PolicyProxyOptio
       meter(client, upstream);
       upstream.pipe(client);
       client.pipe(upstream);
-    });
-    upstream.on('error', (e) => {
-      if (e instanceof BlockedUrlError) block(target.host);
-      if (client.writable) rawDeny(client, e instanceof BlockedUrlError ? '403 Forbidden' : '502 Bad Gateway');
-      client.destroy();
-    });
-    client.on('error', () => upstream.destroy());
+      upstream.on('error', () => client.destroy());
+      client.on('error', () => upstream.destroy());
+    }, deny);
   };
 
   // CONNECT host:port — HTTPS, WSS and (in Chromium) WS through the proxy.

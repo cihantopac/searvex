@@ -3,6 +3,7 @@ import { looksLikeAsset, mapOrigin, normalizeUrl, originMap, pathDepth, type Ori
 import { extractPage, parseXRobotsTag, type PageData } from '../extract/html.js';
 import { DEFAULT_USER_AGENT, HostRateLimiter, safeFetch } from '../net/fetcher.js';
 import { DEFAULT_POLICY, type NetPolicy } from '../net/ssrf.js';
+import { proxySummary } from '../net/proxy.js';
 import { collectSitemaps, type SitemapResult } from './sitemap.js';
 import { fetchRobots, type RobotsInfo } from './robots.js';
 import { RunStore } from './store.js';
@@ -107,6 +108,8 @@ export interface CrawlResult {
   siteUrl?: string;
   /** Set when the crawl was stopped early by `CrawlOptions.stop`: the pages cover only part of the site. */
   interrupted?: Interruption;
+  /** Upstream proxy used for this crawl (endpoint and mode, never credentials). */
+  proxy?: ReturnType<typeof proxySummary>;
 }
 
 /** Why a crawl was stopped early: a signal (SIGINT/SIGTERM) or the --max-duration deadline. */
@@ -199,6 +202,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
         stats: { crawled: 0, fetched: 0, queuedRemaining: 0, blocked: 0, errors: 0, durationMs: Date.now() - t0, avgResponseMs: 0 },
         truncated: false,
         unreachable,
+        ...(opts.policy.upstream ? { proxy: proxySummary(opts.policy.upstream) } : {}),
       };
       store?.writeJson('meta.json', { runId: store.runId, kind: 'crawl', startUrl: start, startedAt, unreachable });
       return result;
@@ -382,6 +386,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
     truncated: queue.length > 0,
     ...(map ? { siteUrl: map.from } : {}),
     ...(interruptionOf(opts.stop) ? { interrupted: interruptionOf(opts.stop) } : {}),
+    ...(opts.policy.upstream ? { proxy: proxySummary(opts.policy.upstream) } : {}),
   };
   store?.writeJson('crawl-summary.json', {
     ...result,

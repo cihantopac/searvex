@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Upstream proxy support, as designed in `docs/design/proxy.md`: `--proxy <url|none>` and `HTTPS_PROXY` /
+  `HTTP_PROXY` / `NO_PROXY`, `CONNECT` only with TLS end to end and Basic authentication. Private, loopback and
+  reserved targets never go through the proxy. Host names are resolved and checked locally before `CONNECT`;
+  `--proxy-resolve local` connects to the checked address instead. Used by crawling, `--render`, `--check-external`
+  and `rules check-sources`.
+- `crawl.proxy` in `report.json` (endpoint and resolution mode, never credentials), plus a limitation line; report
+  schema 1.1.
+- Exit codes for the proxy: an unusable proxy setting or failed proxy authentication is `2`, an unreachable proxy
+  `3`, and a proxy that refuses `CONNECT` to the start URL `4`.
+
 ## [1.3.0] - 2026-11-11
 
 A run says honestly what it did, and its output is a contract. Release notes:

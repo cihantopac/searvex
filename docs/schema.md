@@ -13,7 +13,7 @@ The files ship in the npm package (`node_modules/searvex-seo/schema/`). Their `$
 
 ## Versioning
 
-- `report.json` carries `schemaVersion` (currently `"1.0"`); each schema states its version in
+- `report.json` carries `schemaVersion` (currently `"1.1"`); each schema states its version in
   `x-searvex-schema-version`.
 - **Minor** (`1.0` → `1.1`): additive changes only, such as a new optional field or a new enum value.
 - **Major** (`1.x` → `2.0`): a field is removed or renamed, or its type or meaning changes.
@@ -22,6 +22,13 @@ The files ship in the npm package (`node_modules/searvex-seo/schema/`). Their `$
   `schemaVersion` and reject a major version you do not know.
 - Reports written before 1.3.0 have no `schemaVersion` and do not match the schema exactly: `scores.overall` was a
   number where it is now `null`, and the 1.3.0 fields are missing.
+
+## Schema history
+
+| Version | Package | Change |
+|---|---|---|
+| 1.1 | 1.4.0 | Added `crawl.proxy` (upstream proxy endpoint and resolution mode) |
+| 1.0 | 1.3.0 | First published schema |
 
 ## How the schemas are made
 

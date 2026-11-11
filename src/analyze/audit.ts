@@ -48,6 +48,12 @@ export interface AuditReport {
      * pages fetched before (partial report, exit 5). Resume with --resume <runId>.
      */
     interrupted?: Interruption;
+    /**
+     * Upstream proxy the crawl went through (`--proxy`, HTTPS_PROXY): `host:port` and resolution mode, never
+     * credentials. `unresolvedAllowed`: names local DNS could not resolve were sent to the proxy unchecked.
+     * Since schema 1.1.
+     */
+    proxy?: { endpoint: string; resolve: 'proxy' | 'local'; unresolvedAllowed: boolean };
     truncated: boolean; startUrl: string; robots: { url: string; state: string; status: number; sitemaps: string[] }; sitemaps: string[]; sitemapUrls: number; sitemapIssues: Array<{ sitemap: string; message: string }> };
   inventory: SiteInventory;
   findings: Array<Finding & { count: number }>;
@@ -235,6 +241,7 @@ function crawlSummary(result: CrawlResult, robotsAgent = DEFAULT_CRAWL.robotsAge
     ...(result.unreachable ? { error: result.unreachable.error } : blocked ? { error: robotsBlockReason(result, robotsAgent) } : {}),
     ...(result.siteUrl ? { siteUrl: result.siteUrl } : {}),
     ...(result.interrupted ? { interrupted: result.interrupted } : {}),
+    ...(result.proxy ? { proxy: result.proxy } : {}),
     truncated: result.truncated,
     startUrl: result.startUrl,
     robots: { url: result.robots.url, state: result.robots.state, status: result.robots.status, sitemaps: result.robots.sitemaps },
@@ -370,6 +377,14 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
     );
   else if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
   if (launch) limitations.push(`Pre-launch profile (--pre-launch): the site is audited as it will be once live. ${launch.noindex.size ? `${launch.noindex.size} noindex page(s) were evaluated as indexable; their noindex is in the launch checklist. ` : ''}Findings that depend on the test server (environment) or on a deliberate pre-launch state (launch checklist) are listed separately and excluded from the score and --fail-on.`);
+  if (result.proxy)
+    limitations.push(
+      `Crawled through the upstream proxy ${result.proxy.endpoint} (CONNECT only). Response times include the proxy hop. ${
+        result.proxy.resolve === 'local'
+          ? 'Targets were resolved and checked locally and the proxy was given their addresses.'
+          : `Targets were checked against local DNS before CONNECT, but the proxy resolved the names itself; if its DNS view differs (split-horizon DNS), Searvex cannot see the address it connected to.${result.proxy.unresolvedAllowed ? ' Names local DNS could not resolve were sent to the proxy unchecked (--proxy-resolve proxy).' : ''}`
+      }`,
+    );
   if (result.siteUrl) limitations.push(`Audited ${result.origin} as ${result.siteUrl} (--site-url): canonical, hreflang, sitemap and link URLs on ${result.siteUrl} were checked against the crawled pages at ${result.origin}; the public site itself was not fetched.`);
   if (!opts.checkExternal) limitations.push('Outbound links were not checked (use --check-external).');
   if (!result.pages.some((p) => p.rendered)) limitations.push('JavaScript was not executed (run with --render to compare rendered DOM); client-rendered content is only detected heuristically.');

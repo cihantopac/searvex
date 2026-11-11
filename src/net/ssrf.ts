@@ -1,4 +1,5 @@
 import { isIP } from 'node:net';
+import type { UpstreamProxy } from './proxy.js';
 
 /**
  * SSRF protection. Classifies IP addresses and decides whether Searvex may connect.
@@ -23,6 +24,8 @@ export interface NetPolicy {
   allowHosts?: ReadonlyArray<string>;
   /** Host globs (`--deny-host`) that may never be contacted; they win over `allowHosts`. */
   denyHosts?: ReadonlyArray<string>;
+  /** Upstream proxy (`--proxy`, HTTPS_PROXY): see proxy.ts. Absent = direct connections. */
+  upstream?: UpstreamProxy;
 }
 
 /** Whether `host` matches a host glob (see `NetPolicy.allowHosts`). */
