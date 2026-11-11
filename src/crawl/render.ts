@@ -90,7 +90,9 @@ export const BROWSER_ARGS = [
 ];
 
 async function launch(chromium: Chromium, proxy: PolicyProxy): Promise<{ browser: PwBrowser; sandbox: boolean }> {
-  const base = { headless: true, args: BROWSER_ARGS, proxy: { server: proxy.server, username: proxy.username, password: proxy.password, bypass: '' } };
+  // Searvex handles SIGINT/SIGTERM itself (graceful stop, then close()); Playwright must not kill the
+  // browser under pages that are still rendering.
+  const base = { headless: true, handleSIGINT: false, handleSIGTERM: false, args: BROWSER_ARGS, proxy: { server: proxy.server, username: proxy.username, password: proxy.password, bypass: '' } };
   try {
     return { browser: await chromium.launch({ ...base, chromiumSandbox: true }), sandbox: true };
   } catch {

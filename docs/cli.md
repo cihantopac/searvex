@@ -13,7 +13,7 @@ searvex <command> [target] [options]
 | `2` | Usage error (unknown command or option, invalid value, a target blocked by the network policy without `--allow-private`). A policy-blocked target still gets a `report.json` in its run directory (`crawl.status: "unreachable"`, `crawl.error` starting with `Blocked:`), but no HTML or Markdown report, and one `searvex: …` line on stderr |
 | `3` | Runtime error (until 1.1.1 this was `2`): one `searvex: <message>` line; the stack trace only with `SEARVEX_DEBUG=1` |
 | `4` | Target not analysable, nothing was fetched. `crawl.status: "unreachable"`: the start URL failed at the network level (DNS, TCP, TLS). `crawl.status: "robots-blocked"`: robots.txt blocked every queued URL, because it answered 5xx/429 (RFC 9309: assume complete disallow) or disallows them; the report keeps the one site finding to fix (`robots.unreachable` or `robots.disallow-all`; none when only `SearvexBot` is disallowed). Reports are written with no page findings, `scores.overall: null` and `scores.notApplicable`; one `searvex: …` line goes to stderr, also with `--json` and `--quiet`; `monitor` does not diff, and the run is never a baseline |
-| `5` | Reserved for interrupted runs with a partial report (SIGINT/SIGTERM and `--max-duration` handling is planned; not returned in 1.2.0) |
+| `5` | Interrupted: the first SIGINT/SIGTERM, or the `--max-duration` deadline, stops the crawl; pages in flight finish (bounded by `--timeout`), what was crawled is analysed and every requested format is written with `crawl.interrupted: "signal" \| "max-duration"` and a limitation line. Host/locale/llms.txt probes, `--check-external` and CrUX are skipped. A second signal exits at once with `130` (SIGINT) or `143` (SIGTERM). An interrupted run is never a monitor baseline; continue it with `--resume <runId>` (`audit`, `geo`, `monitor`, `run`) |
 
 ### Error output
 
@@ -69,7 +69,8 @@ With `--json`, the next stderr line is a JSON object:
 | `--include <regex>` / `--exclude <regex>` | — | Restrict crawl scope (repeatable) |
 | `--no-sitemap` | — | Do not seed from sitemaps |
 | `--check-external` | off | Check outbound links (HEAD, robots-aware, max 200) |
-| `--resume <runId>` | — | Continue an interrupted crawl from its checkpoint |
+| `--resume <runId>` | — | Continue an interrupted crawl from its checkpoint (written every 25 pages or 10 seconds, and at the start) |
+| `--max-duration <s>` | — | Stop crawling after `s` seconds (1–604800) and write a partial report (exit `5`) |
 | `--format <list>` | md,html,json | Any of `md,html,json,sarif` |
 | `--out <dir>` | cwd (repo root for repo audits) | Workspace that receives `.searvex/` |
 | `--fail-on <severity>` | — | `critical\|high\|medium\|low`; exit 1 when matching findings exist (unmeasurable ignored) |

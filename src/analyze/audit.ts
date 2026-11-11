@@ -1,5 +1,5 @@
 import type { Category, Finding, Severity } from '../core/types.js';
-import { crawl, DEFAULT_CRAWL, type CrawlOptions, type CrawlResult } from '../crawl/crawler.js';
+import { crawl, DEFAULT_CRAWL, type CrawlOptions, type CrawlResult, type Interruption } from '../crawl/crawler.js';
 import { RunStore } from '../crawl/store.js';
 import { DEFAULT_USER_AGENT, safeFetch, SEARVEX_VERSION } from '../net/fetcher.js';
 import { DEFAULT_POLICY } from '../net/ssrf.js';
@@ -32,6 +32,11 @@ export interface AuditReport {
     error?: string;
     /** Public origin the crawled origin stands for (--site-url); URLs on it were mapped to the crawled origin. */
     siteUrl?: string;
+    /**
+     * The run was stopped early by SIGINT/SIGTERM (`signal`) or at --max-duration: the report covers only the
+     * pages fetched before (partial report, exit 5). Resume with --resume <runId>.
+     */
+    interrupted?: Interruption;
     truncated: boolean; startUrl: string; robots: { url: string; state: string; status: number; sitemaps: string[] }; sitemaps: string[]; sitemapUrls: number; sitemapIssues: Array<{ sitemap: string; message: string }> };
   inventory: SiteInventory;
   findings: Array<Finding & { count: number }>;
@@ -203,6 +208,7 @@ function crawlSummary(result: CrawlResult, robotsAgent = DEFAULT_CRAWL.robotsAge
     status: result.unreachable ? 'unreachable' : blocked ? 'robots-blocked' : 'complete',
     ...(result.unreachable ? { error: result.unreachable.error } : blocked ? { error: robotsBlockReason(result, robotsAgent) } : {}),
     ...(result.siteUrl ? { siteUrl: result.siteUrl } : {}),
+    ...(result.interrupted ? { interrupted: result.interrupted } : {}),
     truncated: result.truncated,
     startUrl: result.startUrl,
     robots: { url: result.robots.url, state: result.robots.state, status: result.robots.status, sitemaps: result.robots.sitemaps },
@@ -286,7 +292,9 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
       rendered: false,
     };
   }
-  if (opts.probes !== false) {
+  // An interrupted run must finish quickly: no extra network probes, outbound checks or CrUX query.
+  const interrupted = result.interrupted;
+  if (opts.probes !== false && !interrupted) {
     await probeHostVariants(result.startUrl, netOpts, sink);
     await probeLocaleAdaptive(result.startUrl, netOpts, sink);
     llms = await probeLlmsTxt(result.origin, netOpts);
@@ -296,9 +304,10 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
   const geo = runGeoChecks(ctx, sink, llms);
   const content = runContentChecks(ctx, sink);
   let externalLinks: ExternalLinkResult | undefined;
-  if (opts.checkExternal) externalLinks = await checkExternalLinks(ctx, sink, { ...netOpts, robotsAgent: opts.robotsAgent });
+  if (opts.checkExternal && !interrupted) externalLinks = await checkExternalLinks(ctx, sink, { ...netOpts, robotsAgent: opts.robotsAgent });
   let fieldData: CruxResult | undefined;
-  if (opts.cruxApiKey) {
+  if (interrupted) sink.emit('perf.cwv-unmeasured', { observed: 'Not queried: the run was interrupted' });
+  else if (opts.cruxApiKey) {
     fieldData = await queryCrux(result.origin, opts.cruxApiKey);
     if (fieldData.status === 'ok') {
       for (const m of fieldData.metrics) {
@@ -315,7 +324,11 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
     'Website mode sees only publicly reachable pages; it has no access to real traffic, rankings, Search Console or analytics data unless an integration is configured.',
     'Response times are single-location lab samples, not Core Web Vitals field data.',
   ];
-  if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
+  if (interrupted)
+    limitations.unshift(
+      `The run was interrupted ${interrupted === 'signal' ? 'by a signal (SIGINT/SIGTERM)' : 'at the --max-duration deadline'} after ${result.stats.fetched} fetched page(s), with ${result.stats.queuedRemaining} URL(s) still queued: this is a partial report. Site-level findings (duplicates, hreflang return links) use the crawled subset, orphan pages are not reported, and the host, locale and llms.txt probes${opts.checkExternal ? ', the outbound link check' : ''} and the CrUX query were skipped. Continue the crawl with --resume ${result.runId}.`,
+    );
+  else if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
   if (launch) limitations.push(`Pre-launch profile (--pre-launch): the site is audited as it will be once live. ${launch.noindex.size ? `${launch.noindex.size} noindex page(s) were evaluated as indexable; their noindex is in the launch checklist. ` : ''}Findings that depend on the test server (environment) or on a deliberate pre-launch state (launch checklist) are listed separately and excluded from the score and --fail-on.`);
   if (result.siteUrl) limitations.push(`Audited ${result.origin} as ${result.siteUrl} (--site-url): canonical, hreflang, sitemap and link URLs on ${result.siteUrl} were checked against the crawled pages at ${result.origin}; the public site itself was not fetched.`);
   if (!opts.checkExternal) limitations.push('Outbound links were not checked (use --check-external).');

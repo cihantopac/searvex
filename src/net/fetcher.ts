@@ -229,11 +229,21 @@ export class HostRateLimiter {
   }
   private custom = new Map<string, number>();
 
-  async wait(host: string): Promise<void> {
+  /** Wait for the host's next slot; resolves early when `signal` aborts (the caller then checks it). */
+  async wait(host: string, signal?: AbortSignal): Promise<void> {
     const now = Date.now();
     const delay = this.custom.get(host) ?? this.delayMs;
     const at = Math.max(now, this.next.get(host) ?? 0);
     this.next.set(host, at + delay);
-    if (at > now) await new Promise((r) => setTimeout(r, at - now));
+    if (at <= now || signal?.aborted) return;
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', done);
+        resolve();
+      };
+      const timer = setTimeout(done, at - now);
+      signal?.addEventListener('abort', done, { once: true });
+    });
   }
 }
