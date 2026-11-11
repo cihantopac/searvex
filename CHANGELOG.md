@@ -5,6 +5,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Repository adapters for SvelteKit, Remix and WordPress block themes. SvelteKit: routes from
+  `src/routes/**/+page.svelte` (groups dropped), `<svelte:head>` title/description/robots with layout inheritance,
+  `lang` in `src/app.html`. Remix: flat and folder routes in `app/routes` (`blog.$slug` → `/blog/:slug`, pathless
+  and `_index` segments), the route `meta` export read from the AST (a computed one is unknown) with `root.tsx`
+  as fallback, resource routes without a default export skipped, `lang` in `root.tsx`. Block themes (style.css +
+  theme.json + templates, no `header.php`) are detected; a post title block without `"level":1` in
+  `templates/single.html` / `page.html` is reported as a missing `<h1>`. `optimize` writes sitemaps and robots.txt
+  to `static/` (SvelteKit) and `public/` (Remix) and gives canonical hints for both.
+
 ### Changed
 - Repository mode parses Vue SFCs, Astro pages and Blade views instead of matching regexes: `<script setup>` head
   calls (`useHead`, `useSeoMeta`, `definePageMeta`) and Astro frontmatter through the Babel AST, Astro templates

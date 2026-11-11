@@ -316,6 +316,10 @@ function frameworkCanonicalHint(fw: string): string {
       return 'Use useHead({ link: [{ rel: "canonical", href: absoluteUrl }] }) or the @nuxtjs/seo module.';
     case 'laravel':
       return 'In the layout <head>: <link rel="canonical" href="{{ url()->current() }}"> (adjust if query strings must be kept).';
+    case 'sveltekit':
+      return 'In the root +layout.svelte: <svelte:head><link rel="canonical" href={new URL($page.url.pathname, PUBLIC_SITE_URL).href} /></svelte:head> (import page from $app/stores, PUBLIC_SITE_URL from $env/static/public).';
+    case 'remix':
+      return 'Return a canonical descriptor from each route\'s meta export: { tagName: "link", rel: "canonical", href: absoluteUrl } (or render <link rel="canonical"> in root.tsx from the request URL).';
     case 'wordpress-theme':
       return 'WordPress core outputs rel=canonical for singular content via wp_head(); ensure header.php calls wp_head().';
     default:
@@ -365,7 +369,7 @@ function planSitemap(
       stage('robots.no-sitemap', 'Add app/robots.ts referencing the sitemap', 'Next.js MetadataRoute.Robots convention; allows all crawlers.', `${appBase}/robots.ts`, `import type { MetadataRoute } from 'next';\n\nexport default function robots(): MetadataRoute.Robots {\n  return {\n    rules: { userAgent: '*', allow: '/' },\n    sitemap: '${origin}/sitemap.xml',\n  };\n}\n`, 'create');
     }
     return;
-  } else if (scan.locations.publicDir && ['laravel', 'nextjs-pages', 'vite-spa', 'cra-spa', 'nuxt', 'astro'].includes(fw) && staticRoutes.length) {
+  } else if (scan.locations.publicDir && ['laravel', 'nextjs-pages', 'vite-spa', 'cra-spa', 'nuxt', 'astro', 'sveltekit', 'remix'].includes(fw) && staticRoutes.length) {
     if (fw === 'astro' || fw === 'nuxt') {
       plan.tasks.push({ ruleId: 'robots.no-sitemap', title: 'Add a sitemap integration', instruction: fw === 'astro' ? 'Install @astrojs/sitemap and add it to integrations in astro.config (requires `site`).' : 'Install @nuxtjs/sitemap (or @nuxtjs/seo) and configure site.url.', locations: [{ file: scan.locations.publicDir }] });
       return;

@@ -37736,6 +37736,10 @@ function frameworkCanonicalHint(fw) {
       return 'Use useHead({ link: [{ rel: "canonical", href: absoluteUrl }] }) or the @nuxtjs/seo module.';
     case "laravel":
       return 'In the layout <head>: <link rel="canonical" href="{{ url()->current() }}"> (adjust if query strings must be kept).';
+    case "sveltekit":
+      return 'In the root +layout.svelte: <svelte:head><link rel="canonical" href={new URL($page.url.pathname, PUBLIC_SITE_URL).href} /></svelte:head> (import page from $app/stores, PUBLIC_SITE_URL from $env/static/public).';
+    case "remix":
+      return `Return a canonical descriptor from each route's meta export: { tagName: "link", rel: "canonical", href: absoluteUrl } (or render <link rel="canonical"> in root.tsx from the request URL).`;
     case "wordpress-theme":
       return "WordPress core outputs rel=canonical for singular content via wp_head(); ensure header.php calls wp_head().";
     default:
@@ -37792,7 +37796,7 @@ export default function robots(): MetadataRoute.Robots {
 `, "create");
     }
     return;
-  } else if (scan.locations.publicDir && ["laravel", "nextjs-pages", "vite-spa", "cra-spa", "nuxt", "astro"].includes(fw) && staticRoutes.length) {
+  } else if (scan.locations.publicDir && ["laravel", "nextjs-pages", "vite-spa", "cra-spa", "nuxt", "astro", "sveltekit", "remix"].includes(fw) && staticRoutes.length) {
     if (fw === "astro" || fw === "nuxt") {
       plan.tasks.push({ ruleId: "robots.no-sitemap", title: "Add a sitemap integration", instruction: fw === "astro" ? "Install @astrojs/sitemap and add it to integrations in astro.config (requires `site`)." : "Install @nuxtjs/sitemap (or @nuxtjs/seo) and configure site.url.", locations: [{ file: scan.locations.publicDir }] });
       return;
@@ -40787,6 +40791,7 @@ function detectApp(dir, rel2 = ".") {
   const composer = readJson(path11.join(dir, "composer.json"));
   if (composer?.require?.["laravel/framework"]) out.push({ framework: "laravel", root: rel2, evidence: `laravel/framework@${composer.require["laravel/framework"]}` });
   if (has2(dir, "style.css") && has2(dir, "functions.php")) out.push({ framework: "wordpress-theme", root: rel2, evidence: "style.css + functions.php" });
+  else if (has2(dir, "style.css") && has2(dir, "theme.json") && has2(dir, "templates")) out.push({ framework: "wordpress-theme", root: rel2, evidence: "style.css + theme.json (block theme)" });
   if (has2(dir, "wp-content/themes")) out.push({ framework: "wordpress-theme", root: rel2, evidence: "wp-content/themes" });
   if (has2(dir, "hugo.toml", "hugo.yaml", "config.toml") && has2(dir, "content", "layouts")) out.push({ framework: "hugo", root: rel2, evidence: "hugo config + content/" });
   if (has2(dir, "_config.yml") && has2(dir, "_layouts", "_posts")) out.push({ framework: "jekyll", root: rel2, evidence: "_config.yml + _layouts" });
@@ -41289,6 +41294,120 @@ function scanNextApp(appRoot, files, read, sink, scan) {
   if (robotsGen) scan.locations.hasRobotsGenerator = robotsGen.rel;
   if (sitemapGen) scan.locations.hasSitemapGenerator = sitemapGen.rel;
 }
+function svelteHead(src) {
+  return [...src.matchAll(/<svelte:head>([\s\S]*?)<\/svelte:head>/g)].map((m) => m[1]).join("\n");
+}
+function headMarkup(head) {
+  const component = /<[A-Z][\w.]*\b/.test(head);
+  const title = /<title\b/i.test(head) ? true : component ? null : false;
+  const description = /<meta\b[^>]*name\s*=\s*["']description["']/i.test(head) ? true : component ? null : false;
+  return { title, description, noindex: /<meta\b[^>]*name\s*=\s*["']robots["'][^>]*noindex/i.test(head) };
+}
+function scanSvelteKit(appRoot, files, read, sink, scan) {
+  const base = rel(appRoot, "src/routes/");
+  const layouts = /* @__PURE__ */ new Map();
+  for (const f of files.filter((f2) => f2.rel.startsWith(base) && /\/\+layout\.svelte$/.test(f2.rel))) layouts.set(path12.posix.dirname(f.rel), headMarkup(svelteHead(read(f.rel))));
+  scan.locations.layouts = [...layouts.keys()];
+  for (const p of files.filter((f) => f.rel.startsWith(base) && /\/\+page\.svelte$/.test(f.rel))) {
+    const dir = path12.posix.dirname(p.rel);
+    const route = "/" + dir.slice(base.length).split("/").filter((s) => s && !/^\(.+\)$/.test(s)).join("/");
+    const own = headMarkup(svelteHead(read(p.rel)));
+    const chain = [own];
+    for (let d = dir; d.length >= base.length - 1; d = path12.posix.dirname(d)) {
+      const l = layouts.get(d);
+      if (l) chain.push(l);
+      if (d + "/" === base || d === "." || d === "") break;
+    }
+    const hasTitle = anyOf(...chain.map((c) => c.title));
+    const hasDesc = anyOf(...chain.map((c) => c.description));
+    const noindex = chain.some((c) => c.noindex);
+    scan.routes.push({ route: route === "/" ? "/" : route.replace(/\/$/, ""), file: p.rel, framework: "sveltekit", dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: hasDesc, noindex });
+    if (hasTitle === false) sink.emit("title.missing", { file: p.rel, observed: `route ${route}: no <title> in <svelte:head> of the page or its layouts` });
+    if (hasDesc === false && !noindex) sink.emit("description.missing", { file: p.rel, observed: `route ${route}: no meta description in <svelte:head>` });
+  }
+  const appHtml = rel(appRoot, "src/app.html");
+  if (files.some((f) => f.rel === appHtml)) {
+    scan.locations.rootLayout = appHtml;
+    const src = read(appHtml);
+    const m = /<html\b[^>]*>/i.exec(src);
+    if (m && !/\blang\s*=/.test(m[0])) sink.emit("html.lang-missing", { file: appHtml, line: lineOf(src, m.index), observed: m[0] });
+  }
+}
+function remixRoute(name) {
+  const segs = name.split(".").filter((s) => s && s !== "_index" && s !== "route");
+  const kept = segs.filter((s) => !s.startsWith("_")).map((s) => s.replace(/_$/, ""));
+  const route = "/" + kept.map((s) => s.startsWith("$") || /^\(\$/.test(s) ? `:${s.replace(/[()$]/g, "") || "splat"}` : s).join("/");
+  return { route: route === "/" ? "/" : route.replace(/\/$/, ""), dynamic: kept.some((s) => s.includes("$")) };
+}
+function remixMeta(src, file2) {
+  const program = parseSource(src, file2);
+  const out = { exported: false, title: false, description: false, noindex: false };
+  if (!program) return { exported: /export\s+(const|function)\s+meta\b/.test(src), title: null, description: null, noindex: false };
+  for (const n of program["body"]) {
+    if (n.type !== "ExportNamedDeclaration") continue;
+    const d = n["declaration"];
+    let fn = null;
+    if (d?.type === "FunctionDeclaration" && d["id"]?.["name"] === "meta") fn = d;
+    else if (d?.type === "VariableDeclaration") {
+      for (const v of d["declarations"]) if (v["id"]?.["name"] === "meta") fn = v["init"];
+    }
+    if (!fn) continue;
+    out.exported = true;
+    let arr = null;
+    const body = fn["body"];
+    if (body?.type === "ArrayExpression") arr = body;
+    else if (body?.type === "BlockStatement") {
+      for (const s of body["body"]) if (s.type === "ReturnStatement" && s["argument"]?.type === "ArrayExpression") arr = s["argument"];
+    }
+    if (!arr) return { ...out, title: null, description: null };
+    for (const e of arr["elements"]) {
+      if (!e || e.type !== "ObjectExpression") {
+        out.title = out.title === true ? true : null;
+        out.description = out.description === true ? true : null;
+        continue;
+      }
+      const name = prop2(e, "name");
+      const nameValue = name && name.type === "StringLiteral" ? name["value"].toLowerCase() : null;
+      if (prop2(e, "title") !== void 0) out.title = true;
+      if (nameValue === "description") out.description = true;
+      const content = prop2(e, "content");
+      if (nameValue === "robots" && content?.type === "StringLiteral" && /noindex/i.test(content["value"])) out.noindex = true;
+    }
+  }
+  return out;
+}
+function scanRemix(appRoot, files, read, sink, scan) {
+  const base = rel(appRoot, "app/routes/");
+  const rootFile = ["tsx", "jsx", "ts", "js"].map((e) => rel(appRoot, `app/root.${e}`)).find((r) => files.some((f) => f.rel === r));
+  const rootMeta = rootFile ? remixMeta(read(rootFile), rootFile) : null;
+  for (const f of files.filter((x) => x.rel.startsWith(base) && /\.(tsx|jsx|ts|js|mdx?)$/.test(x.rel))) {
+    const inner = f.rel.slice(base.length);
+    const name = inner.includes("/") ? /\/route\.\w+$/.test(inner) ? inner.replace(/\/route\.\w+$/, "") : null : inner.replace(/\.\w+$/, "");
+    if (name === null) continue;
+    const src = read(f.rel);
+    if (!/export\s+default\b/.test(src)) continue;
+    const { route, dynamic } = remixRoute(name);
+    const own = remixMeta(src, f.rel);
+    const meta = own.exported ? own : rootMeta ?? own;
+    scan.routes.push({ route, file: f.rel, framework: "remix", dynamic, hasTitle: meta.title, hasDescription: meta.description, noindex: meta.noindex });
+    if (meta.title === false) sink.emit("title.missing", { file: f.rel, observed: `route ${route}: no title in the meta export${own.exported ? "" : " (none in root.tsx either)"}` });
+    if (meta.description === false && !meta.noindex) sink.emit("description.missing", { file: f.rel, observed: `route ${route}: no description in the meta export` });
+  }
+  if (rootFile) {
+    scan.locations.rootLayout = rootFile;
+    htmlLangCheck(read(rootFile), rootFile, "html", sink);
+  }
+}
+function scanBlockTheme(themeRoot, files, read, sink, scan) {
+  for (const t of ["single", "page"]) {
+    const f = files.find((x) => x.rel === `${themeRoot}templates/${t}.html`);
+    if (!f) continue;
+    scan.locations.layouts.push(f.rel);
+    const src = read(f.rel);
+    const titles = [...src.matchAll(/<!--\s*wp:post-title\b([^>]*?)\/?-->/g)];
+    if (titles.length && !titles.some((m) => /"level"\s*:\s*1\b/.test(m[1] ?? ""))) sink.emit("h1.missing", { file: f.rel, line: lineOf(src, titles[0].index), observed: `templates/${t}.html: the post title block has no "level":1, so ${t === "single" ? "posts" : "pages"} render without an <h1>` });
+  }
+}
 function scanNextPages(appRoot, files, read, sink, scan) {
   const base = files.some((f) => f.rel.startsWith(rel(appRoot, "src/pages/"))) ? rel(appRoot, "src/pages/") : rel(appRoot, "pages/");
   const pages = files.filter((f) => f.rel.startsWith(base) && /\.(tsx|jsx|ts|js|mdx)$/.test(f.rel) && !/\/(_app|_document|_error|404|500)\.|\/api\//.test("/" + f.rel.slice(base.length)));
@@ -41489,7 +41608,7 @@ function scanApp(root2, appRoot, framework, files, read, sink, opts) {
     locations: { publicDir: null, robotsFile: null, sitemapFiles: [], rootLayout: null, layouts: [], hasSitemapGenerator: null, hasRobotsGenerator: null }
   };
   const appFiles = appRoot === "." ? files : files.filter((f) => f.rel.startsWith(appRoot + "/"));
-  const publicDir = ["public", "static", "web"].map((d) => rel(appRoot, d)).find((d) => appFiles.some((f) => f.rel.startsWith(d + "/"))) ?? (["laravel", "nextjs-app", "nextjs-pages", "astro", "nuxt", "vite-spa", "cra-spa"].includes(framework) ? rel(appRoot, "public") : null);
+  const publicDir = ["public", "static", "web"].map((d) => rel(appRoot, d)).find((d) => appFiles.some((f) => f.rel.startsWith(d + "/"))) ?? (["laravel", "nextjs-app", "nextjs-pages", "astro", "nuxt", "vite-spa", "cra-spa", "remix"].includes(framework) ? rel(appRoot, "public") : framework === "sveltekit" ? rel(appRoot, "static") : null);
   scan.locations.publicDir = publicDir;
   scan.locations.robotsFile = appFiles.find((f) => f.rel === (publicDir ? `${publicDir}/robots.txt` : "robots.txt") || f.rel === rel(appRoot, "robots.txt"))?.rel ?? null;
   scan.locations.sitemapFiles = appFiles.filter((f) => /sitemap[^/]*\.xml$/i.test(f.rel) && !/(^|\/)(dist|build|out)\//.test(f.rel)).map((f) => f.rel);
@@ -41548,8 +41667,15 @@ function scanApp(root2, appRoot, framework, files, read, sink, opts) {
       if (/spatie\/laravel-sitemap/.test(composerText)) scan.locations.hasSitemapGenerator = "spatie/laravel-sitemap";
       break;
     }
+    case "sveltekit":
+      scanSvelteKit(appRoot, appFiles, read, sink, scan);
+      break;
+    case "remix":
+      scanRemix(appRoot, appFiles, read, sink, scan);
+      break;
     case "wordpress-theme": {
-      const themeRoot = appFiles.find((f) => /(^|\/)functions\.php$/.test(f.rel))?.rel.replace(/functions\.php$/, "") ?? "";
+      const themeRoot = appFiles.find((f) => /(^|\/)functions\.php$/.test(f.rel))?.rel.replace(/functions\.php$/, "") ?? appFiles.find((f) => /(^|\/)style\.css$/.test(f.rel))?.rel.replace(/style\.css$/, "") ?? "";
+      if (!appFiles.some((f) => f.rel === `${themeRoot}header.php`) && appFiles.some((f) => f.rel === `${themeRoot}theme.json`)) scanBlockTheme(themeRoot, appFiles, read, sink, scan);
       const header = appFiles.find((f) => f.rel === `${themeRoot}header.php`);
       const fn = appFiles.find((f) => f.rel === `${themeRoot}functions.php`);
       const fnSrc = fn ? read(fn.rel) : "";
@@ -41614,7 +41740,7 @@ function scanApp(root2, appRoot, framework, files, read, sink, opts) {
 }
 function scanRepository(root2, sink, opts = {}) {
   const detection = detect(root2);
-  const { files, skipped } = walk(root2, { include: (r) => SOURCE_EXT.test(r) || /(^|\/)(robots\.txt|sitemap[^/]*\.xml|package\.json|composer\.json|astro\.config\.\w+|nuxt\.config\.\w+|next\.config\.\w+)$/.test(r) });
+  const { files, skipped } = walk(root2, { include: (r) => SOURCE_EXT.test(r) || /(^|\/)(robots\.txt|sitemap[^/]*\.xml|package\.json|composer\.json|astro\.config\.\w+|nuxt\.config\.\w+|next\.config\.\w+|theme\.json)$/.test(r) });
   const cache = /* @__PURE__ */ new Map();
   const read = (f) => {
     let t = cache.get(f);

@@ -82,12 +82,14 @@ Searvex reports what it can observe and labels everything else. Known limits (v1
   dictionaries, spread props, helper calls) is treated as unknown rather than missing. Vue SFC `<script>`
   blocks and Astro frontmatter go through the same AST, Astro templates through an HTML parser (a `title` prop
   on a component counts, an HTML `title` attribute does not), and Blade views through a tokenizer that drops
-  comments, `@verbatim` and `@php` blocks. Vue templates other than Nuxt's `<Title>`/`<Meta>`, Blade
+  comments, `@verbatim` and `@php` blocks. SvelteKit `<svelte:head>` is read from the markup (an SEO component
+  in it is unknown); Remix `meta` exports through the AST, with `root.tsx` as fallback (Remix's own merge rules for
+  nested routes are not modelled); block themes only for the post title level. Vue templates other than Nuxt's `<Title>`/`<Meta>`, Blade
   `@section`/`@yield` resolution across views and PHP code are not analysed.
-- Supported: Next.js (app & pages router), Astro, Nuxt, Laravel (Blade), WordPress classic themes,
-  Vite/CRA SPAs, static HTML (and committed build output), monorepos (npm/yarn/pnpm workspaces).
-- Partial: SvelteKit, Remix, Gatsby, Eleventy, Hugo, Jekyll (detected; generic checks only).
-- Not supported: WordPress block themes (no `header.php`), Angular, Django/Rails templates, CMS databases.
+- Supported: Next.js (app & pages router), Astro, Nuxt, SvelteKit, Remix, Laravel (Blade), WordPress classic and
+  block themes, Vite/CRA SPAs, static HTML (and committed build output), monorepos (npm/yarn/pnpm workspaces).
+- Partial: Gatsby, Eleventy, Hugo, Jekyll (detected; generic checks only).
+- Not supported: Angular, Django/Rails templates, CMS databases.
 - Automatic fixes exist for 12 rule types; everything requiring judgement is an agent task. In repositories with
   several apps, sitemaps are a task (one `--site-url` cannot tell which host serves which app); run `optimize` on
   the app folder with its own `--site-url` instead.

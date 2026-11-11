@@ -54,6 +54,8 @@ export function detectApp(dir: string, rel = '.'): Array<{ framework: Framework;
   const composer = readJson<{ require?: Record<string, string> }>(path.join(dir, 'composer.json'));
   if (composer?.require?.['laravel/framework']) out.push({ framework: 'laravel', root: rel, evidence: `laravel/framework@${composer.require['laravel/framework']}` });
   if (has(dir, 'style.css') && has(dir, 'functions.php')) out.push({ framework: 'wordpress-theme', root: rel, evidence: 'style.css + functions.php' });
+  // Block themes need no functions.php: style.css plus theme.json and block templates.
+  else if (has(dir, 'style.css') && has(dir, 'theme.json') && has(dir, 'templates')) out.push({ framework: 'wordpress-theme', root: rel, evidence: 'style.css + theme.json (block theme)' });
   if (has(dir, 'wp-content/themes')) out.push({ framework: 'wordpress-theme', root: rel, evidence: 'wp-content/themes' });
   if (has(dir, 'hugo.toml', 'hugo.yaml', 'config.toml') && has(dir, 'content', 'layouts')) out.push({ framework: 'hugo', root: rel, evidence: 'hugo config + content/' });
   if (has(dir, '_config.yml') && has(dir, '_layouts', '_posts')) out.push({ framework: 'jekyll', root: rel, evidence: '_config.yml + _layouts' });

@@ -64,6 +64,6 @@ Open items name the release and milestone of the maintainer's release plan that 
 ### P3 — Later
 | # | Item | Status |
 |---|---|---|
-| 23 | WordPress block themes, SvelteKit, Remix adapters and fixes | ⬜ planned for 1.4.0 (G6) |
+| 23 | WordPress block themes, SvelteKit, Remix adapters and fixes | ✅ 1.4.0 (G6) |
 | 24 | Localised report text | ✅ English and Turkish since 1.1.0 |
 | 25 | Community rule packs with the same sourcing rules | ⬜ planned for 1.5.0 (H4) |
