@@ -39940,7 +39940,7 @@ async function commandMonitor(flags) {
     const note = `${notAnalysedReason(report)}; no comparison with the previous run.`;
     store2.writeJson("monitor.json", { diff: null, notes: [note] });
     if (v["json"]) process.stdout.write(JSON.stringify({ diff: null, notes: [note] }, null, 2) + "\n");
-    console.error(`searvex: ${note}`);
+    reportNotAnalysed(report, !!v["json"], "; no comparison with the previous run.");
     return EXIT.unreachable;
   }
   const explicit = v["baseline"];
@@ -42435,6 +42435,7 @@ async function commandRun(flags) {
   const competitors = v["competitor"] ?? [];
   if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
   if (competitors.length && !url) throw new UsageError("--competitor requires a website URL");
+  if (v["fail-on"] !== void 0) failOnIndex(v["fail-on"]);
   const kb = loadKnowledge();
   const workspace = path20.resolve(String(v["out"] ?? (repo ?? process.cwd())));
   const opts = crawlOptionsFrom(v);
@@ -42540,7 +42541,7 @@ Fix plan (dry run, nothing changed): ${summary.plan.fixes.length} automatic fix(
     if (html3) openFile(html3);
   }
   if (summary.website && notAnalysed(summary.website.report)) {
-    reportNotAnalysed(summary.website.report);
+    reportNotAnalysed(summary.website.report, !!v["json"]);
     return EXIT.unreachable;
   }
   const codes = [summary.website && failOnExit(summary.website.report, v["fail-on"]), summary.repository && failOnExit(summary.repository.report, v["fail-on"])];
@@ -42864,6 +42865,7 @@ Environment (all optional, read-only integrations)
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
   SEARVEX_CREDENTIAL_STORE  file (default, 0600 file in the config dir) or keychain (macOS Keychain,
                         Secret Service via secret-tool, Windows DPAPI)
+  SEARVEX_DEBUG=1       Print the stack trace of a runtime error (exit 3); by default one line
 
 Exit codes
   0 completed \xB7 1 --fail-on threshold reached (also optimize verification failed, rollback conflict, or
@@ -42936,6 +42938,17 @@ function num(v, def, min = 0, max = Number.MAX_SAFE_INTEGER) {
 }
 var UsageError = class extends Error {
 };
+var PolicyError = class extends UsageError {
+};
+var HELP_TRAILER = 'Run "searvex --help" for usage.';
+function errorJson(code, kind, message) {
+  return JSON.stringify({ error: { code, kind, message } });
+}
+function reportError(code, kind, message, json, hint) {
+  console.error(`searvex: ${message}${hint ? `
+${hint}` : ""}`);
+  if (json) console.error(errorJson(code, kind, message));
+}
 var EXIT = {
   ok: 0,
   /** --fail-on threshold reached (also: optimize verification failed, rollback conflict, integration not working). */
@@ -42952,13 +42965,13 @@ var EXIT = {
 };
 function assertTargetAllowed(report) {
   const err = report.crawl.status === "unreachable" ? report.crawl.error : void 0;
-  if (err?.startsWith("Blocked: ")) throw new UsageError(`${report.target} is blocked by the network policy (${err.slice(9)}). Use --allow-private for a local or private development server.`);
+  if (err?.startsWith("Blocked: ")) throw new PolicyError(`${report.target} is blocked by the network policy (${err.slice(9)}). Use --allow-private for a local or private development server.`);
 }
 function auditExit(report, failOn) {
   return notAnalysed(report) ? EXIT.unreachable : failOnExit(report, failOn);
 }
-function reportNotAnalysed(report) {
-  if (notAnalysed(report)) console.error(`searvex: ${notAnalysedReason(report)}`);
+function reportNotAnalysed(report, json, suffix = "") {
+  if (notAnalysed(report)) reportError(EXIT.unreachable, report.crawl.status, `${notAnalysedReason(report)}${suffix}`, json);
 }
 function crawlOptionsFrom(v) {
   return {
@@ -43007,10 +43020,14 @@ function writeReports(store2, report, kb, formats) {
   }
   return out;
 }
-function failOnExit(report, failOn) {
-  if (!failOn) return EXIT.ok;
+function failOnIndex(failOn) {
   const idx = SEVERITY_ORDER.indexOf(String(failOn));
   if (idx < 0 || failOn === "info") throw new UsageError("--fail-on must be critical|high|medium|low");
+  return idx;
+}
+function failOnExit(report, failOn) {
+  if (!failOn) return EXIT.ok;
+  const idx = failOnIndex(failOn);
   return report.findings.some((f) => SEVERITY_ORDER.indexOf(f.severity) <= idx && countsTowardScore(f)) ? EXIT.failOn : EXIT.ok;
 }
 function printSummary(report, files, v, autoRules = []) {
@@ -43091,6 +43108,7 @@ async function commandAudit(flags) {
     throw new UsageError(`Not a URL and not an existing path: ${target}`);
   }
   assertSiteUrl(v);
+  if (v["fail-on"] !== void 0) failOnIndex(v["fail-on"]);
   const kb = loadKnowledge();
   const workspace = path22.resolve(String(v["out"] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
@@ -43126,7 +43144,7 @@ async function commandAudit(flags) {
     assertTargetAllowed(report);
     const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
     printSummary(report, files, v);
-    reportNotAnalysed(report);
+    reportNotAnalysed(report, !!v["json"]);
     return auditExit(report, v["fail-on"]);
   } finally {
     await render3?.close();
@@ -43144,7 +43162,7 @@ async function commandGeo(flags) {
   assertTargetAllowed(report);
   const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
   const unreachable = notAnalysed(report);
-  if (unreachable) console.error(`searvex: ${notAnalysedReason(report)} \u2014 no GEO checks were run.`);
+  reportNotAnalysed(report, !!v["json"], " \u2014 no GEO checks were run.");
   if (v["json"]) {
     process.stdout.write(JSON.stringify({ target: report.target, ...unreachable ? { crawl: { status: report.crawl.status, error: report.crawl.error } } : {}, geo: report.geo, findings: report.findings.filter((f) => f.category === "geo" || f.ruleId.startsWith("sd.")) }, null, 2) + "\n");
     return unreachable ? EXIT.unreachable : EXIT.ok;
@@ -43266,8 +43284,7 @@ async function main(argv = process.argv.slice(2)) {
   try {
     flags = parse8(argv);
   } catch (e) {
-    console.error(`searvex: ${e.message}
-Run "searvex --help" for usage.`);
+    reportError(EXIT.usage, "usage", e.message, argv.includes("--json"), HELP_TRAILER);
     return EXIT.usage;
   }
   if (flags.values["version"]) return console.log(SEARVEX_VERSION), 0;
@@ -43313,11 +43330,14 @@ Run "searvex --help" for usage.`);
         throw new UsageError(`Unknown command: ${cmd}`);
     }
   } catch (e) {
+    const json = !!flags.values["json"];
     if (e instanceof UsageError) {
-      console.error(`searvex: ${e.message}`);
+      reportError(EXIT.usage, e instanceof PolicyError ? "policy" : "usage", e.message, json, HELP_TRAILER);
       return EXIT.usage;
     }
-    console.error(`searvex: ${e.stack ?? e}`);
+    const message = e instanceof Error ? e.message || e.name : String(e);
+    const debug = !!process.env["SEARVEX_DEBUG"] && process.env["SEARVEX_DEBUG"] !== "0";
+    reportError(EXIT.runtime, "runtime", message, json, debug ? String(e.stack ?? e) : "Run with SEARVEX_DEBUG=1 for details.");
     return EXIT.runtime;
   }
 }
@@ -43331,19 +43351,24 @@ export {
   CLI_OPTIONS,
   EXIT,
   HELP_TEXT,
+  HELP_TRAILER,
+  PolicyError,
   SEVERITY_ORDER,
   UsageError,
   assertSiteUrl,
   assertTargetAllowed,
   auditExit,
   crawlOptionsFrom,
+  errorJson,
   failOnExit,
+  failOnIndex,
   isPrivateTarget,
   log,
   main,
   num,
   pagesLabel,
   printSummary,
+  reportError,
   reportNotAnalysed,
   suggestPreLaunch,
   summaryText,

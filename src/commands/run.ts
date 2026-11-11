@@ -9,7 +9,7 @@ import { planFixes, type FixPlan } from '../optimize/fixes.js';
 import { auditRepository } from '../repo/audit.js';
 import { loadKnowledge } from '../rules/engine.js';
 import { md, renderMarkdown } from '../report/markdown.js';
-import { assertTargetAllowed, crawlOptionsFrom, EXIT, failOnExit, log, num, reportNotAnalysed, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
+import { assertTargetAllowed, crawlOptionsFrom, EXIT, failOnExit, failOnIndex, log, num, reportNotAnalysed, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
 import { diffReports, findBaseline, renderDiffMarkdown, type MonitorDiff } from './monitor.js';
 import { computeGaps, profile, renderResearchMarkdown, type ResearchReport } from './research.js';
 import { renderPlan } from './optimize.js';
@@ -101,6 +101,7 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
   const competitors = (v['competitor'] as string[] | undefined) ?? [];
   if (competitors.length > 10) throw new UsageError('At most 10 --competitor URLs');
   if (competitors.length && !url) throw new UsageError('--competitor requires a website URL');
+  if (v['fail-on'] !== undefined) failOnIndex(v['fail-on']);
 
   const kb = loadKnowledge();
   const workspace = path.resolve(String(v['out'] ?? (repo ?? process.cwd())));
@@ -214,7 +215,7 @@ export async function commandRun(flags: GlobalFlags): Promise<number> {
   }
 
   if (summary.website && notAnalysed(summary.website.report)) {
-    reportNotAnalysed(summary.website.report);
+    reportNotAnalysed(summary.website.report, !!v['json']);
     return EXIT.unreachable;
   }
   const codes = [summary.website && failOnExit(summary.website.report, v['fail-on']), summary.repository && failOnExit(summary.repository.report, v['fail-on'])];

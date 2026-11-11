@@ -139,6 +139,7 @@ describe('A1: robots.txt blocking every URL is not a scored run', () => {
       const { code, stderr, stdout } = await cli(['audit', s.url + '/', '--allow-private', '--delay', '0', '--fail-on', 'low', '--out', dir, ...flags]);
       expect(code, flags.join(' ')).toBe(EXIT.unreachable);
       expect(stderr.filter((l) => l.startsWith('searvex: '))).toEqual([expect.stringMatching(/^searvex: robots\.txt blocks every URL: /)]);
+      if (flags[0] === '--json') expect(JSON.parse(stderr.at(-1)!).error).toMatchObject({ code: 4, kind: 'robots-blocked' });
       if (flags[0] === '--json') expect(JSON.parse(stdout).crawl.status).toBe('robots-blocked');
     }
   });
@@ -184,7 +185,7 @@ describe('A4: policy-blocked target', () => {
     const dir = fs.mkdtempSync(path.join(ws, 'policy-'));
     const { code, stderr, stdout } = await cli(['audit', s.url + '/', '--out', dir, '--json']);
     expect(code).toBe(EXIT.usage);
-    expect(stderr).toEqual([expect.stringMatching(/^searvex: .*blocked by the network policy/)]);
+    expect(stderr).toEqual([expect.stringMatching(/^searvex: .*blocked by the network policy.*\nRun "searvex --help" for usage\.$/s), expect.stringMatching(/^\{"error":\{"code":2,"kind":"policy"/)]);
     expect(stdout).toBe('');
     const id = RunStore.list(dir).at(-1)!;
     expect(new RunStore(dir, id).readJson<AuditReport>('report.json')?.crawl.status).toBe('unreachable');

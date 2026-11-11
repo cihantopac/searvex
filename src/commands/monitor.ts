@@ -9,7 +9,7 @@ import { querySearchConsole, type GscRow } from '../integrations/gsc.js';
 import { gscAccessToken } from '../integrations/google-oauth.js';
 import { GscImportError, importGscFiles, parseGscTable, type GscExport } from '../integrations/gsc-csv.js';
 import { assertAuditInProperty, matchAuditToProperty, parseProperty, propertyForExport, PropertyError, type SearchProperty } from '../integrations/property.js';
-import { assertTargetAllowed, crawlOptionsFrom, EXIT, log, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
+import { assertTargetAllowed, crawlOptionsFrom, EXIT, log, reportNotAnalysed, suggestPreLaunch, UsageError, writeReports, type GlobalFlags } from '../cli.js';
 
 export interface FindingDelta {
   ruleId: string;
@@ -163,7 +163,7 @@ export async function commandMonitor(flags: GlobalFlags): Promise<number> {
     const note = `${notAnalysedReason(report)}; no comparison with the previous run.`;
     store.writeJson('monitor.json', { diff: null, notes: [note] });
     if (v['json']) process.stdout.write(JSON.stringify({ diff: null, notes: [note] }, null, 2) + '\n');
-    console.error(`searvex: ${note}`);
+    reportNotAnalysed(report, !!v['json'], '; no comparison with the previous run.');
     return EXIT.unreachable;
   }
   const explicit = v['baseline'] as string | undefined;
