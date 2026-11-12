@@ -19,7 +19,8 @@ import { startPolicyProxy, type PolicyProxy, type PolicyProxyStats } from '../ne
  * - Chromium's own sandbox is used where the OS allows it; otherwise the fallback is recorded in stats.
  */
 export interface Renderer {
-  render: (url: string) => Promise<{ html: string; error?: string }>;
+  /** `screenshot`: also capture one viewport PNG (`--screenshots`). */
+  render: (url: string, o?: { screenshot?: boolean }) => Promise<{ html: string; error?: string; screenshot?: Buffer }>;
   close: () => Promise<void>;
 }
 
@@ -27,6 +28,7 @@ interface PwPage {
   goto: (url: string, o: object) => Promise<unknown>;
   waitForLoadState: (state: string, o: object) => Promise<void>;
   content: () => Promise<string>;
+  screenshot: (o: object) => Promise<Buffer>;
   close: () => Promise<void>;
 }
 interface PwRoute {
@@ -130,7 +132,7 @@ export async function createRenderer(policy: NetPolicy, timeoutMs = 30000): Prom
   };
   return {
     stats,
-    async render(url: string) {
+    async render(url: string, o: { screenshot?: boolean } = {}) {
       stats.pages++;
       proxy.resetBudget();
       const context = await browser.newContext({ userAgent: DEFAULT_USER_AGENT, serviceWorkers: 'block', acceptDownloads: false, javaScriptEnabled: true, locale: 'en-US', timezoneId: 'America/Los_Angeles' });
@@ -165,7 +167,10 @@ export async function createRenderer(policy: NetPolicy, timeoutMs = 30000): Prom
         // streaming connections never reach "networkidle".
         await main.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
         await main.waitForLoadState('networkidle', { timeout: SETTLE_MS }).catch(() => {});
-        return { html: await main.content() };
+        const html = await main.content();
+        // One viewport, not the full page: bounded size, and what a visitor sees first.
+        const screenshot = o.screenshot ? await main.screenshot({ type: 'png', fullPage: false, timeout: SETTLE_MS }).catch(() => undefined) : undefined;
+        return screenshot ? { html, screenshot } : { html };
       })();
       let timer: NodeJS.Timeout | undefined;
       const deadline = new Promise<'deadline'>((resolve) => (timer = setTimeout(() => resolve('deadline'), deadlineMs)));

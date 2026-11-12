@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import type { AuditReport } from '../analyze/audit.js';
+import { applyTrafficPriorities } from '../analyze/priority.js';
 import { analyzeSearchPerformance, rowsToQueryPage, type SearchPerformanceReport } from '../analyze/search-performance.js';
 import { RunStore } from '../crawl/store.js';
 import { authorize, accessToken, deleteCredential, gscAccessToken, GSC_SCOPE, loadClientFile, OAuthClientFileError, getCredential, revokeToken, saveCredential } from '../integrations/google-oauth.js';
@@ -118,7 +119,12 @@ function saveReport(flags: GlobalFlags, workspace: string, kind: string, meta: R
   if (report.audit) {
     const as = new RunStore(workspace, report.audit.runId);
     const audit = as.readJson<AuditReport>('report.json');
-    if (audit) auditHtml = writeReports(as, audit, loadKnowledge(), ['html'])[0];
+    if (audit) {
+      // Verified clicks and impressions now weigh the audit's priorities (property-matched join only).
+      const traffic = report.pageTotals ? applyTrafficPriorities(audit, report.pageTotals, `${report.source}, ${report.period.days} days`) : null;
+      if (traffic) log(v, `Priorities of ${report.audit.runId} weighted by ${traffic.metric} on ${traffic.pages} crawled page(s).`);
+      auditHtml = writeReports(as, audit, loadKnowledge(), traffic ? ['json', 'html'] : ['html']).at(-1);
+    }
   }
   if (v['json']) process.stdout.write(JSON.stringify(report, null, 2) + '\n');
   else if (!v['quiet']) console.log(renderSearchPerformanceMarkdown(report) + `\nSaved: ${out}${auditHtml ? `\nAudit report updated with this data: ${auditHtml}` : ''}`);
