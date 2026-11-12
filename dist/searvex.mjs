@@ -42934,8 +42934,20 @@ function profile(r) {
     sections: r.inventory.sections,
     // Types actually present on crawled pages (JSON-LD, Microdata, RDFa).
     schemaTypes: (r.inventory.structuredData?.types ?? []).map((t) => t.type),
-    truncated: r.crawl.truncated
+    truncated: r.crawl.truncated,
+    clusters: [...r.content.clusters].sort((a, b) => b.pages.length - a.pages.length).slice(0, 15).map((c) => ({ key: c.key, pages: c.pages.length, terms: c.terms.slice(0, 6) })),
+    intents: intentsOf(r)
   };
+}
+function intentsOf(r) {
+  const out = {};
+  for (const p of r.inventory.pages) {
+    if (!p.intent || !p.indexable) continue;
+    const e = out[p.intent] ??= { pages: 0, types: {} };
+    e.pages++;
+    e.types[p.type] = (e.types[p.type] ?? 0) + 1;
+  }
+  return out;
 }
 function computeGaps(target, competitors, targetAllTerms) {
   const half = Math.max(1, Math.ceil(competitors.length / 2));
@@ -42948,7 +42960,30 @@ function computeGaps(target, competitors, targetAllTerms) {
     for (const t of new Set(c.topTerms.slice(0, 40))) termCount.set(t, (termCount.get(t) ?? 0) + 1);
     for (const t of Object.keys(c.byType)) typeCount.set(t, (typeCount.get(t) ?? 0) + 1);
   }
+  const clusters = competitors.map((c) => ({
+    competitor: c.url,
+    clusters: c.clusters.map((k) => {
+      const terms = k.terms.slice(0, 5);
+      return { ...k, covered: terms.length > 0 && terms.filter((t) => targetAllTerms.has(t)).length >= Math.ceil(terms.length / 2) };
+    })
+  }));
+  const intentNames = [...new Set([target, ...competitors].flatMap((p) => Object.keys(p.intents ?? {})))].sort();
+  const intents = intentNames.map((intent) => {
+    const counts = competitors.map((c) => c.intents?.[intent]?.pages ?? 0);
+    const typeCount2 = /* @__PURE__ */ new Map();
+    for (const c of competitors) for (const t of Object.keys(c.intents?.[intent]?.types ?? {})) typeCount2.set(t, (typeCount2.get(t) ?? 0) + 1);
+    const own = target.intents?.[intent];
+    return {
+      intent,
+      target: own?.pages ?? 0,
+      competitors: counts,
+      gap: !own?.pages && counts.filter((n) => n > 0).length >= half,
+      missingTypes: [...typeCount2.entries()].filter(([t, n]) => n >= half && !own?.types[t] && t !== "other").map(([t]) => t).sort()
+    };
+  });
   return {
+    clusters,
+    intents,
     topics: [...termCount.entries()].filter(([t, n]) => n >= half && !targetAllTerms.has(t)).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([term, n]) => ({ term, competitors: n })),
     pageTypes: [...typeCount.entries()].filter(([t, n]) => n >= half && !target.byType[t] && t !== "other").map(([type, n]) => ({ type, competitors: n })),
     schemaTypes: [...schemaCount.entries()].filter(([t, n]) => n >= half && !targetSchema.has(t)).sort((a, b) => b[1] - a[1]).map(([type, n]) => ({ type, competitors: n }))
@@ -42964,6 +42999,15 @@ function renderResearchMarkdown(r) {
     L.push(r.gaps.topics.length ? r.gaps.topics.map((t) => `- **${md(t.term)}** \u2014 prominent on ${t.competitors}/${r.competitors.length} competitors`).join("\n") : "_No consistent topic gaps found._", "");
     L.push("## Page-type gaps", "");
     L.push(r.gaps.pageTypes.length ? r.gaps.pageTypes.map((t) => `- **${t.type}** pages exist on ${t.competitors}/${r.competitors.length} competitors`).join("\n") : "_No page-type gaps._", "");
+    L.push("## Pages per search intent", "", "_Intent follows from the page type (heuristic). A gap means the target has no page for an intent that most competitors serve._", "");
+    L.push(`| Intent | ${md(r.target.url)} | ${r.competitors.map((c) => md(c.url)).join(" | ")} | Types most competitors use, missing on target |`, `|---|---|${r.competitors.map(() => "---|").join("")}---|`);
+    for (const i of r.gaps.intents) L.push(`| ${i.intent}${i.gap ? " **(gap)**" : ""} | ${i.target} | ${i.competitors.join(" | ")} | ${i.missingTypes.join(", ") || "\u2014"} |`);
+    L.push("");
+    L.push("## Topic clusters per competitor", "", '_Clusters are first-path-segment groups labelled by their dominant terms; "covered" means most of those terms also appear on the target. Hypotheses, not demand._', "");
+    for (const c of r.gaps.clusters) {
+      L.push(`### ${md(c.competitor)}`, "");
+      L.push(c.clusters.length ? c.clusters.map((k) => `- ${k.covered ? "covered" : "**not covered**"} \xB7 \`${md(k.key)}\` (${k.pages} pages): ${k.terms.map(md).join(", ") || "\u2014"}`).join("\n") : "_No clusters (too few pages)._", "");
+    }
     L.push("## Structured data gaps", "");
     L.push(r.gaps.schemaTypes.length ? r.gaps.schemaTypes.map((t) => `- **${md(t.type)}** markup used by ${t.competitors}/${r.competitors.length} competitors \u2014 add only if it describes visible content on your pages`).join("\n") : "_No structured-data gaps._", "");
   }

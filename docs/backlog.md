@@ -37,7 +37,7 @@ Open items name the release and milestone of the maintainer's release plan that 
 | 11 | Impact-based prioritisation (severity × affected share × page importance × traffic when available) | ✅ score/bucket/effort/reasons; "Fix first" table; verified clicks/impressions as an importance input in 1.4.0 (F1) |
 | 12 | Search-intent classification of pages and queries (rules + agent), separate verified vs inferred | ✅ |
 | 13 | Internal-linking opportunities (topic-related pages that do not link to each other; orphans by topic) | ✅ |
-| 14 | Deeper competitor research: per-competitor topic clusters, page-type comparison per intent | ⬜ planned for 1.4.0 (G3) |
+| 14 | Deeper competitor research: per-competitor topic clusters, page-type comparison per intent | ✅ 1.4.0 (G3): cluster coverage per competitor, pages per intent with missing page types |
 | 15 | Bing AI Performance import (CSV) when exported by the user | ⬜ planned for 1.4.0 (F3) |
 | 26 | Property-aware audit joins (GSC/Bing), multi-site regression tests | ✅ v0.7.0 |
 | 27 | Search Console CSV/ZIP import (localised headers, decimal commas, filters/period metadata, limits) | ✅ v0.7.0 — verified with real TR and EN exports (2026-11-01) |
