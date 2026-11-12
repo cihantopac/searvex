@@ -4,11 +4,13 @@
   no telemetry and no server component.
 - **What leaves your machine:** HTTP requests to the sites you audit (and, with `--check-external`, to
   linked sites); and only when you configure them: the audited origin sent to the Chrome UX Report API
-  (`SEARVEX_CRUX_API_KEY`), Search Console API queries for your property (`SEARVEX_GSC_TOKEN`).
+  (`SEARVEX_CRUX_API_KEY`), Search Console API queries for your property (`SEARVEX_GSC_TOKEN`), Google Analytics
+  Data API queries for a GA4 property you name (`ga4 report`).
 - **Credentials:** API keys and tokens from environment variables are used per run and never written to
   reports. `searvex gsc auth` stores a Google refresh token (read-only Search Console scope) in your user
   config directory (0600 on macOS/Linux; on Windows it relies on your user profile's permissions);
-  `searvex gsc logout` revokes it at Google and deletes it. `searvex gsc import` reads export files locally
+  `searvex gsc logout` revokes it at Google and deletes it; `searvex ga4 auth` / `ga4 logout` do the same for
+  read-only Google Analytics access. `searvex gsc import` reads export files locally
   and sends nothing anywhere. The per-site search-data choice (`connect`) is stored next to the credentials,
   never in the repository. Searvex ships no OAuth client:
   you create your own "Desktop app" client, so no third party is involved.

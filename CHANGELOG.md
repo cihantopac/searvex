@@ -53,6 +53,11 @@ All notable changes to this project are documented here. The format follows
   "Lab data" table in `report.md`. A score below 50 is reported as `perf.lab-poor` (new rule); lab values are
   never Core Web Vitals pass/fail. The key is stored with `searvex psi auth|status|logout` or read from
   `SEARVEX_PSI_API_KEY`; local and private hosts are skipped (Google fetches the pages).
+- Google Analytics 4, experimental (`ga4 auth|status|properties|report|logout`): read-only OAuth with the same kind
+  of Desktop client as Search Console; `ga4 report <propertyId>` lists Organic Search landing pages (sessions,
+  engaged sessions, key events) and, with `--audit`, the audit's open issues on pages with organic traffic and
+  the indexable pages without organic sessions. Writes `ga4-report.md/json`; not yet verified against a live
+  property.
 
 ### Changed
 - Disk-backed page texts: a crawl with a run directory writes each page's main text to `texts.txt` and keeps

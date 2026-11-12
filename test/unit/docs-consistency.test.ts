@@ -10,7 +10,7 @@ const read = (f: string) => fs.readFileSync(f, 'utf8');
 const version = JSON.parse(read('package.json')).version as string;
 const cli = read('src/cli.ts');
 const gsc = read('src/commands/gsc.ts');
-const commands = [...cli.slice(cli.indexOf('switch (cmd)')).matchAll(/case '([a-z-]+)':/g)].map((m) => m[1]!);
+const commands = [...cli.slice(cli.indexOf('switch (cmd)')).matchAll(/case '([a-z0-9-]+)':/g)].map((m) => m[1]!);
 const docsCli = read('docs/cli.md');
 const skills = fs.readdirSync('skills').map((d) => read(path.join('skills', d, 'SKILL.md')));
 
@@ -40,14 +40,14 @@ describe('documentation consistency', () => {
     const gscSubs = new Set([...gscUsage.matchAll(/(?:^|\| )([a-z]+)/g)].map((m) => m[1]!));
     expect(gscSubs).toEqual(new Set(['auth', 'status', 'sites', 'report', 'import', 'logout']));
     for (const text of [...skills, read('README.md'), docsCli]) {
-      for (const m of text.matchAll(/(?:searvex\.mjs"|(?:^|`|=\S* )searvex) ([a-z][a-z-]+)/gm)) expect(commands, `unknown command "${m[1]}"`).toContain(m[1]);
+      for (const m of text.matchAll(/(?:searvex\.mjs"|(?:^|`|=\S* )searvex) ([a-z][a-z0-9-]+)/gm)) expect(commands, `unknown command "${m[1]}"`).toContain(m[1]);
       for (const m of text.matchAll(/\bgsc ([a-z]+)\b/g)) expect(gscSubs, `unknown gsc subcommand "${m[1]}"`).toContain(m[1]);
     }
   });
 
   it('every SEARVEX_* environment variable read by the code is documented', () => {
     const vars = new Set<string>();
-    for (const f of srcFiles('src')) for (const m of read(f).matchAll(/process\.env\['(SEARVEX_[A-Z_]+)'\]/g)) vars.add(m[1]!);
+    for (const f of srcFiles('src')) for (const m of read(f).matchAll(/process\.env\['(SEARVEX_[A-Z0-9_]+)'\]/g)) vars.add(m[1]!);
     // Endpoint overrides exist for tests only and are intentionally undocumented.
     for (const v of [...vars].filter((x) => !/_(URL|API_BASE)$/.test(x))) expect(docsCli, `docs/cli.md lacks ${v}`).toContain(v);
   });
