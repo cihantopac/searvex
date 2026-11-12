@@ -24,7 +24,8 @@ Searvex reports what it can observe and labels everything else. Known limits (v1
   API; the live API has not been run with an owner key yet.
 - **Bing Webmaster:** API key only; reports are built from the top pages by clicks, so totals are not site
   totals. **GA4** (`ga4 report`): experimental, verified against a mock of the Data and Admin APIs only; it reads
-  Organic Search sessions, which consent banners and tagging gaps lower. **Yandex Webmaster:** not implemented.
+  Organic Search sessions, which consent banners and tagging gaps lower. **Yandex Webmaster** (`yandex report`): experimental, verified against a mock of the API only; popular queries
+  without pages, so no audit join.
 - **Experimental in v1.0:** Bing Webmaster works end to end against the live API, but the owner's sites had no
   Bing data yet, so parsing of real query/page rows is not verified live. It is documented, not advertised as
   fully supported. The Search Console **API and CSV import** and **CrUX** are supported (verified live and

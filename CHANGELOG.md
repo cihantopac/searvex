@@ -58,6 +58,9 @@ All notable changes to this project are documented here. The format follows
   engaged sessions, key events) and, with `--audit`, the audit's open issues on pages with organic traffic and
   the indexable pages without organic sessions. Writes `ga4-report.md/json`; not yet verified against a live
   property.
+- Yandex Webmaster, experimental (`yandex auth|status|sites|report|logout`): an OAuth token with Webmaster access;
+  `yandex report <siteUrl>` lists popular queries of a verified site (impressions, clicks, CTR, average position)
+  and writes `yandex-report.md/json`. Query level only; not yet verified against a live site.
 
 ### Changed
 - Disk-backed page texts: a crawl with a run directory writes each page's main text to `texts.txt` and keeps
