@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Page-structure templates: each page gets a layout skeleton hash (landmarks, body children and their stable
+  classes, main-content blocks, content heading levels). Findings list the structures of their affected pages
+  (`findings[].structures`), and one layout behind several URL patterns (flat slugs such as `/alpha`, `/beta`) now
+  counts as "fix once" in the priorities, like a URL template does.
+
+### Added
 - Upstream proxy support, as designed in `docs/design/proxy.md`: `--proxy <url|none>` and `HTTPS_PROXY` /
   `HTTP_PROXY` / `NO_PROXY`, `CONNECT` only with TLS end to end and Basic authentication. Private, loopback and
   reserved targets never go through the proxy. Host names are resolved and checked locally before `CONNECT`;

@@ -53,7 +53,7 @@ Open items name the release and milestone of the maintainer's release plan that 
 ### P2 — Product experience
 | # | Item | Status |
 |---|---|---|
-| 16 | Template-level issue grouping (URL-pattern clusters) in reports | ✅ URL-pattern templates per finding (DOM-structure clustering still open); DOM-structure clustering planned for 1.4.0 (G2) |
+| 16 | Template-level issue grouping (URL-pattern clusters) in reports | ✅ URL-pattern templates per finding; page-structure (DOM skeleton) templates in 1.4.0 (G2) |
 | 17 | HTML dashboard: charts, template view, monitor before/after, ecosystem view | ✅ |
 | 18 | Disk-backed analysis for >50k pages | ⬜ planned for 1.4.0 (G7) |
 | 19 | GitHub Action wrapper + SARIF upload example tested | ⬜ planned for 1.5.0 (H1) |

@@ -27,7 +27,7 @@ The files ship in the npm package (`node_modules/searvex-seo/schema/`). Their `$
 
 | Version | Package | Change |
 |---|---|---|
-| 1.1 | 1.4.0 | Added `crawl.proxy` (upstream proxy endpoint and resolution mode), `crawl.artefacts` and `findings[].evidence[].artefact` (evidence artefacts), `traffic` (traffic-weighted priorities), `findings[].priority.causedBy` / `.effects` (root causes) |
+| 1.1 | 1.4.0 | Added `crawl.proxy` (upstream proxy endpoint and resolution mode), `crawl.artefacts` and `findings[].evidence[].artefact` (evidence artefacts), `traffic` (traffic-weighted priorities), `findings[].priority.causedBy` / `.effects` (root causes), `findings[].structures` (page-structure templates) |
 | 1.0 | 1.3.0 | First published schema |
 
 ## How the schemas are made
