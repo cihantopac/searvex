@@ -20,7 +20,7 @@ inputs:
     default: ""
   version:
     description: searvex-seo version from npm (defaults to the version of this action release)
-    default: "1.4.0"
+    default: "1.5.0"
   upload-sarif:
     description: Upload the SARIF report to GitHub code scanning (needs "security-events: write")
     default: "true"

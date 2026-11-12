@@ -223,6 +223,16 @@ title; Drupal pages on tubitak.gov.tr carry two `<title>` elements.
 | Valid 3-letter language codes reported as high-severity mistakes with "correct the code" | `ast`, `ach`, `ceb` have no ISO 639-1 code; Google supports only ISO 639-1 and ignores those alternates (documentation re-read 2026-11-01) — the site has nothing to correct | low severity with that explanation; 3-letter codes that have a 2-letter equivalent (`tur` → `tr`) stay high with the correction | mozilla.org 82 → 86, wordpress.org 86 → 93 |
 | A finding's severity depended on the order of its occurrences | first emission decided | the most severe occurrence wins | — |
 
+## 1.5.0 release checks (2026-11-12)
+
+Without `--rules-pack` the analysis takes the same code paths as 1.4.0 (pack checks run only when a pack is
+loaded), so the public-site comparison of 1.4.0 below still applies. The Frameva contract cases give the same exit
+codes and statuses with schema 1.2, and every report validates. New surfaces are covered by tests: rule packs
+(loading, collisions, sourcing validation, pattern safety, an audit with a fixture pack), the MCP server
+(protocol negotiation, stateless requests, network policy, every tool on a real local audit, stdio framing, the
+bundled CLI over real stdio) and the GitHub Action (`action/run.mjs` with the bundled CLI, and the
+`Action self-test` workflow that runs `action.yml` itself on GitHub).
+
 ## 1.4.0 release regression (2026-11-12)
 
 The six sites of round 8, audited with the published 1.3.0 bundle and with 1.4.0 in turn (≤ 20 pages, 1.5 s

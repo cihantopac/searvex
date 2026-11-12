@@ -5,6 +5,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-12
+
+Searvex in other tools: community rule packs, an MCP server for AI clients and a GitHub Action. Release notes:
+[docs/release-notes-1.5.0.md](docs/release-notes-1.5.0.md).
+
 ### Added
 - Community rule packs (`--rules-pack <name|dir>`, repeatable): rule files in `knowledge/packs/<name>/` or any
   directory whose rules carry a declarative page check (`field`: title, description, h1, lang, canonical,
