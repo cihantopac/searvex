@@ -51,6 +51,16 @@
       "contentHash": "d5e407087224b09036798d18fc809199325637110ffde880b6d226827cc70d52",
       "textLength": 319
     },
+    "https://developer.chrome.com/docs/lighthouse/performance/performance-scoring": {
+      "url": "https://developer.chrome.com/docs/lighthouse/performance/performance-scoring",
+      "fetchedAt": "2026-11-12T08:41:11.750Z",
+      "status": 200,
+      "finalUrl": "https://developer.chrome.com/docs/lighthouse/performance/performance-scoring",
+      "title": "Lighthouse performance scoring | Chrome for Developers",
+      "lastUpdated": "2019-09-19",
+      "contentHash": "f7376471464194c4db3c1e28cf256c189ee9ce608ef2df5e98e096fd4adc33c9",
+      "textLength": 5285
+    },
     "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/name/viewport": {
       "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/name/viewport",
       "fetchedAt": "2026-11-11T17:01:48.924Z",
@@ -481,6 +491,16 @@
       "contentHash": "3356743ecd24bbad7ea7b7e2eb1e3229bc08ad43c0aa201a7389def48d7f71f7",
       "textLength": 99999
     },
+    "https://developers.google.com/speed/docs/insights/rest/v5/pagespeedapi/runpagespeed": {
+      "url": "https://developers.google.com/speed/docs/insights/rest/v5/pagespeedapi/runpagespeed",
+      "fetchedAt": "2026-11-12T08:41:11.553Z",
+      "status": 200,
+      "finalUrl": "https://developers.google.com/speed/docs/insights/rest/v5/pagespeedapi/runpagespeed",
+      "title": "Method: pagespeedapi.runpagespeed | PageSpeed Insights | Google for Developers",
+      "lastUpdated": "2024-09-03",
+      "contentHash": "b86c5c8e58a18db2bf1477113a20aaca1962e35dcf8a447494617d740c315135",
+      "textLength": 13603
+    },
     "https://developers.openai.com/api/docs/bots": {
       "url": "https://developers.openai.com/api/docs/bots",
       "fetchedAt": "2026-11-11T17:02:26.938Z",
@@ -563,7 +583,7 @@
     },
     "https://web.dev/articles/vitals": {
       "url": "https://web.dev/articles/vitals",
-      "fetchedAt": "2026-11-11T17:02:30.163Z",
+      "fetchedAt": "2026-11-12T08:41:11.714Z",
       "status": 200,
       "finalUrl": "https://web.dev/articles/vitals",
       "title": "Web Vitals | Articles | web.dev",

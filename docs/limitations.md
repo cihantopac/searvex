@@ -18,7 +18,10 @@ Searvex reports what it can observe and labels everything else. Known limits (v1
 - **AI citations:** not observable directly. Official sources are Bing Webmaster Tools AI Performance
   (preview) and Search Console; no AI-visibility integration is implemented yet.
 - **Core Web Vitals field data:** only with a CrUX API key, and only for origins with enough traffic.
-  No Lighthouse/lab measurements.
+- **Lab data** (`--lab`): one Lighthouse run per sampled template through the PageSpeed Insights API (mobile),
+  only for publicly reachable sites and with an API key. Lab values vary between runs and are never Core Web Vitals
+  pass/fail. A local Lighthouse (for local or staging builds) is not implemented. Verified against a mock of the
+  API; the live API has not been run with an owner key yet.
 - **Bing Webmaster:** API key only; reports are built from the top pages by clicks, so totals are not site
   totals. **Yandex Webmaster, GA4:** not implemented.
 - **Experimental in v1.0:** Bing Webmaster works end to end against the live API, but the owner's sites had no

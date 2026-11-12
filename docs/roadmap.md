@@ -32,7 +32,8 @@ Ordered by value; none is promised for a date.
 5. **Disk-backed analysis** for sites above 50,000 pages. Done in 1.4.0 (G7): page texts live in the run
    directory and the content analysis uses compact structures; 100,000 pages run under a 2 GB heap.
 6. **Optional integrations:** PageSpeed Insights / Lighthouse lab data, GA4 Data API, Yandex Webmaster —
-   each only with live validation before it is advertised. Planned for 1.4.0 (F6, F4, F5).
+   each only with live validation before it is advertised. Lab data (`--lab`) is in 1.4.0 (F6) as experimental
+   until a live run with an owner key; GA4 and Yandex are planned for 1.4.0 (F4, F5).
 7. **Ecosystem:** GitHub Action with SARIF upload, MCP server exposing the engine, plugin directory
    submission (needs the final brand icon), community rule packs under the same sourcing rules. Planned for
    1.5.0 (H1–H4).

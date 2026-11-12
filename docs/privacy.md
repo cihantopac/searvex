@@ -15,6 +15,8 @@
 - **Repository secrets** (`.env`, keys, credentials) are never read.
 - **Reports may contain page content** (titles, excerpts, URLs) of audited sites. Treat them like the
   sites themselves when sharing.
+- **`--lab` sends the sampled page URLs** (at most `--lab-samples`, default 5) to Google's PageSpeed Insights
+  API, which fetches and measures those pages from Google's servers. Nothing else from the audit is sent.
 - **Run directories keep the main text of crawled pages** (`texts.txt`, up to 20,000 characters per page) so the
   analysis does not hold every page in memory; before 1.4.0 the same text was inside `pages.jsonl`.
 - **Evidence artefacts** (`--save-html`, `--screenshots`) are opt-in. They keep each fetched HTML body as served

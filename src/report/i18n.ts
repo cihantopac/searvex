@@ -200,6 +200,7 @@ export const RULES_TR: Record<string, { title: string; fix: string }> = {
   'perf.no-compression': { title: 'HTML sıkıştırmasız sunuluyor', fix: 'Metin yanıtları için sunucu/CDN üzerinde gzip veya Brotli sıkıştırmayı açın.' },
   'perf.cwv-unmeasured': { title: 'Core Web Vitals ölçülmedi', fix: 'SEARVEX_CRUX_API_KEY yapılandırın veya Search Console’daki Core Web Vitals raporunu inceleyin.' },
   'perf.cwv-poor': { title: 'Core Web Vitals "iyi" aralıkta değil (alan verisi)', fix: 'Başarısız metriği iyileştirin (LCP: sunucu/kaynak yükleme; INP: ana iş parçacığı işi; CLS: ayrılmış alan).' },
+  'perf.lab-poor': { title: 'Örnek şablonda zayıf Lighthouse laboratuvar performansı', fix: 'Şablonun en yavaş laboratuvar metriklerini iyileştirin (LCP: sunucu yanıtı ve en büyük görsel/metin bloğu; TBT: uzun JavaScript görevleri; CLS: medya ve geç içerik için ayrılmış alan), sonra --lab ile yeniden çalıştırın.' },
   'https.not-used': { title: 'Sayfa HTTP üzerinden sunuluyor', fix: 'Tüm sayfaları HTTPS üzerinden sunun ve HTTP’yi HTTPS’e yönlendirin.' },
   'https.mixed-content': { title: 'HTTPS sayfada karışık içerik', fix: 'Tüm alt kaynakları HTTPS üzerinden yükleyin.' },
   'sd.invalid-json': { title: 'Geçersiz JSON-LD', fix: 'JSON sözdizimini düzeltin (sondaki virgüller, kaçışsız tırnaklar, HTML varlıkları).' },

@@ -119,6 +119,18 @@ export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = 
   }
   L.push(`Cannibalisation candidates: ${r.content.cannibalization.length} · near-duplicate pairs: ${r.content.nearDuplicates.length} · exact duplicate groups: ${r.content.exactDuplicates.length}`, '');
 
+  if (r.labData && !r.labData.skipped) {
+    L.push('## Lab data (Lighthouse via PageSpeed Insights, mobile)', '', 'One simulated load per sampled URL template. Lab values vary between runs; they show where a page is slow and are not Core Web Vitals field data.', '');
+    if (r.labData.samples.length) {
+      L.push('| Template | Pages | Sampled URL | Score | LCP | TBT | CLS |', '|---|---|---|---|---|---|---|');
+      const sec = (ms?: number) => (ms === undefined ? '–' : `${(ms / 1000).toFixed(1)} s`);
+      for (const x of r.labData.samples) L.push(`| ${md(x.template)} | ${x.pages} | ${md(x.url)} | ${x.score ?? '–'} | ${sec(x.lcpMs)} | ${x.tbtMs === undefined ? '–' : `${x.tbtMs} ms`} | ${x.cls ?? '–'} |`);
+      L.push('');
+    }
+    for (const e of r.labData.errors) L.push(`- Not measured: ${md(e.url)} — ${md(e.message)}`);
+    if (r.labData.errors.length) L.push('');
+  }
+
   const info = r.findings.filter((f) => f.severity === 'info');
   if (info.length) {
     L.push('## Informational', '');

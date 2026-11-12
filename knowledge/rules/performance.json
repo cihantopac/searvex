@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.11",
-  "updated": "2026-11-11",
+  "version": "2026.11.12",
+  "updated": "2026-11-12",
   "rules": [
     {
       "id": "perf.slow-ttfb",
@@ -98,6 +98,40 @@
           "title": "Google: Core Web Vitals and Google Search results",
           "url": "https://developers.google.com/search/docs/appearance/core-web-vitals",
           "checked": "2026-10-30",
+          "level": "fetched"
+        }
+      ],
+      "status": "active"
+    },
+    {
+      "id": "perf.lab-poor",
+      "title": "Poor Lighthouse lab performance on a sampled template",
+      "category": "performance",
+      "severity": "medium",
+      "confidence": "heuristic",
+      "engines": [
+        "google"
+      ],
+      "description": "A Lighthouse run through PageSpeed Insights (mobile, one simulated load) scored the page below 50, Lighthouse's \"poor\" band. Lab values vary between runs and do not decide Core Web Vitals (field data does); the metrics show where the load is slow (LCP, total blocking time, layout shift). The page is a sample of its URL template.",
+      "fix": "Work on the slowest lab metrics of the template (LCP: server response and the largest image or text block; TBT: long JavaScript tasks; CLS: reserved space for media and late content), then re-run with --lab.",
+      "verify": "Re-run the audit with --lab, and confirm with CrUX field data (searvex crux auth) once it is available.",
+      "sources": [
+        {
+          "title": "Chrome for Developers: Lighthouse performance scoring",
+          "url": "https://developer.chrome.com/docs/lighthouse/performance/performance-scoring",
+          "checked": "2026-11-12",
+          "level": "fetched"
+        },
+        {
+          "title": "Google: PageSpeed Insights API runPagespeed",
+          "url": "https://developers.google.com/speed/docs/insights/rest/v5/pagespeedapi/runpagespeed",
+          "checked": "2026-11-12",
+          "level": "fetched"
+        },
+        {
+          "title": "web.dev: Web Vitals",
+          "url": "https://web.dev/articles/vitals",
+          "checked": "2026-11-11",
           "level": "fetched"
         }
       ],

@@ -15998,8 +15998,8 @@ __export(bing_exports, {
   maskKey: () => maskKey,
   parseBingDate: () => parseBingDate
 });
-import http5 from "node:http";
-import https5 from "node:https";
+import http6 from "node:http";
+import https6 from "node:https";
 function parseBingDate(v) {
   if (typeof v !== "string") return null;
   const m = /\/Date\((-?\d+)([+-]\d{4})?\)\//.exec(v);
@@ -16021,9 +16021,9 @@ function maskKey(text4, apiKey) {
   if (!apiKey) return text4;
   return [apiKey, encodeURIComponent(apiKey)].reduce((t, k) => t.split(k).join("***"), text4);
 }
-function get2(method, params, apiKey) {
-  const url = `${BASE3()}/${method}?${new URLSearchParams({ ...params, apikey: apiKey })}`;
-  const mod = url.startsWith("https:") ? https5 : http5;
+function get3(method, params, apiKey) {
+  const url = `${BASE4()}/${method}?${new URLSearchParams({ ...params, apikey: apiKey })}`;
+  const mod = url.startsWith("https:") ? https6 : http6;
   return new Promise((resolve, reject) => {
     const req = mod.get(url, { headers: { accept: "application/json" }, timeout: 3e4 }, (res) => {
       const chunks = [];
@@ -16083,33 +16083,33 @@ async function bingQueryPageRows(siteUrl, apiKey, opts) {
   return { rows, pages: pages.length };
 }
 async function getUserSites(apiKey) {
-  return (await get2("GetUserSites", {}, apiKey)).map((x) => {
+  return (await get3("GetUserSites", {}, apiKey)).map((x) => {
     const o = x;
     return { url: String(o["Url"] ?? ""), verified: o["IsVerified"] === true };
   });
 }
 async function getDailyTraffic(siteUrl, apiKey, sinceIso) {
-  return (await get2("GetRankAndTrafficStats", { siteUrl }, apiKey)).map((x) => {
+  return (await get3("GetRankAndTrafficStats", { siteUrl }, apiKey)).map((x) => {
     const o = x;
     return { date: parseBingDate(o["Date"]) ?? "", clicks: Number(o["Clicks"] ?? 0) || 0, impressions: Number(o["Impressions"] ?? 0) || 0 };
   }).filter((d) => d.date && d.date >= sinceIso).sort((a, b) => a.date.localeCompare(b.date));
 }
-var BASE3, BingApiError, getQueryStats, getPageStats, getPageQueryStats;
+var BASE4, BingApiError, getQueryStats, getPageStats, getPageQueryStats;
 var init_bing = __esm({
   "src/integrations/bing.ts"() {
     "use strict";
-    BASE3 = () => process.env["SEARVEX_BING_API_BASE"] ?? "https://ssl.bing.com/webmaster/api.svc/json";
+    BASE4 = () => process.env["SEARVEX_BING_API_BASE"] ?? "https://ssl.bing.com/webmaster/api.svc/json";
     BingApiError = class extends Error {
     };
-    getQueryStats = async (siteUrl, apiKey) => toStats(await get2("GetQueryStats", { siteUrl }, apiKey));
-    getPageStats = async (siteUrl, apiKey) => toStats(await get2("GetPageStats", { siteUrl }, apiKey));
-    getPageQueryStats = async (siteUrl, page, apiKey) => toStats(await get2("GetPageQueryStats", { siteUrl, page }, apiKey));
+    getQueryStats = async (siteUrl, apiKey) => toStats(await get3("GetQueryStats", { siteUrl }, apiKey));
+    getPageStats = async (siteUrl, apiKey) => toStats(await get3("GetPageStats", { siteUrl }, apiKey));
+    getPageQueryStats = async (siteUrl, page, apiKey) => toStats(await get3("GetPageQueryStats", { siteUrl, page }, apiKey));
   }
 });
 
 // src/net/policy-proxy.ts
 import crypto8 from "node:crypto";
-import http6 from "node:http";
+import http7 from "node:http";
 import net2 from "node:net";
 async function startPolicyProxy(policy, opts = {}) {
   const maxBytes = opts.maxBytesPerWindow ?? 64 * 1024 * 1024;
@@ -16161,7 +16161,7 @@ Connection: close\r
       return null;
     }
   };
-  const server = http6.createServer((req, res) => {
+  const server = http7.createServer((req, res) => {
     stats.requests++;
     if (!authorized(req)) {
       res.writeHead(407, { "proxy-authenticate": 'Basic realm="searvex"', connection: "close" }).end();
@@ -16187,7 +16187,7 @@ Connection: close\r
       forward(via ? { agent: void 0, createConnection: () => via } : { lookup: guardedLookup(policy), agent: false });
     }).catch(fail);
     const forward = (connection) => {
-      const upstream = http6.request(
+      const upstream = http7.request(
         { host, port: port2, path: `${u.pathname}${u.search}`, method: req.method, headers, ...connection, timeout: idle },
         (up) => {
           const out = {};
@@ -35668,6 +35668,7 @@ var OFFICIAL_DOMAINS = [
   "search.google.com",
   "blog.google",
   "web.dev",
+  "developer.chrome.com",
   "www.bing.com",
   "blogs.bing.com",
   "learn.microsoft.com",
@@ -37602,6 +37603,131 @@ function failingMetrics(m) {
   return out;
 }
 
+// src/integrations/psi.ts
+init_ssrf();
+import http3 from "node:http";
+import https3 from "node:https";
+import { isIP as isIP2 } from "node:net";
+var BASE3 = () => process.env["SEARVEX_PSI_API_BASE"] ?? "https://pagespeedonline.googleapis.com/pagespeedonline/v5";
+var LAB_SCORE_POOR = 50;
+function get2(url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const req = (url.startsWith("https:") ? https3 : http3).get(url, { timeout: timeoutMs }, (r) => {
+      const chunks = [];
+      r.on("data", (c) => chunks.push(c));
+      r.on("end", () => resolve({ status: r.statusCode ?? 0, text: Buffer.concat(chunks).toString("utf8") }));
+    });
+    req.on("timeout", () => req.destroy(new Error("PageSpeed Insights request timed out")));
+    req.on("error", reject);
+  });
+}
+function parsePsi(json, url, strategy) {
+  const lh = json.lighthouseResult;
+  if (!lh) return { status: "error", url, message: "PageSpeed Insights returned no Lighthouse result" };
+  if (lh.runtimeError?.code && lh.runtimeError.code !== "NO_ERROR") return { status: "error", url, message: `Lighthouse could not measure the page: ${lh.runtimeError.code}${lh.runtimeError.message ? ` (${lh.runtimeError.message.slice(0, 160)})` : ""}` };
+  const a = lh.audits ?? {};
+  const n = (k, round = true) => {
+    const v = a[k]?.numericValue;
+    return typeof v === "number" && Number.isFinite(v) ? round ? Math.round(v) : Math.round(v * 1e3) / 1e3 : void 0;
+  };
+  const score = lh.categories?.performance?.score;
+  return {
+    status: "ok",
+    metrics: {
+      url,
+      finalUrl: lh.finalDisplayedUrl ?? lh.finalUrl ?? json.id ?? url,
+      strategy,
+      ...typeof score === "number" ? { score: Math.round(score * 100) } : {},
+      lcpMs: n("largest-contentful-paint"),
+      fcpMs: n("first-contentful-paint"),
+      tbtMs: n("total-blocking-time"),
+      cls: n("cumulative-layout-shift", false),
+      speedIndexMs: n("speed-index"),
+      ttfbMs: n("server-response-time"),
+      lighthouseVersion: lh.lighthouseVersion,
+      fetchTime: lh.fetchTime
+    }
+  };
+}
+function psiErrorMessage(status, body) {
+  let reason = "";
+  try {
+    const e = JSON.parse(body).error;
+    reason = `${e?.status ?? ""} ${e?.message ?? ""}`.trim();
+  } catch {
+    reason = body;
+  }
+  if (status === 400 && /API key not valid|API_KEY_INVALID/i.test(reason)) return 'Google rejected the PageSpeed Insights API key (not valid). Store a new key with "searvex psi auth --force", or fix SEARVEX_PSI_API_KEY.';
+  if (status === 400) return `PageSpeed Insights could not measure the URL: ${reason.slice(0, 200)}`;
+  if (status === 403) return `The key may not use the PageSpeed Insights API (${reason.slice(0, 160)}). Enable "PageSpeed Insights API" in the key's Google Cloud project and allow it in the key's API restrictions.`;
+  if (status === 429) return "PageSpeed Insights API quota reached. Try again later or lower --lab.";
+  return `PageSpeed Insights API HTTP ${status}: ${reason.slice(0, 200)}`;
+}
+async function queryPsi(url, apiKey, strategy = "mobile", timeoutMs = 12e4) {
+  const q = new URLSearchParams({ url, strategy, category: "performance", key: apiKey });
+  try {
+    const res = await get2(`${BASE3()}/runPagespeed?${q}`, timeoutMs);
+    if (res.status !== 200) return { status: "error", url, message: psiErrorMessage(res.status, maskCruxKey(res.text.slice(0, 400), apiKey)) };
+    return parsePsi(JSON.parse(res.text), url, strategy);
+  } catch (e) {
+    return { status: "error", url, message: maskCruxKey(`PageSpeed Insights request failed: ${e.message}`, apiKey) };
+  }
+}
+function publiclyMeasurable(url) {
+  let host;
+  try {
+    host = new URL(url).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  } catch {
+    return false;
+  }
+  if (isIP2(host)) return classifyAddress(host) === "public";
+  return !(host === "localhost" || /\.(localhost|local|test|internal|lan|home\.arpa)$/.test(host) || !host.includes("."));
+}
+function labSummary(m) {
+  const parts = [];
+  if (m.score !== void 0) parts.push(`score ${m.score}`);
+  if (m.lcpMs !== void 0) parts.push(`LCP ${(m.lcpMs / 1e3).toFixed(1)} s`);
+  if (m.tbtMs !== void 0) parts.push(`TBT ${m.tbtMs} ms`);
+  if (m.cls !== void 0) parts.push(`CLS ${m.cls}`);
+  if (m.fcpMs !== void 0) parts.push(`FCP ${(m.fcpMs / 1e3).toFixed(1)} s`);
+  return parts.join(", ");
+}
+
+// src/analyze/lab.ts
+var LAB_DEFAULT_SAMPLES = 5;
+function labSamples(ctx, n) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const p of ctx.indexable) {
+    const t = urlPattern(p.url);
+    (groups.get(t) ?? groups.set(t, []).get(t)).push(p.url);
+  }
+  const inl = (u) => ctx.reachIn.get(u)?.size ?? 0;
+  const home = ctx.homepage?.url;
+  return [...groups.entries()].map(([template, urls]) => ({
+    template,
+    pages: urls.length,
+    url: home && urls.includes(home) ? home : [...urls].sort((a, b) => inl(b) - inl(a) || (a < b ? -1 : a > b ? 1 : 0))[0]
+  })).sort((a, b) => Number(b.url === home) - Number(a.url === home) || b.pages - a.pages || (a.template < b.template ? -1 : 1)).slice(0, Math.max(0, n));
+}
+async function runLab(ctx, opts, sink) {
+  const out = { source: "pagespeed-insights", strategy: "mobile", samples: [], errors: [] };
+  if (!publiclyMeasurable(ctx.crawl.origin)) {
+    out.skipped = `${ctx.crawl.origin} is not publicly reachable; PageSpeed Insights fetches pages from Google's servers`;
+    return out;
+  }
+  for (const s of labSamples(ctx, opts.samples)) {
+    const r = await queryPsi(s.url, opts.apiKey);
+    if (r.status === "error") {
+      out.errors.push({ url: s.url, template: s.template, message: r.message });
+      continue;
+    }
+    out.samples.push({ ...r.metrics, template: s.template, pages: s.pages });
+    if (r.metrics.score !== void 0 && r.metrics.score < LAB_SCORE_POOR)
+      sink.emit("perf.lab-poor", { url: s.url, observed: `Lighthouse lab (mobile): ${labSummary(r.metrics)}; template ${s.template} (${s.pages} page${s.pages === 1 ? "" : "s"} in this crawl)` });
+  }
+  return out;
+}
+
 // src/optimize/fixes.ts
 import path4 from "node:path";
 
@@ -38242,10 +38368,10 @@ async function probeLocaleAdaptive(startUrl, opts, sink) {
 async function probeHostVariants(startUrl, opts, sink) {
   const u = new URL(startUrl);
   if (u.protocol === "https:") {
-    const http7 = new URL(startUrl);
-    http7.protocol = "http:";
-    const res2 = await safeFetch(http7.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
-    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http7.toString(), observed: "HTTP 200 without redirect to HTTPS" });
+    const http8 = new URL(startUrl);
+    http8.protocol = "http:";
+    const res2 = await safeFetch(http8.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
+    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http8.toString(), observed: "HTTP 200 without redirect to HTTPS" });
   }
   if (/^[\d.]+$/.test(u.hostname) || u.hostname === "localhost" || u.hostname.split(".").length < 2) return;
   const alt = new URL(startUrl);
@@ -38290,7 +38416,7 @@ async function auditWebsite(url, options = {}) {
   options.onPhase?.("crawl");
   const result = await crawl(url, options.crawl, store2);
   options.onPhase?.("analyze");
-  const report = annotateReport(await analyzeCrawl(result, kb, { ...options.crawl, probes: options.probes ?? true, checkExternal: options.checkExternal, cruxApiKey: options.cruxApiKey, preLaunch: options.preLaunch }));
+  const report = annotateReport(await analyzeCrawl(result, kb, { ...options.crawl, probes: options.probes ?? true, checkExternal: options.checkExternal, cruxApiKey: options.cruxApiKey, lab: options.lab, preLaunch: options.preLaunch }));
   if (options.compact) compactAffected(report);
   store2.writeJson("report.json", report);
   return { report, store: store2 };
@@ -38362,6 +38488,10 @@ async function analyzeCrawl(result, kb, opts = {}) {
       }
     } else sink.emit("perf.cwv-unmeasured", { observed: fieldData.message });
   } else sink.emit("perf.cwv-unmeasured", { observed: "No CrUX API key configured (searvex crux auth, or SEARVEX_CRUX_API_KEY)" });
+  let labData;
+  if (opts.lab) {
+    labData = interrupted ? { source: "pagespeed-insights", strategy: "mobile", samples: [], errors: [], skipped: "the run was interrupted" } : await runLab(ctx, opts.lab, sink);
+  }
   const inventory = buildInventory(ctx);
   const findings = sink.findings();
   if (result.artefacts) linkArtefacts(findings, ctx);
@@ -38387,6 +38517,10 @@ async function analyzeCrawl(result, kb, opts = {}) {
     );
   if (result.siteUrl) limitations.push(`Audited ${result.origin} as ${result.siteUrl} (--site-url): canonical, hreflang, sitemap and link URLs on ${result.siteUrl} were checked against the crawled pages at ${result.origin}; the public site itself was not fetched.`);
   if (!opts.checkExternal) limitations.push("Outbound links were not checked (use --check-external).");
+  if (labData) {
+    if (labData.skipped) limitations.push(`Lab data (--lab) not measured: ${labData.skipped}.`);
+    else limitations.push(`Lab data (--lab): one Lighthouse run (PageSpeed Insights, mobile) on ${labData.samples.length} of ${labData.samples.length + labData.errors.length} sampled template page(s). Lab values vary between runs and are not Core Web Vitals field data.${labData.errors.length ? ` Not measured: ${labData.errors.map((e) => `${e.url} (${e.message})`).join("; ").slice(0, 400)}.` : ""}`);
+  }
   if (!result.pages.some((p) => p.rendered)) limitations.push("JavaScript was not executed (run with --render to compare rendered DOM); client-rendered content is only detected heuristically.");
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -38407,6 +38541,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
       unmeasurable: findings.filter((f) => f.confidence === "unmeasurable").length
     },
     fieldData,
+    ...labData ? { labData } : {},
     externalLinks,
     limitations,
     affectedUrls: countAffected(findings, (id) => sink.affected(id)),
@@ -39277,6 +39412,7 @@ var RULES_TR = {
   "perf.no-compression": { title: "HTML s\u0131k\u0131\u015Ft\u0131rmas\u0131z sunuluyor", fix: "Metin yan\u0131tlar\u0131 i\xE7in sunucu/CDN \xFCzerinde gzip veya Brotli s\u0131k\u0131\u015Ft\u0131rmay\u0131 a\xE7\u0131n." },
   "perf.cwv-unmeasured": { title: "Core Web Vitals \xF6l\xE7\xFClmedi", fix: "SEARVEX_CRUX_API_KEY yap\u0131land\u0131r\u0131n veya Search Console\u2019daki Core Web Vitals raporunu inceleyin." },
   "perf.cwv-poor": { title: 'Core Web Vitals "iyi" aral\u0131kta de\u011Fil (alan verisi)', fix: "Ba\u015Far\u0131s\u0131z metri\u011Fi iyile\u015Ftirin (LCP: sunucu/kaynak y\xFCkleme; INP: ana i\u015F par\xE7ac\u0131\u011F\u0131 i\u015Fi; CLS: ayr\u0131lm\u0131\u015F alan)." },
+  "perf.lab-poor": { title: "\xD6rnek \u015Fablonda zay\u0131f Lighthouse laboratuvar performans\u0131", fix: "\u015Eablonun en yava\u015F laboratuvar metriklerini iyile\u015Ftirin (LCP: sunucu yan\u0131t\u0131 ve en b\xFCy\xFCk g\xF6rsel/metin blo\u011Fu; TBT: uzun JavaScript g\xF6revleri; CLS: medya ve ge\xE7 i\xE7erik i\xE7in ayr\u0131lm\u0131\u015F alan), sonra --lab ile yeniden \xE7al\u0131\u015Ft\u0131r\u0131n." },
   "https.not-used": { title: "Sayfa HTTP \xFCzerinden sunuluyor", fix: "T\xFCm sayfalar\u0131 HTTPS \xFCzerinden sunun ve HTTP\u2019yi HTTPS\u2019e y\xF6nlendirin." },
   "https.mixed-content": { title: "HTTPS sayfada kar\u0131\u015F\u0131k i\xE7erik", fix: "T\xFCm alt kaynaklar\u0131 HTTPS \xFCzerinden y\xFCkleyin." },
   "sd.invalid-json": { title: "Ge\xE7ersiz JSON-LD", fix: "JSON s\xF6zdizimini d\xFCzeltin (sondaki virg\xFCller, ka\xE7\u0131\u015Fs\u0131z t\u0131rnaklar, HTML varl\u0131klar\u0131)." },
@@ -39688,6 +39824,17 @@ function renderMarkdown(r, opts = {}) {
     L.push("");
   }
   L.push(`Cannibalisation candidates: ${r.content.cannibalization.length} \xB7 near-duplicate pairs: ${r.content.nearDuplicates.length} \xB7 exact duplicate groups: ${r.content.exactDuplicates.length}`, "");
+  if (r.labData && !r.labData.skipped) {
+    L.push("## Lab data (Lighthouse via PageSpeed Insights, mobile)", "", "One simulated load per sampled URL template. Lab values vary between runs; they show where a page is slow and are not Core Web Vitals field data.", "");
+    if (r.labData.samples.length) {
+      L.push("| Template | Pages | Sampled URL | Score | LCP | TBT | CLS |", "|---|---|---|---|---|---|---|");
+      const sec = (ms) => ms === void 0 ? "\u2013" : `${(ms / 1e3).toFixed(1)} s`;
+      for (const x of r.labData.samples) L.push(`| ${md(x.template)} | ${x.pages} | ${md(x.url)} | ${x.score ?? "\u2013"} | ${sec(x.lcpMs)} | ${x.tbtMs === void 0 ? "\u2013" : `${x.tbtMs} ms`} | ${x.cls ?? "\u2013"} |`);
+      L.push("");
+    }
+    for (const e of r.labData.errors) L.push(`- Not measured: ${md(e.url)} \u2014 ${md(e.message)}`);
+    if (r.labData.errors.length) L.push("");
+  }
   const info = r.findings.filter((f) => f.severity === "info");
   if (info.length) {
     L.push("## Informational", "");
@@ -39701,11 +39848,11 @@ function renderMarkdown(r, opts = {}) {
 }
 
 // src/integrations/gsc.ts
-import http3 from "node:http";
-import https3 from "node:https";
+import http4 from "node:http";
+import https4 from "node:https";
 var API_BASE = () => process.env["SEARVEX_GSC_API_BASE"] ?? "https://www.googleapis.com/webmasters/v3";
 function request(method, url, token, body) {
-  const mod = url.startsWith("https:") ? https3 : http3;
+  const mod = url.startsWith("https:") ? https4 : http4;
   return new Promise((resolve, reject) => {
     const req = mod.request(url, { method, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, timeout: 3e4 }, (r) => {
       const chunks = [];
@@ -39758,8 +39905,8 @@ async function querySearchConsole(q) {
 // src/integrations/google-oauth.ts
 import crypto5 from "node:crypto";
 import fs5 from "node:fs";
-import http4 from "node:http";
-import https4 from "node:https";
+import http5 from "node:http";
+import https5 from "node:https";
 
 // src/integrations/credentials.ts
 import { spawnSync } from "node:child_process";
@@ -39980,7 +40127,7 @@ function pkcePair() {
 }
 function postForm(url, form) {
   const body = new URLSearchParams(form).toString();
-  const mod = url.startsWith("https:") ? https4 : http4;
+  const mod = url.startsWith("https:") ? https5 : http5;
   return new Promise((resolve, reject) => {
     const req = mod.request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "content-length": Buffer.byteLength(body) }, timeout: 3e4 }, (res) => {
       const chunks = [];
@@ -40004,7 +40151,7 @@ function postForm(url, form) {
 async function authorize(client, scope, onUrl, timeoutMs = 5 * 60 * 1e3) {
   const { verifier, challenge } = pkcePair();
   const state = b64url(crypto5.randomBytes(16));
-  const server = http4.createServer();
+  const server = http5.createServer();
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const redirectUri = `http://127.0.0.1:${server.address().port}`;
   try {
@@ -41027,6 +41174,7 @@ var IMPLEMENTED_RULES = /* @__PURE__ */ new Set([
   "perf.no-compression",
   "perf.cwv-unmeasured",
   "perf.cwv-poor",
+  "perf.lab-poor",
   "https.not-used",
   "https.mixed-content",
   // geo
@@ -43383,6 +43531,54 @@ ${hint}`);
   throw new UsageError("crux subcommands: auth [--force] | status | logout");
 }
 
+// src/commands/psi.ts
+function psiKey() {
+  const env = process.env["SEARVEX_PSI_API_KEY"];
+  if (env) return { key: env, source: "SEARVEX_PSI_API_KEY" };
+  const stored = getCredential("psi");
+  return stored?.refreshToken ? { key: stored.refreshToken, source: defaultCredentialStore().describe() } : null;
+}
+var PROBE_URL = "https://example.com/";
+async function commandPsi(flags) {
+  const v = flags.values;
+  const sub = flags.positionals[1];
+  if (sub === "auth") {
+    if (getCredential("psi") && !v["force"]) {
+      console.log(`A PageSpeed Insights API key is already stored in ${defaultCredentialStore().describe()}. Use --force to replace it, or "psi logout".`);
+      return 0;
+    }
+    const key = await readSecret("PageSpeed Insights API key (Google Cloud \u2192 Credentials; input hidden): ");
+    if (!/^[A-Za-z0-9_-]{20,100}$/.test(key)) throw new UsageError("That does not look like a Google API key. Nothing was stored.");
+    console.log("Checking the key with one PageSpeed Insights run (takes up to a minute)\u2026");
+    const probe = await queryPsi(PROBE_URL, key);
+    if (probe.status === "error" && !probe.message.startsWith("Lighthouse could not measure")) throw new UsageError(`Google rejected the key; nothing was stored. ${maskCruxKey(probe.message, key)}`);
+    saveCredential("psi", { clientId: "psi-api-key", refreshToken: key, scope: "pagespeedonline", createdAt: (/* @__PURE__ */ new Date()).toISOString() });
+    console.log(`Stored the PageSpeed Insights API key in ${defaultCredentialStore().describe()}. Add --lab to a website audit to measure sampled templates.`);
+    return 0;
+  }
+  if (sub === "logout") {
+    const removed = deleteCredential("psi");
+    console.log(`${removed ? "Removed the stored PageSpeed Insights API key." : "No stored PageSpeed Insights API key."} The key stays valid until you delete or restrict it in Google Cloud Console.`);
+    return 0;
+  }
+  if (sub === "status") {
+    const k = psiKey();
+    if (!k) {
+      const hint = 'No PageSpeed Insights API key: run "searvex psi auth", or set SEARVEX_PSI_API_KEY.';
+      if (v["json"]) process.stdout.write(JSON.stringify({ key: "none", valid: false, hint }, null, 2) + "\n");
+      else console.log(`key: none
+${hint}`);
+      return 1;
+    }
+    const probe = await queryPsi(PROBE_URL, k.key);
+    const status = { key: k.source, valid: probe.status === "ok", ...probe.status === "error" ? { error: probe.message } : {} };
+    if (v["json"]) process.stdout.write(JSON.stringify(status, null, 2) + "\n");
+    else for (const [n, x] of Object.entries(status)) console.log(`${n}: ${String(x)}`);
+    return status.valid ? 0 : 1;
+  }
+  throw new UsageError("psi subcommands: auth [--force] | status | logout");
+}
+
 // src/commands/research.ts
 import path20 from "node:path";
 function profile(r) {
@@ -43970,6 +44166,9 @@ Commands
   crux <auth|status|logout>
                         Chrome UX Report API key for real-user Core Web Vitals (hidden input, stored in the
                         credential store)
+  psi <auth|status|logout>
+                        PageSpeed Insights API key for Lighthouse lab data with --lab (hidden input, stored in
+                        the credential store)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and
@@ -43994,6 +44193,11 @@ Common options
   --screenshots         With --render: one viewport screenshot per rendered page (\u2264 200 MB per run in all)
   --include <regex>     Only crawl matching URLs          --exclude <regex>  Skip matching URLs
   --check-external      Check outbound links (HEAD, robots.txt-aware, max 200)
+  --lab                 Lighthouse lab data (PageSpeed Insights, mobile) for one page per URL template, the
+                        homepage and the largest templates first; needs "psi auth" or SEARVEX_PSI_API_KEY and a
+                        public URL. Lab values, never Core Web Vitals pass/fail (experimental: not yet verified
+                        against the live service)
+  --lab-samples <n>     Templates measured with --lab (default 5, max 20)
   --no-sitemap          Do not seed from sitemaps         --resume <runId>   Resume an interrupted crawl
   --max-duration <s>    Stop crawling after s seconds and write a partial report (exit 5). SIGINT/SIGTERM
                         do the same; a second signal exits at once (130/143)
@@ -44041,6 +44245,7 @@ Command options
 
 Environment (all optional, read-only integrations)
   SEARVEX_CRUX_API_KEY  Chrome UX Report API key (instead of "searvex crux auth")
+  SEARVEX_PSI_API_KEY   PageSpeed Insights API key for --lab (instead of "searvex psi auth")
   SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
   SEARVEX_BING_API_KEY  Bing Webmaster Tools API key (instead of "searvex bing auth")
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
@@ -44106,6 +44311,8 @@ var CLI_OPTIONS = {
   "site-url": { type: "string" },
   lang: { type: "string" },
   "check-external": { type: "boolean" },
+  lab: { type: "boolean" },
+  "lab-samples": { type: "string" },
   reuse: { type: "boolean" },
   update: { type: "boolean" },
   client: { type: "string" },
@@ -44384,6 +44591,15 @@ Open the report: ${pathToFileURL(html3).href}`, `  (or run: searvex open ${path2
   if (others.length) L.push(`Other files: ${others.map((f) => path23.basename(f)).join(", ")} in ${path23.dirname(others[0])}`);
   return L.join("\n");
 }
+function labOptions(v) {
+  if (!v["lab"]) {
+    if (v["lab-samples"] !== void 0) throw new UsageError("--lab-samples needs --lab");
+    return void 0;
+  }
+  const key = psiKey();
+  if (!key) throw new UsageError('--lab needs a PageSpeed Insights API key: run "searvex psi auth", or set SEARVEX_PSI_API_KEY.');
+  return { apiKey: key.key, samples: v["lab-samples"] === void 0 ? LAB_DEFAULT_SAMPLES : num(v["lab-samples"], LAB_DEFAULT_SAMPLES, 1, 20) };
+}
 async function commandAudit(flags) {
   const { values: v, positionals } = flags;
   const target = positionals[1];
@@ -44394,6 +44610,7 @@ async function commandAudit(flags) {
   }
   assertSiteUrl(v);
   if (v["fail-on"] !== void 0) failOnIndex(v["fail-on"]);
+  const lab = labOptions(v);
   const kb = loadKnowledge();
   const workspace = path23.resolve(String(v["out"] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
@@ -44410,6 +44627,7 @@ async function commandAudit(flags) {
       kb,
       checkExternal: !!v["check-external"],
       cruxApiKey: cruxKey()?.key,
+      ...lab ? { lab } : {},
       preLaunch: !!v["pre-launch"],
       compact: !!v["compact"],
       crawl: {
@@ -44637,6 +44855,8 @@ async function runCommand(cmd, flags) {
         return await commandBing(flags);
       case "crux":
         return await commandCrux(flags);
+      case "psi":
+        return await commandPsi(flags);
       case "connect":
         return await commandConnect(flags);
       case "audit":

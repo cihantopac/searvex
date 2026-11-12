@@ -59,7 +59,7 @@ Open items name the release and milestone of the maintainer's release plan that 
 | 19 | GitHub Action wrapper + SARIF upload example tested | ⬜ planned for 1.5.0 (H1) |
 | 20 | MCP server exposing the engine | ⬜ planned for 1.5.0 (H2) |
 | 21 | Plugin icon (512 px) for directory submission | ⬜ planned for 1.5.0 (H3) |
-| 22 | Lighthouse lab metrics on sampled templates (optional dependency) | ⬜ planned for 1.4.0 (F6) |
+| 22 | Lighthouse lab metrics on sampled templates (optional dependency) | ✅ 1.4.0 (F6): `--lab` through the PageSpeed Insights API; local Lighthouse not implemented |
 
 ### P3 — Later
 | # | Item | Status |

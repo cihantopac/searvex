@@ -14,6 +14,7 @@ import { runRobotsAccessChecks, runTechnicalChecks } from './technical.js';
 import { prioritise, type TrafficInput } from './priority.js';
 import { checkExternalLinks, type ExternalLinkResult } from './external-links.js';
 import { failingMetrics, queryCrux, type CruxResult } from '../integrations/crux.js';
+import { runLab, type LabData } from './lab.js';
 import { annotateReport, type RootCauseGroup } from '../report/remediation.js';
 import { SCHEMA_VERSION } from '../contract.js';
 
@@ -68,6 +69,11 @@ export interface AuditReport {
   measurement: { verified: number; heuristic: number; unmeasurable: number };
   /** Real-user field data when a CrUX API key is configured. */
   fieldData?: CruxResult;
+  /**
+   * Lighthouse lab data from PageSpeed Insights for sampled URL templates (`--lab`). Lab values from one simulated
+   * load: never Core Web Vitals pass/fail (that is `fieldData`). Since schema 1.1.
+   */
+  labData?: LabData;
   externalLinks?: ExternalLinkResult;
   limitations: string[];
   /** Distinct URLs (website) or locations (repository) with at least one non-informational finding. */
@@ -285,6 +291,8 @@ export interface AuditOptions {
   probes?: boolean;
   checkExternal?: boolean;
   cruxApiKey?: string;
+  /** --lab: PageSpeed Insights lab runs on this many sampled templates with this key. */
+  lab?: { apiKey: string; samples: number };
   /** Pre-launch profile (--pre-launch): see `applyPreLaunch`. */
   preLaunch?: boolean;
   /** --compact: write only the count of each finding's affected URLs (see `compactAffected`). */
@@ -305,13 +313,13 @@ export async function auditWebsite(url: string, options: AuditOptions = {}): Pro
   options.onPhase?.('crawl');
   const result = await crawl(url, options.crawl, store);
   options.onPhase?.('analyze');
-  const report = annotateReport(await analyzeCrawl(result, kb, { ...options.crawl, probes: options.probes ?? true, checkExternal: options.checkExternal, cruxApiKey: options.cruxApiKey, preLaunch: options.preLaunch }));
+  const report = annotateReport(await analyzeCrawl(result, kb, { ...options.crawl, probes: options.probes ?? true, checkExternal: options.checkExternal, cruxApiKey: options.cruxApiKey, lab: options.lab, preLaunch: options.preLaunch }));
   if (options.compact) compactAffected(report);
   store.writeJson('report.json', report);
   return { report, store };
 }
 
-export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts: Partial<CrawlOptions> & { probes?: boolean; checkExternal?: boolean; cruxApiKey?: string; preLaunch?: boolean } = {}): Promise<AuditReport> {
+export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts: Partial<CrawlOptions> & { probes?: boolean; checkExternal?: boolean; cruxApiKey?: string; lab?: { apiKey: string; samples: number }; preLaunch?: boolean } = {}): Promise<AuditReport> {
   const sink = new FindingSink(kb);
   const launch = opts.preLaunch ? asLaunched(result) : undefined;
   if (launch) result = launch.result;
@@ -389,6 +397,10 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
       }
     } else sink.emit('perf.cwv-unmeasured', { observed: fieldData.message });
   } else sink.emit('perf.cwv-unmeasured', { observed: 'No CrUX API key configured (searvex crux auth, or SEARVEX_CRUX_API_KEY)' });
+  let labData: LabData | undefined;
+  if (opts.lab) {
+    labData = interrupted ? { source: 'pagespeed-insights', strategy: 'mobile', samples: [], errors: [], skipped: 'the run was interrupted' } : await runLab(ctx, opts.lab, sink);
+  }
   const inventory = buildInventory(ctx);
   const findings = sink.findings();
   if (result.artefacts) linkArtefacts(findings, ctx);
@@ -418,6 +430,10 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
     );
   if (result.siteUrl) limitations.push(`Audited ${result.origin} as ${result.siteUrl} (--site-url): canonical, hreflang, sitemap and link URLs on ${result.siteUrl} were checked against the crawled pages at ${result.origin}; the public site itself was not fetched.`);
   if (!opts.checkExternal) limitations.push('Outbound links were not checked (use --check-external).');
+  if (labData) {
+    if (labData.skipped) limitations.push(`Lab data (--lab) not measured: ${labData.skipped}.`);
+    else limitations.push(`Lab data (--lab): one Lighthouse run (PageSpeed Insights, mobile) on ${labData.samples.length} of ${labData.samples.length + labData.errors.length} sampled template page(s). Lab values vary between runs and are not Core Web Vitals field data.${labData.errors.length ? ` Not measured: ${labData.errors.map((e) => `${e.url} (${e.message})`).join('; ').slice(0, 400)}.` : ''}`);
+  }
   if (!result.pages.some((p) => p.rendered)) limitations.push('JavaScript was not executed (run with --render to compare rendered DOM); client-rendered content is only detected heuristically.');
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -438,6 +454,7 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
       unmeasurable: findings.filter((f) => f.confidence === 'unmeasurable').length,
     },
     fieldData,
+    ...(labData ? { labData } : {}),
     externalLinks,
     limitations,
     affectedUrls: countAffected(findings, (id) => sink.affected(id)),
