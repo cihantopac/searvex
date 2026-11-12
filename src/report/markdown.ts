@@ -30,6 +30,7 @@ export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = 
   L.push(`| Indexable HTML pages | ${indexableSummary(r).replace(/ indexable/, '')} |`);
   L.push(`| Likely site type (heuristic) | ${md(r.inventory.businessModel.label)} |`);
   L.push(`| Findings | ${r.findings.filter((f) => f.severity !== 'info').length} issues + ${r.findings.filter((f) => f.severity === 'info').length} informational |`);
+  if (r.traffic) L.push(`| Priorities weighted by | ${r.traffic.clicks} clicks · ${r.traffic.impressions} impressions on ${r.traffic.pages} pages (${md(r.traffic.source)}; verified data, ${r.traffic.metric}) |`);
   L.push(`| Evidence quality | ${r.measurement.verified} verified · ${r.measurement.heuristic} heuristic · ${r.measurement.unmeasurable} unmeasurable |`);
   L.push('', `¹ ${r.scores.method}`, '');
 

@@ -73,7 +73,7 @@ describe.runIf(available)('JavaScript rendering (Playwright)', () => {
     ws = fs.mkdtempSync(path.join(os.tmpdir(), 'searvex-render-'));
     const renderer = await createRenderer(policy, 20000);
     try {
-      ({ report } = await auditWebsite(server.url + '/', { workspace: ws, probes: false, crawl: { policy, delayMs: 0, render: renderer.render, useSitemaps: false } }));
+      ({ report } = await auditWebsite(server.url + '/', { workspace: ws, probes: false, crawl: { policy, delayMs: 0, render: renderer.render, useSitemaps: false, artefacts: { html: true, screenshots: true } } }));
     } finally {
       await renderer.close();
     }
@@ -85,6 +85,17 @@ describe.runIf(available)('JavaScript rendering (Playwright)', () => {
   });
 
   const finding = (id: string) => report.findings.find((f) => f.ruleId === id);
+
+  it('saves a viewport screenshot and the served HTML per page, linked from the evidence (--screenshots, --save-html)', () => {
+    const a = report.crawl.artefacts!;
+    expect(a.screenshots).toBeGreaterThanOrEqual(5);
+    expect(a.html).toBeGreaterThanOrEqual(5);
+    const runDir = path.join(ws, '.searvex', 'runs', report.runId);
+    const linked = report.findings.flatMap((f) => f.evidence).find((e) => e.artefact?.screenshot);
+    expect(linked?.artefact?.screenshot).toMatch(/^artefacts\/screenshots\/[0-9a-f]{12}-[\w-]+\.png$/);
+    const png = fs.readFileSync(path.join(runDir, linked!.artefact!.screenshot!));
+    expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+  });
 
   it('discovers links that only exist after rendering (SPA)', () => {
     const urls = report.inventory.pages.map((p) => new URL(p.url).pathname).sort();

@@ -11,7 +11,7 @@ import { runContentChecks, type ContentReport } from './content.js';
 import { runGeoChecks, type GeoReport, type LlmsTxtStatus } from './geo.js';
 import { buildInventory, type SiteInventory } from './inventory.js';
 import { runRobotsAccessChecks, runTechnicalChecks } from './technical.js';
-import { prioritise } from './priority.js';
+import { prioritise, type TrafficInput } from './priority.js';
 import { checkExternalLinks, type ExternalLinkResult } from './external-links.js';
 import { failingMetrics, queryCrux, type CruxResult } from '../integrations/crux.js';
 import { annotateReport, type RootCauseGroup } from '../report/remediation.js';
@@ -54,6 +54,11 @@ export interface AuditReport {
      * Since schema 1.1.
      */
     proxy?: { endpoint: string; resolve: 'proxy' | 'local'; unresolvedAllowed: boolean };
+    /**
+     * Evidence artefacts written by this run (`--save-html`, `--screenshots`) under `artefacts/` in the run
+     * directory; `skipped` were over the 200 MB run limit. Since schema 1.1.
+     */
+    artefacts?: { html: number; screenshots: number; bytes: number; skipped: number };
     truncated: boolean; startUrl: string; robots: { url: string; state: string; status: number; sitemaps: string[] }; sitemaps: string[]; sitemapUrls: number; sitemapIssues: Array<{ sitemap: string; message: string }> };
   inventory: SiteInventory;
   findings: Array<Finding & { count: number }>;
@@ -69,6 +74,16 @@ export interface AuditReport {
   affectedUrls?: number;
   /** Whether JavaScript was executed for at least one page (`--render`). */
   rendered?: boolean;
+  /**
+   * Search data that weighted the priorities (`gsc|bing report --audit`, `monitor --import` with a pages table):
+   * page importance is then half structure, half share of clicks (or impressions). Since schema 1.1.
+   */
+  traffic?: TrafficInput;
+  /**
+   * Repository mode: routes that need a login (auth middleware, a login-redirecting layout). Their metadata and
+   * indexability findings are not reported. Since schema 1.1.
+   */
+  privateRoutes?: Array<{ route: string; file: string; reason: string }>;
   /**
    * Root-cause groups per rule id: occurrences of one rule split by URL template, source file, shared layout or
    * site (see `rootCauseGroups`). Since 1.3.0.
@@ -173,6 +188,16 @@ export function toolInfo(kb: KnowledgeBase, findings: Array<Pick<Finding, 'ruleI
   return { name: 'searvex', version: SEARVEX_VERSION, rulesVersion: kb.version, rules };
 }
 
+/** Point each evidence item at the artefacts of its page (`--save-html`, `--screenshots`). */
+function linkArtefacts(findings: Finding[], ctx: ReturnType<typeof buildContext>): void {
+  for (const f of findings) {
+    f.evidence = f.evidence.map((e) => {
+      const page = e.url ? ctx.byUrl.get(e.url) : undefined;
+      return page?.artefacts ? { ...e, artefact: page.artefacts } : e;
+    });
+  }
+}
+
 /** Scores of a run that audited nothing: no overall score, no categories. */
 export function notApplicableScores(reason: string): Scores {
   return { ...computeScores([], 1), overall: null, notApplicable: reason };
@@ -242,6 +267,7 @@ function crawlSummary(result: CrawlResult, robotsAgent = DEFAULT_CRAWL.robotsAge
     ...(result.siteUrl ? { siteUrl: result.siteUrl } : {}),
     ...(result.interrupted ? { interrupted: result.interrupted } : {}),
     ...(result.proxy ? { proxy: result.proxy } : {}),
+    ...(result.artefacts ? { artefacts: result.artefacts } : {}),
     truncated: result.truncated,
     startUrl: result.startUrl,
     robots: { url: result.robots.url, state: result.robots.state, status: result.robots.status, sitemaps: result.robots.sitemaps },
@@ -365,6 +391,7 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
   } else sink.emit('perf.cwv-unmeasured', { observed: 'No CrUX API key configured (searvex crux auth, or SEARVEX_CRUX_API_KEY)' });
   const inventory = buildInventory(ctx);
   const findings = sink.findings();
+  if (result.artefacts) linkArtefacts(findings, ctx);
   prioritise(findings, (id) => sink.affected(id), ctx);
   if (opts.preLaunch) applyPreLaunch(findings, kb);
   const limitations = [
@@ -377,6 +404,10 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
     );
   else if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
   if (launch) limitations.push(`Pre-launch profile (--pre-launch): the site is audited as it will be once live. ${launch.noindex.size ? `${launch.noindex.size} noindex page(s) were evaluated as indexable; their noindex is in the launch checklist. ` : ''}Findings that depend on the test server (environment) or on a deliberate pre-launch state (launch checklist) are listed separately and excluded from the score and --fail-on.`);
+  if (result.artefacts)
+    limitations.push(
+      `Evidence artefacts: ${result.artefacts.html} HTML bod${result.artefacts.html === 1 ? 'y' : 'ies'} and ${result.artefacts.screenshots} screenshot(s) under artefacts/ in the run directory (owner-only permissions). Bodies are stored as served (up to 2 MB each, as .html.txt so they open as source) and can contain personal data or tokens from the pages.${result.artefacts.skipped ? ` ${result.artefacts.skipped} artefact(s) were skipped at the 200 MB per-run limit.` : ''}`,
+    );
   if (result.proxy)
     limitations.push(
       `Crawled through the upstream proxy ${result.proxy.endpoint} (CONNECT only). Response times include the proxy hop. ${

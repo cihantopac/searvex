@@ -91,6 +91,21 @@ export class RunStore {
     return out;
   }
 
+  /**
+   * Write an evidence artefact (`--save-html`, `--screenshots`) under `artefacts/<kind>/` with owner-only
+   * permissions (0700 directory, 0600 file): bodies are stored as served and may contain personal data.
+   * Returns the path relative to the run directory.
+   */
+  writeArtefact(kind: 'html' | 'screenshots', name: string, data: string | Buffer): string {
+    if (!/^[\w.-]+$/.test(name) || name.includes('..')) throw new Error(`Invalid artefact name: ${name}`);
+    this.ensure();
+    const dir = path.join(this.dir, 'artefacts', kind);
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    fs.chmodSync(path.join(this.dir, 'artefacts'), 0o700);
+    fs.writeFileSync(path.join(dir, name), data, { mode: 0o600 });
+    return `artefacts/${kind}/${name}`;
+  }
+
   writeText(name: string, text: string): string {
     this.ensure();
     const f = this.file(name);

@@ -72,18 +72,34 @@ describe('report renderers', () => {
 
 describe('research', () => {
   it('computes topic and page-type gaps only from consistent competitor signals', () => {
-    const t = { url: 't', pages: 3, businessModel: 'x', byType: { home: 1, pricing: 1 }, languages: [], topTerms: ['espresso'], sections: [], schemaTypes: [] as string[], truncated: false };
-    const c1 = { ...t, url: 'c1', byType: { home: 1, docs: 2 }, topTerms: ['subscription', 'roastery', 'espresso'] };
-    const c2 = { ...t, url: 'c2', byType: { home: 1, docs: 1, blog: 1 }, topTerms: ['subscription', 'delivery'] };
+    const nav = { pages: 1, types: { home: 1 } as Record<string, number> };
+    const t = {
+      url: 't', pages: 3, businessModel: 'x', byType: { home: 1, pricing: 1 }, languages: [], topTerms: ['espresso'], sections: [], schemaTypes: [] as string[], truncated: false,
+      clusters: [{ key: '/coffee', pages: 3, terms: ['espresso', 'beans'] }],
+      intents: { navigational: nav, transactional: { pages: 1, types: { pricing: 1 } as Record<string, number> } } as Record<string, { pages: number; types: Record<string, number> }>,
+    };
+    const c1 = {
+      ...t, url: 'c1', byType: { home: 1, docs: 2 }, topTerms: ['subscription', 'roastery', 'espresso'],
+      clusters: [{ key: '/docs', pages: 2, terms: ['subscription', 'roastery'] }, { key: '/coffee', pages: 4, terms: ['espresso', 'beans', 'grind'] }],
+      intents: { navigational: nav, informational: { pages: 2, types: { docs: 2 } } },
+    };
+    const c2 = { ...t, url: 'c2', byType: { home: 1, docs: 1, blog: 1 }, topTerms: ['subscription', 'delivery'], clusters: [], intents: { navigational: nav, informational: { pages: 2, types: { docs: 1, blog: 1 } } } };
     c1.schemaTypes = ['Organization', 'FAQPage', 'Product'];
     c2.schemaTypes = ['Organization', 'Product'];
     t.schemaTypes = ['Organization'];
-    const gaps = computeGaps(t, [c1, c2], new Set(['espresso']));
+    const gaps = computeGaps(t, [c1, c2], new Set(['espresso', 'beans']));
+    expect(gaps.intents.find((i) => i.intent === 'informational')).toEqual({ intent: 'informational', target: 0, competitors: [2, 2], gap: true, missingTypes: ['blog', 'docs'] });
+    expect(gaps.intents.find((i) => i.intent === 'transactional')).toMatchObject({ target: 1, competitors: [0, 0], gap: false });
+    expect(gaps.clusters[0]!.clusters.map((k) => [k.key, k.covered])).toEqual([['/docs', false], ['/coffee', true]]);
+    expect(gaps.clusters[1]!.clusters).toEqual([]);
     expect(gaps.schemaTypes).toEqual([{ type: 'Product', competitors: 2 }, { type: 'FAQPage', competitors: 1 }]);
     expect(gaps.topics.map((g) => g.term)).toEqual(expect.arrayContaining(['subscription', 'roastery', 'delivery']));
     expect(gaps.topics.find((g) => g.term === 'subscription')!.competitors).toBe(2);
     expect(gaps.pageTypes.map((g) => g.type)).toContain('docs');
-    expect(renderResearchMarkdown({ target: t, competitors: [c1, c2], gaps, limitations: ['x'] })).toContain('Content gaps');
+    const md = renderResearchMarkdown({ target: t, competitors: [c1, c2], gaps, limitations: ['x'] });
+    expect(md).toContain('Content gaps');
+    expect(md).toMatch(/\| informational \*\*\(gap\)\*\* \| 0 \| 2 \| 2 \| blog, docs \|/);
+    expect(md).toMatch(/\*\*not covered\*\* · `\/docs` \(2 pages\)/);
   });
 
   it('CLI research crawls target and competitors and writes research.md', async () => {

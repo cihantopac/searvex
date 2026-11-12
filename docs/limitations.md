@@ -71,8 +71,10 @@ Searvex reports what it can observe and labels everything else. Known limits (v1
   document element; `.html` files in template folders (`templates/`, `layouts/`, `partials/` …); Filament admin
   views. Point Searvex at such a folder directly to audit it. A repository with nothing else reports the health
   score as **n/a**.
-- Login-protected server views (e.g. Laravel routes behind `auth` middleware) are not recognised statically;
-  metadata findings on such layouts can be ignored.
+- Login-protected routes are recognised from Laravel `auth` middleware and from Next.js auth middleware matchers
+  or login-redirecting layouts. Guards written another way (a custom middleware name, a check inside the page
+  component, a catch-all matcher) are not recognised, and such routes are still checked. Laravel views are shared
+  by public and private routes, so findings in a Blade layout are kept; the private routes are listed.
 - Static sites: `about.html` is treated as `/about` when its canonical or the sitemap uses that clean URL. URLs in
   the sitemap that no file serves are reported only when no other app in the repository has a matching route,
   and then as heuristic (a server rewrite outside the repository may still serve them).

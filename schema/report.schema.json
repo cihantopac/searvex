@@ -129,6 +129,30 @@
             "unresolvedAllowed"
           ]
         },
+        "artefacts": {
+          "description": "Evidence artefacts written by this run (`--save-html`, `--screenshots`) under `artefacts/` in the run directory; `skipped` were over the 200 MB run limit. Since schema 1.1.",
+          "type": "object",
+          "properties": {
+            "html": {
+              "type": "number"
+            },
+            "screenshots": {
+              "type": "number"
+            },
+            "bytes": {
+              "type": "number"
+            },
+            "skipped": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "html",
+            "screenshots",
+            "bytes",
+            "skipped"
+          ]
+        },
         "truncated": {
           "type": "boolean"
         },
@@ -275,6 +299,29 @@
               "required": [
                 "pattern",
                 "pages"
+              ]
+            }
+          },
+          "structures": {
+            "description": "Page-structure templates of the affected pages (layout skeleton hash, see PageData.skeleton) with an example URL: finds one template behind unrelated URLs (flat slugs) that URL patterns miss. Since schema 1.1.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "pages": {
+                  "type": "number"
+                },
+                "example": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "pages",
+                "example"
               ]
             }
           },
@@ -432,6 +479,37 @@
     "rendered": {
       "description": "Whether JavaScript was executed for at least one page (`--render`).",
       "type": "boolean"
+    },
+    "traffic": {
+      "description": "Search data that weighted the priorities (`gsc|bing report --audit`, `monitor --import` with a pages table): page importance is then half structure, half share of clicks (or impressions). Since schema 1.1.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/TrafficInput"
+        }
+      ]
+    },
+    "privateRoutes": {
+      "description": "Repository mode: routes that need a login (auth middleware, a login-redirecting layout). Their metadata and indexability findings are not reported. Since schema 1.1.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "route": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "route",
+          "file",
+          "reason"
+        ]
+      }
     },
     "rootCauseGroups": {
       "description": "Root-cause groups per rule id: occurrences of one rule split by URL template, source file, shared layout or site (see `rootCauseGroups`). Since 1.3.0.",
@@ -756,6 +834,18 @@
         "ref": {
           "description": "Stable reference of this occurrence, `<ruleId>#<hash of url|file|line>` (the one the HTML report, repair prompts and `searvex review` use). Set on reports written since 1.3.0.",
           "type": "string"
+        },
+        "artefact": {
+          "description": "Evidence artefacts of the page this occurrence is on, relative to the run directory: the HTML body as served (`--save-html`, saved as `.html.txt`) and a viewport screenshot (`--screenshots`). Since schema 1.1.",
+          "type": "object",
+          "properties": {
+            "html": {
+              "type": "string"
+            },
+            "screenshot": {
+              "type": "string"
+            }
+          }
         }
       }
     },
@@ -1058,6 +1148,29 @@
           ]
         },
         "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "causedBy": {
+          "description": "The observed root cause this finding is likely a consequence of (fix that first, then re-run). Stated as \"likely\": the check cannot prove it. Since schema 1.1.",
+          "type": "object",
+          "properties": {
+            "ruleId": {
+              "type": "string"
+            },
+            "why": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "ruleId",
+            "why"
+          ]
+        },
+        "effects": {
+          "description": "For a root cause: the findings that are likely its consequences. Since schema 1.1.",
           "type": "array",
           "items": {
             "type": "string"
@@ -1446,6 +1559,41 @@
         "businessModel",
         "sections",
         "structuredData"
+      ]
+    },
+    "TrafficInput": {
+      "description": "What `applyTrafficPriorities` recorded on the report (`report.traffic`).",
+      "type": "object",
+      "properties": {
+        "source": {
+          "description": "Where the numbers come from, e.g. \"Search Console sc-domain:example.com, 28 days\".",
+          "type": "string"
+        },
+        "metric": {
+          "description": "`clicks`, or `impressions` when the joined pages have fewer than 10 clicks in all.",
+          "type": "string",
+          "enum": [
+            "clicks",
+            "impressions"
+          ]
+        },
+        "pages": {
+          "description": "Crawled indexable pages with search data.",
+          "type": "number"
+        },
+        "clicks": {
+          "type": "number"
+        },
+        "impressions": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "source",
+        "metric",
+        "pages",
+        "clicks",
+        "impressions"
       ]
     },
     "UnfetchedUrl": {
