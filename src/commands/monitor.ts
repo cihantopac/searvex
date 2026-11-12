@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { auditWebsite, notAnalysed, notAnalysedReason, type AuditReport } from '../analyze/audit.js';
+import { applyTrafficPriorities } from '../analyze/priority.js';
 import { originMap } from '../core/url.js';
 import { RunStore } from '../crawl/store.js';
 import { loadKnowledge } from '../rules/engine.js';
@@ -190,6 +191,9 @@ export async function commandMonitor(flags: GlobalFlags): Promise<number> {
     const label = `The export ${exp.files.join(', ')}`;
     propertyOrUsage(() => (assertAuditInProperty(report, importProperty!, label), undefined));
     for (const w of exp.warnings) log(v, `warning: ${w}`);
+    // A pages table in the export weighs this audit's priorities by verified clicks/impressions.
+    const pages = exp.tables.pages;
+    if (pages?.length && applyTrafficPriorities(report, pages.map((p) => ({ page: p.key, clicks: p.clicks, impressions: p.impressions })), `Search Console export ${exp.files.join(', ')}`)) writeReports(store, report, kb, ['json', 'md', 'html']);
     const table = exp.tables.queries ?? exp.tables.pages;
     const verified = exp.tables.pages?.length ? 'property checked against the pages table' : 'property as stated with --property (the export has no pages table to check it)';
     if (table?.length) gsc = { rows: table.map((r) => ({ keys: [r.key], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })), source: `imported ${exp.files.join(', ')}, ${importProperty.raw}; ${verified}` };

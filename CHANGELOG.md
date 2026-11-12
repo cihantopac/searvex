@@ -17,6 +17,19 @@ All notable changes to this project are documented here. The format follows
   reserved targets never go through the proxy. Host names are resolved and checked locally before `CONNECT`;
   `--proxy-resolve local` connects to the checked address instead. Used by crawling, `--render`, `--check-external`
   and `rules check-sources`.
+- Evidence artefacts: `--save-html` keeps each fetched HTML body as served (≤ 2 MB, as `.html.txt`), and
+  `--screenshots` (with `--render`) one viewport PNG per rendered page, under `artefacts/` in the run directory
+  with owner-only permissions and a 200 MB per-run budget. Evidence items (`evidence[].artefact`) and the HTML
+  report link them; `crawl.artefacts` counts them.
+- Traffic-weighted priorities: when Search Console or Bing data is joined to an audit (`gsc report --audit`,
+  `gsc import --audit`, `bing report --audit`, `monitor --import` with a pages table), a page's importance becomes
+  half structure and half its share of verified clicks (impressions when clicks are too few). Reach and scores are
+  recomputed over each finding's complete affected URLs, the "why" reasons state the clicks and impressions, and
+  `report.json` records the input under `traffic`.
+- **By cause** view in the HTML report (EN/TR): observed root causes with their likely consequences (for example a
+  client-side language switch → render mismatch, hreflang and duplicate findings), and the templates and source
+  files that carry several issue types, so one change can fix them. Findings show a "likely from" chip wherever they
+  are listed. `report.json` records the links as `priority.causedBy` and `priority.effects`.
 - `crawl.proxy` in `report.json` (endpoint and resolution mode, never credentials), plus a limitation line; report
   schema 1.1.
 - Exit codes for the proxy: an unusable proxy setting or failed proxy authentication is `2`, an unreachable proxy

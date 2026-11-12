@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { FetchResult, RedirectHop } from '../core/types.js';
 import { looksLikeAsset, mapOrigin, normalizeUrl, originMap, pathDepth, type OriginMap } from '../core/url.js';
 import { extractPage, parseXRobotsTag, type PageData } from '../extract/html.js';
@@ -23,7 +24,13 @@ export interface CrawlOptions {
   /** Robots group used for allow/disallow decisions. */
   robotsAgent: string;
   /** Optional JS renderer (see render.ts). */
-  render?: (url: string) => Promise<{ html: string; error?: string }>;
+  render?: (url: string, o?: { screenshot?: boolean }) => Promise<{ html: string; error?: string; screenshot?: Buffer }>;
+  /**
+   * Evidence artefacts written to the run directory (needs a store): `html` = each fetched HTML body as served
+   * (--save-html), `screenshots` = one viewport PNG per rendered page (--screenshots, with `render`). Bounded by
+   * `ARTEFACT_PAGE_CAP` per page and `ARTEFACT_RUN_CAP` per run.
+   */
+  artefacts?: { html?: boolean; screenshots?: boolean; /** Run budget in bytes (default `ARTEFACT_RUN_CAP`). */ maxBytes?: number };
   /**
    * Called after each URL. `crawled`: URLs processed (fetched + robots-blocked); `fetched`: URLs for which an
    * HTTP request was made; `blocked`: this URL was disallowed by robots.txt and not requested.
@@ -59,6 +66,23 @@ export const DEFAULT_CRAWL: CrawlOptions = {
   checkpointMs: 10_000,
 };
 
+/** Bytes of one saved HTML body (longer bodies are cut). */
+export const ARTEFACT_PAGE_CAP = 2 * 1024 * 1024;
+/** Bytes of all artefacts of one run; later ones are skipped and counted. */
+export const ARTEFACT_RUN_CAP = 200 * 1024 * 1024;
+
+/** `<hash>-<path slug>`: stable for a URL, safe as a file name. */
+export function artefactName(url: string): string {
+  let pathname = new URL(url).pathname;
+  try {
+    pathname = decodeURIComponent(pathname);
+  } catch {
+    /* keep the encoded form */
+  }
+  const slug = (pathname.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'index').slice(0, 40);
+  return `${crypto.createHash('sha1').update(url).digest('hex').slice(0, 12)}-${slug}`;
+}
+
 export interface PageRecord {
   url: string;
   finalUrl: string;
@@ -81,6 +105,8 @@ export interface PageRecord {
   /** Present when JS rendering ran: facts extracted from the rendered DOM. */
   rendered?: PageData;
   renderError?: string;
+  /** Evidence artefacts of this page, relative to the run directory (`--save-html`, `--screenshots`). */
+  artefacts?: { html?: string; screenshot?: string };
 }
 
 export interface CrawlResult {
@@ -108,6 +134,8 @@ export interface CrawlResult {
   siteUrl?: string;
   /** Set when the crawl was stopped early by `CrawlOptions.stop`: the pages cover only part of the site. */
   interrupted?: Interruption;
+  /** Evidence artefacts written by this run (`CrawlOptions.artefacts`). */
+  artefacts?: { html: number; screenshots: number; bytes: number; skipped: number };
   /** Upstream proxy used for this crawl (endpoint and mode, never credentials). */
   proxy?: ReturnType<typeof proxySummary>;
 }
@@ -257,6 +285,18 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
   }
   store?.writeJson('meta.json', { runId: store.runId, kind: 'crawl', startUrl: start, startedAt, options: { ...opts, policy: undefined, render: !!opts.render, onProgress: undefined, stop: undefined } });
 
+  const artefacts = { html: 0, screenshots: 0, bytes: 0, skipped: 0 };
+  /** Save one artefact within the run budget; returns its relative path, or undefined when skipped. */
+  const saveArtefact = (kind: 'html' | 'screenshots', name: string, data: Buffer): string | undefined => {
+    if (!store) return undefined;
+    if (artefacts.bytes + data.length > (opts.artefacts?.maxBytes ?? ARTEFACT_RUN_CAP)) {
+      artefacts.skipped++;
+      return undefined;
+    }
+    artefacts.bytes += data.length;
+    artefacts[kind === 'html' ? 'html' : 'screenshots']++;
+    return store.writeArtefact(kind, name, data);
+  };
   let crawledThisRun = 0;
   let fetchedCount = existing.filter((p) => !p.blockedByRobots).length;
   let lastPersist = Date.now();
@@ -316,10 +356,18 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
     const isHtml = /html/i.test(res.contentType) || (!res.contentType && /^\s*</.test(res.body));
     if (!res.error && isHtml && res.body) {
       rec.data = mapPageData(extractPage(res.body, res.finalUrl), map);
+      const name = artefactName(item.url);
+      // Saved as .html.txt: opening it shows the source instead of running the page's scripts locally.
+      if (opts.artefacts?.html) {
+        const html = saveArtefact('html', `${name}.html.txt`, Buffer.from(res.body, 'utf8').subarray(0, ARTEFACT_PAGE_CAP));
+        if (html) rec.artefacts = { html };
+      }
       if (opts.render) {
-        const r = await opts.render(res.finalUrl);
+        const r = await opts.render(res.finalUrl, { screenshot: !!opts.artefacts?.screenshots });
         if (r.error) rec.renderError = r.error;
         else rec.rendered = mapPageData(extractPage(r.html, res.finalUrl), map);
+        const shot = r.screenshot && saveArtefact('screenshots', `${name}.png`, r.screenshot);
+        if (shot) rec.artefacts = { ...rec.artefacts, screenshot: shot };
       }
     }
     enqueueLinksOf(rec, item);
@@ -387,6 +435,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
     ...(map ? { siteUrl: map.from } : {}),
     ...(interruptionOf(opts.stop) ? { interrupted: interruptionOf(opts.stop) } : {}),
     ...(opts.policy.upstream ? { proxy: proxySummary(opts.policy.upstream) } : {}),
+    ...(opts.artefacts?.html || opts.artefacts?.screenshots ? { artefacts } : {}),
   };
   store?.writeJson('crawl-summary.json', {
     ...result,
