@@ -80,7 +80,7 @@ Searvex reports what it can observe and labels everything else. Known limits (v1
   and then as heuristic (a server rewrite outside the repository may still serve them).
 - Static analysis: JS/TS/JSX/TSX sources are parsed into an AST (@babel/parser). Next.js `metadata` /
   `generateMetadata` objects are read key by key: a key in another object does not count, and branches that
-  throw (`notFound()`, `redirect()`) are ignored. Metadata computed at runtime (CMS content, i18n
+  throw (`notFound()`, `redirect()`) are ignored; a page that calls one unconditionally is not indexable. Metadata computed at runtime (CMS content, i18n
   dictionaries, spread props, helper calls) is treated as unknown rather than missing. Vue SFC `<script>`
   blocks and Astro frontmatter go through the same AST, Astro templates through an HTML parser (a `title` prop
   on a component counts, an HTML `title` attribute does not), and Blade views through a tokenizer that drops

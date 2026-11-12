@@ -8,7 +8,7 @@ export function md(s: unknown): string {
   return String(s ?? '')
     .replace(/[\r\n]+/g, ' ')
     .replace(/[|\\`*_[\]<>]/g, (c) => `\\${c}`)
-    .slice(0, 300);
+    .replace(/^([\s\S]{299})[\s\S]+$/, '$1…');
 }
 
 export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = {}): string {
