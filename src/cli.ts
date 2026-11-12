@@ -30,6 +30,7 @@ import { commandCrux, cruxKey } from './commands/crux.js';
 import { commandPsi, psiKey } from './commands/psi.js';
 import { commandGa4 } from './commands/ga4.js';
 import { commandYandex } from './commands/yandex.js';
+import { serveMcp } from './mcp/server.js';
 import { LAB_DEFAULT_SAMPLES } from './analyze/lab.js';
 import { commandResearch } from './commands/research.js';
 import { commandRun } from './commands/run.js';
@@ -72,6 +73,9 @@ Commands
                         Google Analytics 4 (read-only OAuth, same Desktop client as gsc): "ga4 report <propertyId>
                         [--audit latest]" lists Organic Search landing pages and the audit's issues on pages with
                         traffic (experimental: not yet verified against a live property)
+  mcp                   Read-only MCP server on stdio (tools: audit, geo, report, findings, prompt, rules) for AI
+                        clients; the network policy is fixed at start (--allow-private, host/port limits, --proxy),
+                        --max-pages caps tool audits (default 500), --out sets the workspace
   yandex <auth|status|sites|report|logout>
                         Yandex Webmaster (OAuth token, read-only): "yandex report <siteUrl>" lists popular queries
                         of a verified site (experimental: not yet verified against a live site)
@@ -879,6 +883,13 @@ async function runCommand(cmd: string, flags: GlobalFlags): Promise<number> {
         return await commandGa4(flags);
       case 'yandex':
         return await commandYandex(flags);
+      case 'mcp': {
+        const v = flags.values;
+        const { kb } = knowledgeFrom(v);
+        const { maxPages, ...crawl } = crawlOptionsFrom(v);
+        await serveMcp({ workspace: path.resolve(String(v['out'] ?? process.cwd())), kb, policy: policyFrom(v), crawl, maxPagesCap: v['max-pages'] === undefined ? 500 : maxPages });
+        return EXIT.ok;
+      }
       case 'connect':
         return await commandConnect(flags);
       case 'audit':

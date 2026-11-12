@@ -14,6 +14,11 @@ All notable changes to this project are documented here. The format follows
   labelled with their pack (`findings[].pack`, `tool.packs`, schema 1.2) in every report format.
   `rules list|show|validate --rules-pack` include them. Format and contribution guide:
   `knowledge/packs/README.md`, `CONTRIBUTING.md`.
+- `searvex mcp`: a read-only Model Context Protocol server on stdio with the tools `audit`, `geo`, `report`,
+  `findings`, `prompt` and `rules`, returning report-schema objects. It speaks the initialize handshake
+  (2025-03-26 to 2025-11-25) and the stateless 2026-07-28 protocol. The network policy is fixed when the server
+  starts (`--allow-private`, host and port limits, `--proxy`), `--max-pages` caps tool audits and audits run one
+  at a time; nothing that writes to a repository is exposed. No new dependency.
 
 ## [1.4.0] - 2026-11-12
 
