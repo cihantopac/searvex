@@ -5,14 +5,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Changed
-- Repository mode parses Vue SFCs, Astro pages and Blade views instead of matching regexes: `<script setup>` head
-  calls (`useHead`, `useSeoMeta`, `definePageMeta`) and Astro frontmatter through the Babel AST, Astro templates
-  through parse5, Blade through a tokenizer that drops comments, `@verbatim` and `@php`. A commented-out
-  `useHead`, a help string mentioning it, or an `<a title>` no longer counts as a page title; a computed head object
-  or a spread into a layout is reported as unknown instead of present or missing. No new dependency.
-
 ### Added
+- Upstream proxy support, as designed in `docs/design/proxy.md`: `--proxy <url|none>` and `HTTPS_PROXY` /
+  `HTTP_PROXY` / `NO_PROXY`, `CONNECT` only with TLS end to end and Basic authentication. Private, loopback and
+  reserved targets never go through the proxy. Host names are resolved and checked locally before `CONNECT`;
+  `--proxy-resolve local` connects to the checked address instead. Used by crawling, `--render`, `--check-external`
+  and `rules check-sources`.
+- `crawl.proxy` in `report.json` (endpoint and resolution mode, never credentials), plus a limitation line; report
+  schema 1.1.
+- Exit codes for the proxy: an unusable proxy setting or failed proxy authentication is `2`, an unreachable proxy
+  `3`, and a proxy that refuses `CONNECT` to the start URL `4`.
+- Evidence artefacts: `--save-html` keeps each fetched HTML body as served (≤ 2 MB, as `.html.txt`), and
+  `--screenshots` (with `--render`) one viewport PNG per rendered page, under `artefacts/` in the run directory
+  with owner-only permissions and a 200 MB per-run budget. Evidence items (`evidence[].artefact`) and the HTML
+  report link them; `crawl.artefacts` counts them.
+- Traffic-weighted priorities: when Search Console or Bing data is joined to an audit (`gsc report --audit`,
+  `gsc import --audit`, `bing report --audit`, `monitor --import` with a pages table), a page's importance becomes
+  half structure and half its share of verified clicks (impressions when clicks are too few). Reach and scores are
+  recomputed over each finding's complete affected URLs, the "why" reasons state the clicks and impressions, and
+  `report.json` records the input under `traffic`.
+- **By cause** view in the HTML report (EN/TR): observed root causes with their likely consequences (for example a
+  client-side language switch → render mismatch, hreflang and duplicate findings), and the templates and source
+  files that carry several issue types, so one change can fix them. Findings show a "likely from" chip wherever they
+  are listed. `report.json` records the links as `priority.causedBy` and `priority.effects`.
 - Page-structure templates: each page gets a layout skeleton hash (landmarks, body children and their stable
   classes, main-content blocks, content heading levels). Findings list the structures of their affected pages
   (`findings[].structures`), and one layout behind several URL patterns (flat slugs such as `/alpha`, `/beta`) now
@@ -25,8 +40,6 @@ All notable changes to this project are documented here. The format follows
   (`config.matcher`, Clerk `createRouteMatcher`) or by a layout that redirects anonymous users to a login page.
   Their metadata and indexability findings are not reported (pages behind a login are not indexed); the routes are
   listed in `privateRoutes`, the summary and the limitations. Catch-all or regex matchers never make routes private.
-
-### Added
 - Repository adapters for SvelteKit, Remix and WordPress block themes. SvelteKit: routes from
   `src/routes/**/+page.svelte` (groups dropped), `<svelte:head>` title/description/robots with layout inheritance,
   `lang` in `src/app.html`. Remix: flat and folder routes in `app/routes` (`blog.$slug` → `/blog/:slug`, pathless
@@ -42,30 +55,6 @@ All notable changes to this project are documented here. The format follows
   through parse5, Blade through a tokenizer that drops comments, `@verbatim` and `@php`. A commented-out
   `useHead`, a help string mentioning it, or an `<a title>` no longer counts as a page title; a computed head object
   or a spread into a layout is reported as unknown instead of present or missing. No new dependency.
-
-### Added
-- Upstream proxy support, as designed in `docs/design/proxy.md`: `--proxy <url|none>` and `HTTPS_PROXY` /
-  `HTTP_PROXY` / `NO_PROXY`, `CONNECT` only with TLS end to end and Basic authentication. Private, loopback and
-  reserved targets never go through the proxy. Host names are resolved and checked locally before `CONNECT`;
-  `--proxy-resolve local` connects to the checked address instead. Used by crawling, `--render`, `--check-external`
-  and `rules check-sources`.
-- Evidence artefacts: `--save-html` keeps each fetched HTML body as served (≤ 2 MB, as `.html.txt`), and
-  `--screenshots` (with `--render`) one viewport PNG per rendered page, under `artefacts/` in the run directory
-  with owner-only permissions and a 200 MB per-run budget. Evidence items (`evidence[].artefact`) and the HTML
-  report link them; `crawl.artefacts` counts them.
-- Traffic-weighted priorities: when Search Console or Bing data is joined to an audit (`gsc report --audit`,
-  `gsc import --audit`, `bing report --audit`, `monitor --import` with a pages table), a page's importance becomes
-  half structure and half its share of verified clicks (impressions when clicks are too few). Reach and scores are
-  recomputed over each finding's complete affected URLs, the "why" reasons state the clicks and impressions, and
-  `report.json` records the input under `traffic`.
-- **By cause** view in the HTML report (EN/TR): observed root causes with their likely consequences (for example a
-  client-side language switch → render mismatch, hreflang and duplicate findings), and the templates and source
-  files that carry several issue types, so one change can fix them. Findings show a "likely from" chip wherever they
-  are listed. `report.json` records the links as `priority.causedBy` and `priority.effects`.
-- `crawl.proxy` in `report.json` (endpoint and resolution mode, never credentials), plus a limitation line; report
-  schema 1.1.
-- Exit codes for the proxy: an unusable proxy setting or failed proxy authentication is `2`, an unreachable proxy
-  `3`, and a proxy that refuses `CONNECT` to the start URL `4`.
 
 ## [1.3.0] - 2026-11-11
 
