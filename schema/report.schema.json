@@ -1106,6 +1106,29 @@
           "items": {
             "type": "string"
           }
+        },
+        "causedBy": {
+          "description": "The observed root cause this finding is likely a consequence of (fix that first, then re-run). Stated as \"likely\": the check cannot prove it. Since schema 1.1.",
+          "type": "object",
+          "properties": {
+            "ruleId": {
+              "type": "string"
+            },
+            "why": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "ruleId",
+            "why"
+          ]
+        },
+        "effects": {
+          "description": "For a root cause: the findings that are likely its consequences. Since schema 1.1.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [

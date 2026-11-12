@@ -172,12 +172,21 @@ const CONSEQUENCES: Array<{ cause: string; when: RegExp; effects: string[]; why:
 ];
 
 function linkRootCauses(findings: Array<Finding & { count: number }>): void {
+  // Recomputed from scratch on every call (traffic weighting calls it again).
+  for (const f of findings) {
+    delete f.priority?.causedBy;
+    delete f.priority?.effects;
+  }
   for (const c of CONSEQUENCES) {
     const cause = findings.find((f) => f.ruleId === c.cause && f.evidence.some((e) => c.when.test(e.observed ?? '')));
     if (!cause) continue;
     const effects = findings.filter((f) => c.effects.includes(f.ruleId) && f.priority);
     if (!effects.length || !cause.priority) continue;
-    for (const f of effects) f.priority!.reasons.push(`likely a consequence of ${c.cause} — ${c.why}; fix that first, then re-run`);
+    for (const f of effects) {
+      f.priority!.reasons.push(`likely a consequence of ${c.cause} — ${c.why}; fix that first, then re-run`);
+      f.priority!.causedBy = { ruleId: c.cause, why: c.why };
+    }
+    cause.priority.effects = effects.map((f) => f.ruleId);
     // Rank the cause above its consequences: fixing it usually resolves them.
     const top = Math.max(...effects.map((f) => f.priority!.score));
     if (cause.priority.score <= top) {

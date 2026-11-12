@@ -20,6 +20,10 @@ All notable changes to this project are documented here. The format follows
   half structure and half its share of verified clicks (impressions when clicks are too few). Reach and scores are
   recomputed over each finding's complete affected URLs, the "why" reasons state the clicks and impressions, and
   `report.json` records the input under `traffic`.
+- **By cause** view in the HTML report (EN/TR): observed root causes with their likely consequences (for example a
+  client-side language switch → render mismatch, hreflang and duplicate findings), and the templates and source
+  files that carry several issue types, so one change can fix them. Findings show a "likely from" chip wherever they
+  are listed. `report.json` records the links as `priority.causedBy` and `priority.effects`.
 - `crawl.proxy` in `report.json` (endpoint and resolution mode, never credentials), plus a limitation line; report
   schema 1.1.
 - Exit codes for the proxy: an unusable proxy setting or failed proxy authentication is `2`, an unreachable proxy
