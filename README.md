@@ -46,6 +46,27 @@ Or as a **Claude Code plugin**, no npm install needed:
 
 Then run `/searvex <url> [path]`. Requires Node.js ≥ 20.10. Full reference: [docs/cli.md](docs/cli.md).
 
+In **GitHub Actions**, findings land in code scanning and the job fails at the chosen severity:
+
+```yaml
+jobs:
+  seo:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # SARIF upload to code scanning
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cihantopac/searvex@v1.5.0
+        with:
+          target: . # or https://example.com
+          fail-on: high
+```
+
+Inputs: `target`, `fail-on` (or `none`), `max-pages`, `args` (extra `audit` flags such as `--site-url`), `version`,
+`upload-sarif`, `category`. Outputs: `exit-code`, `sarif`, `report`, `run-dir`. The job summary lists the score
+and the top issues.
+
 ## How it works
 
 <picture>

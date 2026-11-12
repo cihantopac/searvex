@@ -1,0 +1,69 @@
+name: Searvex SEO audit
+description: Audit a website or repository for technical SEO, GEO and content with sourced rules, and upload SARIF to code scanning.
+author: cihantopac
+branding:
+  icon: search
+  color: blue
+
+inputs:
+  target:
+    description: Website URL (https://…) or repository path to audit
+    default: "."
+  fail-on:
+    description: Fail the job when a finding of this severity or higher exists (critical, high, medium, low, or none)
+    default: high
+  max-pages:
+    description: Pages to crawl for a website audit
+    default: "50"
+  args:
+    description: Extra searvex audit arguments, e.g. "--site-url https://example.com --pre-launch"
+    default: ""
+  version:
+    description: searvex-seo version from npm (defaults to the version of this action release)
+    default: "1.4.0"
+  upload-sarif:
+    description: Upload the SARIF report to GitHub code scanning (needs "security-events: write")
+    default: "true"
+  category:
+    description: Code-scanning category, to keep several Searvex audits apart
+    default: searvex
+
+outputs:
+  exit-code:
+    description: Exit code of the audit (0 ok, 1 fail-on threshold met, 2 usage or policy, 3 runtime, 4 target not analysable, 5 interrupted)
+    value: ${{ steps.audit.outputs.exit-code }}
+  sarif:
+    description: Path of report.sarif
+    value: ${{ steps.audit.outputs.sarif }}
+  report:
+    description: Path of report.json
+    value: ${{ steps.audit.outputs.report }}
+  run-dir:
+    description: Run directory with every report format
+    value: ${{ steps.audit.outputs.run-dir }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+    - id: audit
+      shell: bash
+      # Inputs reach the script as environment variables, never interpolated into the shell command.
+      run: node "$GITHUB_ACTION_PATH/action/run.mjs"
+      env:
+        INPUT_TARGET: ${{ inputs.target }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_MAX_PAGES: ${{ inputs.max-pages }}
+        INPUT_ARGS: ${{ inputs.args }}
+        INPUT_VERSION: ${{ inputs.version }}
+    - if: ${{ always() && inputs.upload-sarif == 'true' && steps.audit.outputs.sarif != '' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.audit.outputs.sarif }}
+        category: ${{ inputs.category }}
+    - shell: bash
+      run: exit "$EXIT_CODE"
+      env:
+        EXIT_CODE: ${{ steps.audit.outputs.exit-code }}
