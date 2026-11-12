@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Category, Confidence, Engine, Evidence, Finding, Severity, SourceRef } from '../core/types.js';
+import type { PackCheck } from './packs.js';
 
 /**
  * Rule knowledge base.
@@ -29,6 +30,10 @@ export interface Rule {
   status: 'active' | 'deprecated' | 'draft';
   /** Rule ids whose recommendation contradicts this one for an overlapping engine. */
   conflictsWith?: string[];
+  /** Set on rules loaded from a community rule pack (`--rules-pack`): the pack's name. */
+  pack?: string;
+  /** Pack rules only: the declarative page check that emits the rule (see `rules/packs.ts`). */
+  check?: PackCheck;
   autofix?: boolean;
   /**
    * Findings that describe the test environment (`server`: the local/staging web server, e.g. no HTTPS or
@@ -51,6 +56,8 @@ export interface KnowledgeBase {
   files: string[];
   /** `version` of the rule file that defines each rule id. */
   ruleVersions?: Map<string, string>;
+  /** Community rule packs merged with `withPacks` (`--rules-pack`). */
+  packs?: Array<{ name: string; version: string; rules: number }>;
 }
 
 /** Domains accepted as official sources. Anything else fails validation. */
@@ -233,6 +240,7 @@ export class FindingSink {
       confidence: overrides.confidence ?? rule.confidence,
       category: rule.category,
       engines: rule.engines,
+      ...(rule.pack ? { pack: rule.pack } : {}),
       message: overrides.message ?? rule.description,
       evidence: list.slice(0, this.maxEvidence),
       fix: rule.fix,

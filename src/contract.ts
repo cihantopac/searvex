@@ -9,7 +9,7 @@
 import type { ErrorKind } from './cli.js';
 
 /** Version of the report, event and error schemas (`report.json` → `schemaVersion`). */
-export const SCHEMA_VERSION = '1.1' as const;
+export const SCHEMA_VERSION = '1.2' as const;
 
 /** The JSON error object written on stderr with --json or --progress ndjson. */
 export interface ErrorOutput {

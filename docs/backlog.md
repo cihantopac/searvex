@@ -66,4 +66,4 @@ Open items name the release and milestone of the maintainer's release plan that 
 |---|---|---|
 | 23 | WordPress block themes, SvelteKit, Remix adapters and fixes | ✅ 1.4.0 (G6) |
 | 24 | Localised report text | ✅ English and Turkish since 1.1.0 |
-| 25 | Community rule packs with the same sourcing rules | ⬜ planned for 1.5.0 (H4) |
+| 25 | Community rule packs with the same sourcing rules | ✅ 1.5.0 (H4): `--rules-pack`, declarative page checks, `rules validate --rules-pack` |

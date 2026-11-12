@@ -1,0 +1,34 @@
+{
+  "version": "2026.11.12",
+  "updated": "2026-11-12",
+  "rules": [
+    {
+      "id": "shop.product-schema-missing",
+      "title": "Product page without Product structured data",
+      "category": "structured-data",
+      "severity": "medium",
+      "confidence": "heuristic",
+      "engines": ["google"],
+      "description": "A page under /products/ has no schema.org Product markup, so it cannot show product rich results.",
+      "fix": "Add Product structured data with name, offers and review details where they apply.",
+      "verify": "Rich Results Test on the page.",
+      "sources": [{ "title": "Google: Product structured data", "url": "https://developers.google.com/search/docs/appearance/structured-data/product", "checked": "2026-11-12", "level": "fetched" }],
+      "status": "active",
+      "check": { "field": "jsonld-types", "test": "not-matches", "value": "^(Product|ProductGroup)$", "urlPattern": "^/products/" }
+    },
+    {
+      "id": "shop.missing-og-image",
+      "title": "No og:image",
+      "category": "metadata",
+      "severity": "low",
+      "confidence": "verified",
+      "engines": ["all"],
+      "description": "The page sets no og:image.",
+      "fix": "Add an og:image meta tag.",
+      "verify": "View the page source.",
+      "sources": [{ "title": "Google: Search Central documentation", "url": "https://developers.google.com/search/docs", "checked": "2026-11-12", "level": "fetched" }],
+      "status": "active",
+      "check": { "field": "og:image", "test": "missing" }
+    }
+  ]
+}

@@ -20,6 +20,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { renderMarkdown } from './report/markdown.js';
 import { renderSarif } from './report/sarif.js';
 import { defaultKnowledgeDir, loadKnowledge, validateKnowledge, type KnowledgeBase } from './rules/engine.js';
+import { loadRulePack, RulePackError, validatePacks, withPacks, type RulePack } from './rules/packs.js';
 import { checkSources, readSnapshots, snapshotFile, writeSnapshots } from './rules/sources.js';
 import { IMPLEMENTED_RULES } from './rules/implemented.js';
 import { commandRepo } from './commands/repo.js';
@@ -103,6 +104,10 @@ Common options
                         public URL. Lab values, never Core Web Vitals pass/fail (experimental: not yet verified
                         against the live service)
   --lab-samples <n>     Templates measured with --lab (default 5, max 20)
+  --rules-pack <name|dir>
+                        Add a community rule pack (knowledge/packs/<name> or a directory; repeatable). Pack
+                        rules are sourced like core rules, labelled in reports and never replace a core rule;
+                        also for "rules list|show|validate"
   --no-sitemap          Do not seed from sitemaps         --resume <runId>   Resume an interrupted crawl
   --max-duration <s>    Stop crawling after s seconds and write a partial report (exit 5). SIGINT/SIGTERM
                         do the same; a second signal exits at once (130/143)
@@ -236,6 +241,7 @@ export const CLI_OPTIONS = {
   days: { type: 'string' },
   audit: { type: 'string' },
   'max-rows': { type: 'string' },
+  'rules-pack': { type: 'string', multiple: true },
   competitor: { type: 'string', multiple: true },
   category: { type: 'string' },
   strict: { type: 'boolean' },
@@ -590,6 +596,19 @@ function withReportFiles(L: string[], files: string[]): string {
   return L.join('\n');
 }
 
+/** The rule base plus the community packs named with --rules-pack (a bad pack is a usage error). */
+export function knowledgeFrom(v: Record<string, unknown>): { kb: KnowledgeBase; packs: RulePack[] } {
+  const kb = loadKnowledge();
+  const refs = ((v['rules-pack'] as string[] | undefined) ?? []).flatMap((x) => x.split(',')).map((x) => x.trim()).filter(Boolean);
+  try {
+    const packs = refs.map((r) => loadRulePack(r));
+    return { kb: withPacks(kb, packs), packs };
+  } catch (e) {
+    if (e instanceof RulePackError) throw new UsageError(e.message);
+    throw e;
+  }
+}
+
 /** --lab / --lab-samples: PageSpeed Insights lab runs; a missing key is a usage error, not a silent skip. */
 function labOptions(v: Record<string, unknown>): { apiKey: string; samples: number } | undefined {
   if (!v['lab']) {
@@ -612,7 +631,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
   assertSiteUrl(v);
   if (v['fail-on'] !== undefined) failOnIndex(v['fail-on']);
   const lab = labOptions(v);
-  const kb = loadKnowledge();
+  const { kb } = knowledgeFrom(v);
   const workspace = path.resolve(String(v['out'] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
   const stop = interrupter(v);
@@ -661,7 +680,7 @@ async function commandGeo(flags: GlobalFlags): Promise<number> {
   const target = flags.positionals[1];
   if (!target || !/^https?:\/\//i.test(target)) throw new UsageError('geo requires a URL');
   assertSiteUrl(v);
-  const kb = loadKnowledge();
+  const { kb } = knowledgeFrom(v);
   const opts = crawlOptionsFrom({ ...v, 'max-pages': v['max-pages'] ?? '50' });
   suggestPreLaunch(v, target);
   const stop = interrupter(v);
@@ -691,9 +710,9 @@ async function commandGeo(flags: GlobalFlags): Promise<number> {
 }
 
 async function commandRules(flags: GlobalFlags): Promise<number> {
-  const kb = loadKnowledge();
-  const sub = flags.positionals[1] ?? 'list';
   const v = flags.values;
+  const { kb, packs } = knowledgeFrom(v);
+  const sub = flags.positionals[1] ?? 'list';
   if (sub === 'list') {
     const rules = [...kb.rules.values()].filter((r) => !v['category'] || r.category === v['category']);
     if (v['json']) return (process.stdout.write(JSON.stringify(rules, null, 2) + '\n'), 0);
@@ -718,7 +737,9 @@ async function commandRules(flags: GlobalFlags): Promise<number> {
     return 0;
   }
   if (sub === 'validate') {
-    const issues = validateKnowledge(kb, { implemented: IMPLEMENTED_RULES });
+    // Core rules against their implementations; pack rules against their declarative checks.
+    const core = packs.length ? { ...kb, rules: new Map([...kb.rules].filter(([, r]) => !r.pack)) } : kb;
+    const issues = [...validateKnowledge(core, { implemented: IMPLEMENTED_RULES }), ...validatePacks(kb, packs)];
     const errors = issues.filter((i) => i.level === 'error');
     for (const i of issues) console.log(`${i.level.toUpperCase().padEnd(7)} ${i.ruleId}: ${i.message}`);
     console.log(`\n${kb.rules.size} rules, ${errors.length} errors, ${issues.length - errors.length} warnings`);

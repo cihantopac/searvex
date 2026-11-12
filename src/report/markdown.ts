@@ -62,7 +62,7 @@ export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = 
   L.push('## Issues by severity', '');
   if (!issues.length) L.push('_No issues found by the active rules._', '');
   for (const f of issues) {
-    L.push(`### ${ICON[f.severity]} ${md(f.title)} — ${f.severity}${f.confidence !== 'verified' ? ` (${f.confidence})` : ''}`, '');
+    L.push(`### ${ICON[f.severity]} ${md(f.title)}${f.pack ? ` _(${md(f.pack)} pack)_` : ''} — ${f.severity}${f.confidence !== 'verified' ? ` (${f.confidence})` : ''}`, '');
     L.push(`\`${f.ruleId}\` · ${f.category} · engines: ${f.engines.join(', ')} · affected: ${f.count}${f.autofixable ? ' · 🔧 auto-fixable with `searvex optimize` (repository mode)' : ' · needs judgement'}`, '');
     L.push(md(f.message).replace(/\\([*_])/g, '$1'), '');
     if (f.fix) L.push(`**Fix:** ${md(f.fix)}`, '');

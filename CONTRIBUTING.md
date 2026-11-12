@@ -34,6 +34,19 @@ Node.js ≥ 20.10. (`.npmrc` enables `legacy-peer-deps` because of an npm 10.9 r
 3. Add the id to `src/rules/implemented.ts`; if the optimizer can fix it, add it to `AUTOFIX_RULES` and set `"autofix": true`.
 4. Add tests. Run `npm test` and `node bin/searvex rules validate`.
 
+## Contributing a rule pack
+
+A rule pack adds rules without code: a folder `knowledge/packs/<name>/` with rule files whose rules carry a
+declarative `check` (format and limits in [knowledge/packs/README.md](knowledge/packs/README.md)).
+
+1. Name the folder after the pack (`a-z`, `0-9`, `-`); every rule id starts with `<name>.`.
+2. Cite official documentation for every rule (the same allowlist and `checked` dates as core rules). A pack is
+   for rules that a domain or platform documents, not for opinions or ranking folklore.
+3. Keep patterns simple: case-insensitive, at most 200 characters, no quantified group with an inner quantifier
+   and no back-references (packs run on every page of other people's sites).
+4. Run `node bin/searvex rules validate --rules-pack <name>` and audit a real site with `--rules-pack <name>`.
+   Include in the PR one page where each rule fires and one where it does not.
+
 ## Adding a framework adapter
 
 Detection in `src/repo/detect.ts`, scanning in `scanApp` (`src/repo/scan.ts`), fixes using the framework's
