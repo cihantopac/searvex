@@ -1196,35 +1196,35 @@ var require_Robots = __commonJS({
       }
       return formattedUserAgent.trim();
     }
-    function normaliseEncoding(path26) {
+    function normaliseEncoding(path27) {
       try {
-        return urlEncodeToUpper(encodeURI(path26).replace(/%25/g, "%"));
+        return urlEncodeToUpper(encodeURI(path27).replace(/%25/g, "%"));
       } catch (e) {
-        return path26;
+        return path27;
       }
     }
-    function urlEncodeToUpper(path26) {
-      return path26.replace(/%[0-9a-fA-F]{2}/g, function(match) {
+    function urlEncodeToUpper(path27) {
+      return path27.replace(/%[0-9a-fA-F]{2}/g, function(match) {
         return match.toUpperCase();
       });
     }
-    function matches(pattern, path26) {
-      var matchingLengths = new Array(path26.length + 1);
+    function matches(pattern, path27) {
+      var matchingLengths = new Array(path27.length + 1);
       var numMatchingLengths = 1;
       matchingLengths[0] = 0;
       for (var p = 0; p < pattern.length; p++) {
         if (pattern[p] === "$" && p + 1 === pattern.length) {
-          return matchingLengths[numMatchingLengths - 1] === path26.length;
+          return matchingLengths[numMatchingLengths - 1] === path27.length;
         }
         if (pattern[p] == "*") {
-          numMatchingLengths = path26.length - matchingLengths[0] + 1;
+          numMatchingLengths = path27.length - matchingLengths[0] + 1;
           for (var i = 1; i < numMatchingLengths; i++) {
             matchingLengths[i] = matchingLengths[i - 1] + 1;
           }
         } else {
           var numMatches = 0;
           for (var i = 0; i < numMatchingLengths; i++) {
-            if (matchingLengths[i] < path26.length && path26[matchingLengths[i]] === pattern[p]) {
+            if (matchingLengths[i] < path27.length && path27[matchingLengths[i]] === pattern[p]) {
               matchingLengths[numMatches++] = matchingLengths[i] + 1;
             }
           }
@@ -1278,11 +1278,11 @@ var require_Robots = __commonJS({
         isNoneUserAgentState = line[0].toLowerCase() !== "user-agent";
       }
     }
-    function findRule(path26, rules) {
+    function findRule(path27, rules) {
       var matchedRule = null;
       for (var i = 0; i < rules.length; i++) {
         var rule = rules[i];
-        if (!matches(rule.pattern, path26)) {
+        if (!matches(rule.pattern, path27)) {
           continue;
         }
         if (!matchedRule || rule.pattern.length > matchedRule.pattern.length) {
@@ -1349,8 +1349,8 @@ var require_Robots = __commonJS({
         return;
       }
       var rules = this._rules[userAgent] || this._rules["*"] || [];
-      var path26 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
-      var rule = findRule(path26, rules);
+      var path27 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
+      var rule = findRule(path27, rules);
       return rule;
     };
     Robots.prototype.isAllowed = function(url, ua) {
@@ -16417,8 +16417,8 @@ var init_render = __esm({
 });
 
 // src/cli.ts
-import fs16 from "node:fs";
-import path25 from "node:path";
+import fs17 from "node:fs";
+import path26 from "node:path";
 import { parseArgs } from "node:util";
 
 // src/crawl/crawler.ts
@@ -33083,16 +33083,16 @@ var MatcherView = class {
    * @returns {string|undefined}
    */
   getCurrentTag() {
-    const path26 = this._matcher.path;
-    return path26.length > 0 ? path26[path26.length - 1].tag : void 0;
+    const path27 = this._matcher.path;
+    return path27.length > 0 ? path27[path27.length - 1].tag : void 0;
   }
   /**
    * Get current namespace.
    * @returns {string|undefined}
    */
   getCurrentNamespace() {
-    const path26 = this._matcher.path;
-    return path26.length > 0 ? path26[path26.length - 1].namespace : void 0;
+    const path27 = this._matcher.path;
+    return path27.length > 0 ? path27[path27.length - 1].namespace : void 0;
   }
   /**
    * Get current node's attribute value.
@@ -33100,9 +33100,9 @@ var MatcherView = class {
    * @returns {*}
    */
   getAttrValue(attrName) {
-    const path26 = this._matcher.path;
-    if (path26.length === 0) return void 0;
-    return path26[path26.length - 1].values?.[attrName];
+    const path27 = this._matcher.path;
+    if (path27.length === 0) return void 0;
+    return path27[path27.length - 1].values?.[attrName];
   }
   /**
    * Check if current node has an attribute.
@@ -33110,9 +33110,9 @@ var MatcherView = class {
    * @returns {boolean}
    */
   hasAttr(attrName) {
-    const path26 = this._matcher.path;
-    if (path26.length === 0) return false;
-    const current2 = path26[path26.length - 1];
+    const path27 = this._matcher.path;
+    if (path27.length === 0) return false;
+    const current2 = path27[path27.length - 1];
     return current2.values !== void 0 && attrName in current2.values;
   }
   /**
@@ -33138,18 +33138,18 @@ var MatcherView = class {
    * @returns {number}
    */
   getPosition() {
-    const path26 = this._matcher.path;
-    if (path26.length === 0) return -1;
-    return path26[path26.length - 1].position ?? 0;
+    const path27 = this._matcher.path;
+    if (path27.length === 0) return -1;
+    return path27[path27.length - 1].position ?? 0;
   }
   /**
    * Get current node's repeat counter (occurrence count of this tag name).
    * @returns {number}
    */
   getCounter() {
-    const path26 = this._matcher.path;
-    if (path26.length === 0) return -1;
-    return path26[path26.length - 1].counter ?? 0;
+    const path27 = this._matcher.path;
+    if (path27.length === 0) return -1;
+    return path27[path27.length - 1].counter ?? 0;
   }
   /**
    * Get current node's sibling index (alias for getPosition).
@@ -35832,6 +35832,7 @@ var FindingSink = class {
       confidence: overrides.confidence ?? rule.confidence,
       category: rule.category,
       engines: rule.engines,
+      ...rule.pack ? { pack: rule.pack } : {},
       message: overrides.message ?? rule.description,
       evidence: list.slice(0, this.maxEvidence),
       fix: rule.fix,
@@ -36376,10 +36377,10 @@ function buildInventory(ctx) {
     if (!f || p.status !== 200 || p.redirects.length) continue;
     const types = /* @__PURE__ */ new Set();
     for (const b of f.jsonLd) for (const n of typedNodes(b.data)) for (const t of [].concat(n["@type"] ?? [])) if (typeof t === "string") types.add(t);
-    const path26 = new URL(p.finalUrl).pathname;
+    const path27 = new URL(p.finalUrl).pathname;
     let type = "other";
     let basis = "default";
-    if (p === ctx.homepage || path26 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path26)) {
+    if (p === ctx.homepage || path27 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path27)) {
       type = "home";
       basis = "url";
     } else {
@@ -36388,7 +36389,7 @@ function buildInventory(ctx) {
         type = s;
         basis = "schema";
       } else {
-        const r = URL_RULES.find(([re]) => re.test(path26));
+        const r = URL_RULES.find(([re]) => re.test(path27));
         if (r) {
           type = r[1];
           basis = "url";
@@ -36460,7 +36461,7 @@ function buildInventory(ctx) {
       pagesWithStructuredData: pagesWithSd,
       invalidJsonLdPages
     },
-    sections: [...sectionsMap.entries()].map(([path26, c]) => ({ path: path26, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
+    sections: [...sectionsMap.entries()].map(([path27, c]) => ({ path: path27, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
   };
 }
 function classifyBusiness(ctx, byType, sd) {
@@ -37201,8 +37202,8 @@ function runTechnicalChecks(ctx, sink) {
     const ttfb = p.ttfbMs ?? p.timingMs;
     if (ttfb > 800 && !p.redirects.length) sink.emit("perf.slow-ttfb", { url: p.url, observed: `TTFB ${ttfb} ms (single sample from the crawler's location; full response ${p.timingMs} ms)` });
     if (p.bytes > 10 * 1024 && !p.headers["content-encoding"]) sink.emit("perf.no-compression", { url: p.url, observed: `${Math.round(p.bytes / 1024)} KB uncompressed` });
-    const path26 = new URL(p.finalUrl).pathname;
-    if (path26.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
+    const path27 = new URL(p.finalUrl).pathname;
+    if (path27.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
     const declared = primaryTag(f.lang);
     if (declared && ["en", "tr", "de", "fr", "es", "it", "pt", "nl"].includes(declared) && !noindex) {
       const detected = detectLanguage(mainTextOf(ctx, f));
@@ -37310,11 +37311,11 @@ function checkFacetsAndPagination(ctx, sink) {
     const key = u.origin + u.pathname;
     (variants.get(key) ?? variants.set(key, /* @__PURE__ */ new Set()).get(key)).add(u.search);
   }
-  for (const [path26, set] of variants) {
+  for (const [path27, set] of variants) {
     if (set.size < 10) continue;
     const paramCount = /* @__PURE__ */ new Map();
     for (const q of set) for (const k of new URLSearchParams(q).keys()) if (!PAGE_PARAM.test(k)) paramCount.set(k, (paramCount.get(k) ?? 0) + 1);
-    const crawled = ctx.pages.filter((p) => p.url.startsWith(path26 + "?"));
+    const crawled = ctx.pages.filter((p) => p.url.startsWith(path27 + "?"));
     const blocked = crawled.filter((p) => p.blockedByRobots).length;
     const canonicalised = crawled.filter((p) => {
       const f = factsOf(p);
@@ -37322,7 +37323,7 @@ function checkFacetsAndPagination(ctx, sink) {
     }).length;
     const params = [...paramCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => `${k} (${n})`).join(", ");
     sink.emit("crawl.facet-explosion", {
-      url: path26,
+      url: path27,
       observed: `${set.size} parameter variants linked internally; parameters: ${params}; of ${crawled.length} crawled variants, ${blocked} robots-blocked, ${canonicalised} canonicalised elsewhere`
     });
   }
@@ -37340,13 +37341,13 @@ function checkFacetsAndPagination(ctx, sink) {
 // src/analyze/priority.ts
 var SEVERITY = { critical: 1, high: 0.7, medium: 0.4, low: 0.15, info: 0 };
 function urlPattern(urlOrPath) {
-  let path26;
+  let path27;
   try {
-    path26 = new URL(urlOrPath).pathname;
+    path27 = new URL(urlOrPath).pathname;
   } catch {
-    path26 = urlOrPath.startsWith("/") ? urlOrPath : "/" + urlOrPath;
+    path27 = urlOrPath.startsWith("/") ? urlOrPath : "/" + urlOrPath;
   }
-  const segs = path26.split("/").filter(Boolean);
+  const segs = path27.split("/").filter(Boolean);
   if (!segs.length) return "/";
   const out = [];
   if (/^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0])) out.push(segs.shift());
@@ -37728,12 +37729,156 @@ async function runLab(ctx, opts, sink) {
   return out;
 }
 
-// src/optimize/fixes.ts
-import path4 from "node:path";
-
-// src/repo/fs-safe.ts
+// src/rules/packs.ts
 import fs3 from "node:fs";
 import path3 from "node:path";
+var RulePackError = class extends Error {
+};
+var FIELDS = /^(title|description|h1|lang|canonical|jsonld-types|og:[a-z0-9:_-]+|twitter:[a-z0-9:_-]+|header:[a-z0-9-]+)$/;
+var TESTS = ["missing", "present", "matches", "not-matches", "longer-than", "shorter-than"];
+var MAX_PATTERN = 200;
+function compilePackPattern(src) {
+  if (src.length > MAX_PATTERN) throw new RulePackError(`pattern longer than ${MAX_PATTERN} characters`);
+  if (/\([^)]*[*+}][^)]*\)\s*[*+{?]/.test(src) || /\\[1-9]/.test(src)) throw new RulePackError("pattern has a quantified group with an inner quantifier or a back-reference (may backtrack catastrophically)");
+  try {
+    return new RegExp(src, "i");
+  } catch (e) {
+    throw new RulePackError(`invalid pattern: ${e.message}`);
+  }
+}
+function checkProblems(c) {
+  if (!c || typeof c !== "object") return ['pack rules need a "check" object'];
+  const out = [];
+  if (typeof c.field !== "string" || !FIELDS.test(c.field)) out.push(`check.field "${String(c.field)}" is not one of title, description, h1, lang, canonical, jsonld-types, og:<property>, twitter:<name>, header:<name>`);
+  if (!TESTS.includes(c.test)) out.push(`check.test "${String(c.test)}" is not one of ${TESTS.join(", ")}`);
+  if (c.test === "matches" || c.test === "not-matches") {
+    if (typeof c.value !== "string" || !c.value) out.push(`check.value must be a regular expression for "${c.test}"`);
+    else
+      try {
+        compilePackPattern(c.value);
+      } catch (e) {
+        out.push(`check.value: ${e.message}`);
+      }
+  }
+  if ((c.test === "longer-than" || c.test === "shorter-than") && (typeof c.value !== "number" || !Number.isInteger(c.value) || c.value < 0)) out.push(`check.value must be a non-negative integer for "${c.test}"`);
+  if (c.urlPattern !== void 0)
+    try {
+      compilePackPattern(String(c.urlPattern));
+    } catch (e) {
+      out.push(`check.urlPattern: ${e.message}`);
+    }
+  return out;
+}
+function loadRulePack(ref, knowledgeDir = defaultKnowledgeDir()) {
+  const dir = fs3.existsSync(ref) && fs3.statSync(ref).isDirectory() ? path3.resolve(ref) : path3.join(knowledgeDir, "packs", ref);
+  if (!fs3.existsSync(dir) || !fs3.statSync(dir).isDirectory()) throw new RulePackError(`Rule pack not found: ${ref} (a pack name in knowledge/packs/ or a directory)`);
+  const name = path3.basename(dir);
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) throw new RulePackError(`Rule pack directory name "${name}" must be lower-case letters, digits and dashes (it prefixes every rule id)`);
+  const files = fs3.readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
+  if (!files.length) throw new RulePackError(`Rule pack ${name} has no .json rule files`);
+  const rules = [];
+  let version = "0.0.0";
+  for (const f of files) {
+    let data2;
+    try {
+      data2 = JSON.parse(fs3.readFileSync(path3.join(dir, f), "utf8"));
+    } catch (e) {
+      throw new RulePackError(`Rule pack ${name}/${f}: ${e.message}`);
+    }
+    if (!Array.isArray(data2.rules)) throw new RulePackError(`Rule pack ${name}/${f}: no "rules" array`);
+    if (typeof data2.version === "string" && data2.version > version) version = data2.version;
+    for (const r of data2.rules) rules.push({ ...r, pack: name });
+  }
+  return { name, version, dir, rules };
+}
+function withPacks(kb, packs) {
+  if (!packs.length) return kb;
+  const rules = new Map(kb.rules);
+  const ruleVersions = new Map(kb.ruleVersions ?? []);
+  for (const p of packs) {
+    for (const r of p.rules) {
+      if (typeof r.id !== "string" || !r.id.startsWith(`${p.name}.`)) throw new RulePackError(`Rule pack ${p.name}: rule id "${String(r.id)}" must start with "${p.name}."`);
+      if (rules.has(r.id)) throw new RulePackError(`Rule pack ${p.name}: rule id ${r.id} already exists${kb.rules.has(r.id) ? " in the core rule base" : ""}; a pack can never replace a rule`);
+      rules.set(r.id, r);
+      ruleVersions.set(r.id, p.version);
+    }
+  }
+  return { ...kb, rules, ruleVersions, packs: [...kb.packs ?? [], ...packs.map((p) => ({ name: p.name, version: p.version, rules: p.rules.length }))] };
+}
+function validatePacks(kb, packs, opts = {}) {
+  const ids = new Set(packs.flatMap((p) => p.rules.map((r) => r.id)));
+  const only = { ...kb, rules: new Map([...kb.rules].filter(([id]) => ids.has(id))) };
+  const issues = validateKnowledge(only, opts).filter((i) => ids.has(i.ruleId));
+  for (const r of only.rules.values()) for (const m of checkProblems(r.check)) issues.push({ ruleId: r.id, level: "error", message: m });
+  return issues;
+}
+
+// src/analyze/packs.ts
+function packFieldValue(p, f, field) {
+  const s = (v) => v && v.trim() ? v.trim() : null;
+  if (field === "title") return s(f.title);
+  if (field === "description") return s(f.metaDescription);
+  if (field === "h1") return s(f.headings.find((h) => h.level === 1 && !h.chrome)?.text);
+  if (field === "lang") return s(f.lang);
+  if (field === "canonical") return s(f.canonical);
+  if (field === "jsonld-types") {
+    const types = f.jsonLd.flatMap((b) => b.types);
+    return types.length ? types : null;
+  }
+  if (field.startsWith("og:")) return s(f.openGraph[field] ?? f.openGraph[field.slice(3)]);
+  if (field.startsWith("twitter:")) return s(f.twitter[field] ?? f.twitter[field.slice(8)]);
+  if (field.startsWith("header:")) return s(p.headers[field.slice(7).toLowerCase()]);
+  return null;
+}
+function evaluatePackCheck(c, value) {
+  const show = (v) => (Array.isArray(v) ? v.join(", ") : v).slice(0, 120);
+  const list = value === null ? [] : Array.isArray(value) ? value : [value];
+  const any = (re) => list.some((v) => re.test(v.slice(0, 2e3)));
+  switch (c.test) {
+    case "missing":
+      return value === null ? `${c.field} missing` : null;
+    case "present":
+      return value !== null ? `${c.field}: "${show(value)}"` : null;
+    case "matches":
+      return value !== null && any(compilePackPattern(String(c.value))) ? `${c.field}: "${show(value)}" matches /${String(c.value)}/` : null;
+    case "not-matches":
+      if (any(compilePackPattern(String(c.value)))) return null;
+      return value === null ? `${c.field} missing (expected /${String(c.value)}/)` : `${c.field}: "${show(value)}" does not match /${String(c.value)}/`;
+    case "longer-than":
+      return typeof value === "string" && value.length > Number(c.value) ? `${c.field} is ${value.length} characters (limit ${Number(c.value)})` : null;
+    case "shorter-than":
+      return typeof value === "string" && value.length < Number(c.value) ? `${c.field} is ${value.length} characters (minimum ${Number(c.value)})` : null;
+  }
+  return null;
+}
+function runPackChecks(ctx, kb, sink) {
+  for (const rule of kb.rules.values()) {
+    if (!rule.pack || !rule.check || rule.status !== "active") continue;
+    const c = rule.check;
+    const scope = c.urlPattern ? compilePackPattern(c.urlPattern) : null;
+    for (const p of ctx.indexable) {
+      const f = factsOf(p);
+      if (!f) continue;
+      if (scope) {
+        let pathname = p.url;
+        try {
+          pathname = new URL(p.url).pathname;
+        } catch {
+        }
+        if (!scope.test(pathname)) continue;
+      }
+      const observed = evaluatePackCheck(c, packFieldValue(p, f, c.field));
+      if (observed) sink.emit(rule.id, { url: p.url, observed });
+    }
+  }
+}
+
+// src/optimize/fixes.ts
+import path5 from "node:path";
+
+// src/repo/fs-safe.ts
+import fs4 from "node:fs";
+import path4 from "node:path";
 var SKIP_DIRS = /* @__PURE__ */ new Set([
   "node_modules",
   ".git",
@@ -37783,21 +37928,21 @@ function isSecretPath(p) {
 var PathEscapeError = class extends Error {
 };
 function resolveInside(root2, rel2) {
-  const realRoot = fs3.realpathSync(root2);
-  const abs = path3.resolve(realRoot, rel2);
-  const relative = path3.relative(realRoot, abs);
-  if (relative.startsWith("..") || path3.isAbsolute(relative)) throw new PathEscapeError(`Path escapes repository root: ${rel2}`);
+  const realRoot = fs4.realpathSync(root2);
+  const abs = path4.resolve(realRoot, rel2);
+  const relative = path4.relative(realRoot, abs);
+  if (relative.startsWith("..") || path4.isAbsolute(relative)) throw new PathEscapeError(`Path escapes repository root: ${rel2}`);
   let probe = abs;
-  while (!fs3.existsSync(probe)) probe = path3.dirname(probe);
-  const realProbe = fs3.realpathSync(probe);
-  const r2 = path3.relative(realRoot, realProbe);
-  if (r2.startsWith("..") || path3.isAbsolute(r2)) throw new PathEscapeError(`Path resolves outside repository root via symlink: ${rel2}`);
+  while (!fs4.existsSync(probe)) probe = path4.dirname(probe);
+  const realProbe = fs4.realpathSync(probe);
+  const r2 = path4.relative(realRoot, realProbe);
+  if (r2.startsWith("..") || path4.isAbsolute(r2)) throw new PathEscapeError(`Path resolves outside repository root via symlink: ${rel2}`);
   return abs;
 }
 function walk(root2, opts = {}) {
   const maxFiles = opts.maxFiles ?? 5e4;
   const maxBytes = opts.maxFileBytes ?? 2 * 1024 * 1024;
-  const realRoot = fs3.realpathSync(root2);
+  const realRoot = fs4.realpathSync(root2);
   const files = [];
   const skipped = { symlinks: 0, secrets: 0, large: 0, truncated: false };
   const stack = [""];
@@ -37805,7 +37950,7 @@ function walk(root2, opts = {}) {
     const relDir = stack.pop();
     let entries;
     try {
-      entries = fs3.readdirSync(path3.join(realRoot, relDir), { withFileTypes: true });
+      entries = fs4.readdirSync(path4.join(realRoot, relDir), { withFileTypes: true });
     } catch {
       continue;
     }
@@ -37827,8 +37972,8 @@ function walk(root2, opts = {}) {
         continue;
       }
       if (opts.include && !opts.include(rel2)) continue;
-      const abs = path3.join(realRoot, rel2);
-      const size = fs3.statSync(abs).size;
+      const abs = path4.join(realRoot, rel2);
+      const size = fs4.statSync(abs).size;
       if (size > maxBytes) {
         skipped.large++;
         continue;
@@ -37846,9 +37991,9 @@ function walk(root2, opts = {}) {
 function readText(root2, rel2) {
   if (isSecretPath(rel2)) throw new Error(`Refusing to read secret-bearing file: ${rel2}`);
   const abs = resolveInside(root2, rel2);
-  const st = fs3.lstatSync(abs);
+  const st = fs4.lstatSync(abs);
   if (st.isSymbolicLink()) throw new PathEscapeError(`Refusing to read symlink: ${rel2}`);
-  return fs3.readFileSync(abs, "utf8");
+  return fs4.readFileSync(abs, "utf8");
 }
 function lineOf(text4, index2) {
   let line = 1;
@@ -38129,11 +38274,11 @@ function planSitemap(scan, opts, plan, stage, read, report) {
   if (scan.staticSite) {
     const excluded = new Set(report.findings.filter((f) => ["index.noindex", "index.sitemap-non-canonical", "index.soft-404"].includes(f.ruleId)).flatMap((f) => f.evidence.map((e) => e.file)));
     const urls = [...scan.urlToFile.entries()].filter(([, file2]) => !excluded.has(file2)).map(([u]) => new URL(new URL(u).pathname, origin).toString()).sort();
-    const dir = path4.posix.dirname([...scan.urlToFile.values()].sort((a, b) => a.split("/").length - b.split("/").length || a.length - b.length)[0]);
+    const dir = path5.posix.dirname([...scan.urlToFile.values()].sort((a, b) => a.split("/").length - b.split("/").length || a.length - b.length)[0]);
     sitemapPath = (dir === "." ? "" : dir + "/") + "sitemap.xml";
     stage("robots.no-sitemap", "Generate sitemap.xml", `Lists ${urls.length} indexable static pages (noindex/non-canonical pages excluded).`, sitemapPath, sitemapXml(urls), "create");
   } else if (fw === "nextjs-app") {
-    const appBase = scan.locations.rootLayout ? path4.posix.dirname(scan.locations.rootLayout) : "app";
+    const appBase = scan.locations.rootLayout ? path5.posix.dirname(scan.locations.rootLayout) : "app";
     const file2 = `${appBase}/sitemap.ts`;
     const body = `import type { MetadataRoute } from 'next';
 
@@ -38167,8 +38312,8 @@ export default function robots(): MetadataRoute.Robots {
     stage("robots.no-sitemap", "Generate static sitemap.xml", `Static routes from ${fw === "laravel" ? "routes/web.php" : "the router"} (${staticRoutes.length}); regenerate when routes change or adopt a generator package.`, sitemapPath, sitemapXml(staticRoutes.map((r) => new URL(r, origin).toString())), "create");
   }
   if (!sitemapPath) return;
-  const robotsPath = scan.locations.robotsFile ?? (scan.locations.publicDir ? `${scan.locations.publicDir}/robots.txt` : path4.posix.join(path4.posix.dirname(sitemapPath), "robots.txt"));
-  const sitemapUrl = new URL("/" + path4.posix.basename(sitemapPath), origin).toString();
+  const robotsPath = scan.locations.robotsFile ?? (scan.locations.publicDir ? `${scan.locations.publicDir}/robots.txt` : path5.posix.join(path5.posix.dirname(sitemapPath), "robots.txt"));
+  const sitemapUrl = new URL("/" + path5.posix.basename(sitemapPath), origin).toString();
   let robots = null;
   try {
     robots = read(robotsPath);
@@ -38283,7 +38428,7 @@ function rootCauseGroups(r) {
 }
 
 // src/contract.ts
-var SCHEMA_VERSION = "1.1";
+var SCHEMA_VERSION = "1.2";
 
 // src/analyze/audit.ts
 function notAnalysed(r) {
@@ -38314,7 +38459,7 @@ function scoreLabel(s) {
 }
 var WEIGHT = { critical: 25, high: 10, medium: 4, low: 1.5, info: 0 };
 function computeScores(findings, pageCount) {
-  const penalty = (fs17) => fs17.reduce((sum, f) => {
+  const penalty = (fs18) => fs18.reduce((sum, f) => {
     if (!countsTowardScore(f)) return sum;
     const share = pageCount > 0 ? Math.min(1, f.count / pageCount) : 1;
     return sum + WEIGHT[f.severity] * Math.max(share, f.severity === "critical" ? 1 : share) * (f.confidence === "heuristic" ? 0.5 : 1);
@@ -38335,7 +38480,7 @@ function toolInfo(kb, findings) {
     const v = kb.ruleVersions?.get(f.ruleId);
     if (v) rules[f.ruleId] = v;
   }
-  return { name: "searvex", version: SEARVEX_VERSION, rulesVersion: kb.version, rules };
+  return { name: "searvex", version: SEARVEX_VERSION, rulesVersion: kb.version, rules, ...kb.packs?.length ? { packs: kb.packs } : {} };
 }
 function linkArtefacts(findings, ctx) {
   for (const f of findings) {
@@ -38475,6 +38620,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
   if (launch2) emitLaunchNoindex(ctx, launch2.noindex, sink);
   const geo = runGeoChecks(ctx, sink, llms);
   const content = runContentChecks(ctx, sink);
+  if (kb.packs?.length) runPackChecks(ctx, kb, sink);
   let externalLinks;
   if (opts.checkExternal && !interrupted) externalLinks = await checkExternalLinks(ctx, sink, { ...netOpts, robotsAgent: opts.robotsAgent });
   let fieldData;
@@ -39670,7 +39816,8 @@ function renderHtml(r, kb, extras = {}) {
   for (const f of r.findings) {
     const rule = kb.rules.get(f.ruleId);
     rules[f.ruleId] = {
-      title: rule?.title ?? f.title,
+      // Community pack rules are labelled with their pack (they have no Turkish text).
+      title: `${rule?.title ?? f.title}${f.pack ? ` [${f.pack} pack]` : ""}`,
       fix: rule?.fix ?? f.fix,
       verify: rule?.verify,
       sources: rule?.sources.map((s) => ({ title: s.title, url: s.url, checked: s.checked })) ?? [],
@@ -39711,11 +39858,11 @@ function renderEcosystemHtml(e) {
 }
 
 // src/report/extras.ts
-import fs7 from "node:fs";
-import path8 from "node:path";
+import fs8 from "node:fs";
+import path9 from "node:path";
 
 // src/commands/monitor.ts
-import path7 from "node:path";
+import path8 from "node:path";
 
 // src/report/markdown.ts
 var ICON = { critical: "\u{1F534}", high: "\u{1F7E0}", medium: "\u{1F7E1}", low: "\u{1F535}", info: "\u26AA" };
@@ -39771,7 +39918,7 @@ function renderMarkdown(r, opts = {}) {
   L.push("## Issues by severity", "");
   if (!issues.length) L.push("_No issues found by the active rules._", "");
   for (const f of issues) {
-    L.push(`### ${ICON[f.severity]} ${md(f.title)} \u2014 ${f.severity}${f.confidence !== "verified" ? ` (${f.confidence})` : ""}`, "");
+    L.push(`### ${ICON[f.severity]} ${md(f.title)}${f.pack ? ` _(${md(f.pack)} pack)_` : ""} \u2014 ${f.severity}${f.confidence !== "verified" ? ` (${f.confidence})` : ""}`, "");
     L.push(`\`${f.ruleId}\` \xB7 ${f.category} \xB7 engines: ${f.engines.join(", ")} \xB7 affected: ${f.count}${f.autofixable ? " \xB7 \u{1F527} auto-fixable with `searvex optimize` (repository mode)" : " \xB7 needs judgement"}`, "");
     L.push(md(f.message).replace(/\\([*_])/g, "$1"), "");
     if (f.fix) L.push(`**Fix:** ${md(f.fix)}`, "");
@@ -39904,23 +40051,23 @@ async function querySearchConsole(q) {
 
 // src/integrations/google-oauth.ts
 import crypto5 from "node:crypto";
-import fs5 from "node:fs";
+import fs6 from "node:fs";
 import http5 from "node:http";
 import https5 from "node:https";
 
 // src/integrations/credentials.ts
 import { spawnSync } from "node:child_process";
 import crypto4 from "node:crypto";
-import fs4 from "node:fs";
+import fs5 from "node:fs";
 import os from "node:os";
-import path5 from "node:path";
+import path6 from "node:path";
 function configDir() {
   if (process.env["SEARVEX_CONFIG_DIR"]) return process.env["SEARVEX_CONFIG_DIR"];
   return defaultConfigDir();
 }
 function defaultConfigDir() {
-  if (process.platform === "win32") return path5.join(process.env["APPDATA"] ?? path5.join(os.homedir(), "AppData", "Roaming"), "searvex");
-  return path5.join(process.env["XDG_CONFIG_HOME"] ?? path5.join(os.homedir(), ".config"), "searvex");
+  if (process.platform === "win32") return path6.join(process.env["APPDATA"] ?? path6.join(os.homedir(), "AppData", "Roaming"), "searvex");
+  return path6.join(process.env["XDG_CONFIG_HOME"] ?? path6.join(os.homedir(), ".config"), "searvex");
 }
 var FileCredentialStore = class {
   constructor(dir = configDir()) {
@@ -39928,11 +40075,11 @@ var FileCredentialStore = class {
   }
   dir;
   get file() {
-    return path5.join(this.dir, "credentials.json");
+    return path6.join(this.dir, "credentials.json");
   }
   readAll() {
     try {
-      return JSON.parse(fs4.readFileSync(this.file, "utf8"));
+      return JSON.parse(fs5.readFileSync(this.file, "utf8"));
     } catch {
       return {};
     }
@@ -39954,11 +40101,11 @@ var FileCredentialStore = class {
     return process.platform === "win32" ? `${this.file} (user profile; Windows does not apply POSIX file modes)` : `${this.file} (permissions 0600)`;
   }
   write(all2) {
-    fs4.mkdirSync(this.dir, { recursive: true, mode: 448 });
+    fs5.mkdirSync(this.dir, { recursive: true, mode: 448 });
     const tmp = `${this.file}.${process.pid}.tmp`;
-    fs4.writeFileSync(tmp, JSON.stringify(all2, null, 2), { mode: 384 });
-    fs4.chmodSync(tmp, 384);
-    fs4.renameSync(tmp, this.file);
+    fs5.writeFileSync(tmp, JSON.stringify(all2, null, 2), { mode: 384 });
+    fs5.chmodSync(tmp, 384);
+    fs5.renameSync(tmp, this.file);
   }
 };
 var CredentialStoreError = class extends Error {
@@ -39975,8 +40122,8 @@ function keychainKind(platform = process.platform) {
   return null;
 }
 function keychainService(dir) {
-  const resolved = path5.resolve(dir);
-  if (resolved === path5.resolve(defaultConfigDir())) return "searvex";
+  const resolved = path6.resolve(dir);
+  if (resolved === path6.resolve(defaultConfigDir())) return "searvex";
   return `searvex-${crypto4.createHash("sha256").update(resolved).digest("hex").slice(0, 12)}`;
 }
 var PS_PROTECT = "$ErrorActionPreference='Stop';Add-Type -AssemblyName System.Security;$s=[Console]::In.ReadToEnd();[Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($s),$null,'CurrentUser'))";
@@ -40020,7 +40167,7 @@ var KeychainCredentialStore = class {
     return { macos: "macOS Keychain", "secret-service": "Secret Service keyring (libsecret)", "windows-dpapi": "Windows DPAPI (current user)" }[this.kind];
   }
   dpapiFile(name) {
-    return path5.join(this.dir, "credentials.dpapi", `${name}.b64`);
+    return path6.join(this.dir, "credentials.dpapi", `${name}.b64`);
   }
   fail(action, r) {
     const tool = { macos: "security", "secret-service": "secret-tool", "windows-dpapi": "powershell.exe" }[this.kind];
@@ -40030,8 +40177,8 @@ var KeychainCredentialStore = class {
   read(name) {
     if (this.kind === "windows-dpapi") {
       const f = this.dpapiFile(name);
-      if (!fs4.existsSync(f)) return null;
-      const r2 = this.run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", PS_UNPROTECT], fs4.readFileSync(f, "utf8"));
+      if (!fs5.existsSync(f)) return null;
+      const r2 = this.run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", PS_UNPROTECT], fs5.readFileSync(f, "utf8"));
       if (r2.status !== 0) this.fail("read", r2);
       return r2.stdout;
     }
@@ -40047,10 +40194,10 @@ var KeychainCredentialStore = class {
       const r2 = this.run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", PS_PROTECT], json);
       if (r2.status !== 0 || !r2.stdout.trim()) this.fail("store", r2);
       const f = this.dpapiFile(name);
-      fs4.mkdirSync(path5.dirname(f), { recursive: true, mode: 448 });
+      fs5.mkdirSync(path6.dirname(f), { recursive: true, mode: 448 });
       const tmp = `${f}.${process.pid}.tmp`;
-      fs4.writeFileSync(tmp, r2.stdout.trim(), { mode: 384 });
-      fs4.renameSync(tmp, f);
+      fs5.writeFileSync(tmp, r2.stdout.trim(), { mode: 384 });
+      fs5.renameSync(tmp, f);
       return;
     }
     const r = this.kind === "macos" ? this.run("security", ["-i"], `add-generic-password -U -s ${this.service} -a ${name} -l Searvex-${name} -X ${Buffer.from(json, "utf8").toString("hex")}
@@ -40060,8 +40207,8 @@ var KeychainCredentialStore = class {
   remove(name) {
     if (this.kind === "windows-dpapi") {
       const f = this.dpapiFile(name);
-      if (!fs4.existsSync(f)) return false;
-      fs4.rmSync(f);
+      if (!fs5.existsSync(f)) return false;
+      fs5.rmSync(f);
       return true;
     }
     if (this.read(name) === null) return false;
@@ -40095,7 +40242,7 @@ var OAuthClientFileError = class extends Error {
 function loadClientFile(file2) {
   let raw;
   try {
-    raw = JSON.parse(fs5.readFileSync(file2, "utf8"));
+    raw = JSON.parse(fs6.readFileSync(file2, "utf8"));
   } catch (e) {
     throw new OAuthClientFileError(`Cannot read OAuth client file ${file2}: ${e.code ?? "invalid JSON"}`);
   }
@@ -40221,8 +40368,8 @@ async function gscAccessToken() {
 }
 
 // src/integrations/gsc-csv.ts
-import fs6 from "node:fs";
-import path6 from "node:path";
+import fs7 from "node:fs";
+import path7 from "node:path";
 
 // src/integrations/csv.ts
 function parseCsvTable(text4, delimiter) {
@@ -40377,7 +40524,7 @@ function identifyKey(header, values, fileName) {
   const sample = values.slice(0, 20).filter((v) => v.trim());
   if (sample.length && sample.every((v) => /^https?:\/\//i.test(v.trim()))) return "pages";
   if (sample.length && sample.every((v) => toIsoDate(v))) return "dates";
-  const f = norm2(path6.basename(fileName, path6.extname(fileName)));
+  const f = norm2(path7.basename(fileName, path7.extname(fileName)));
   for (const [t, re] of KEYS) if (re.test(f)) return t;
   return null;
 }
@@ -40405,7 +40552,7 @@ function parseGscTable(text4, fileName) {
   if (!header || !header.length) return null;
   const kind = identifyKey(header[0], body.map((r) => r[0] ?? ""), fileName);
   if (!kind) return null;
-  const base = path6.basename(fileName);
+  const base = path7.basename(fileName);
   if (kind === "filters") return { kind, rows: [], filters: body.map((r) => ({ name: (r[0] ?? "").trim(), value: (r[1] ?? "").trim() })).filter((f) => f.name), warnings: [] };
   const warnings = [];
   let idx = metricIndex(header);
@@ -40446,11 +40593,11 @@ function importGscFiles(files) {
   for (const file2 of files) {
     let buf;
     try {
-      buf = fs6.readFileSync(file2);
+      buf = fs7.readFileSync(file2);
     } catch (e) {
       throw new GscImportError(`Cannot read ${file2}: ${e.code ?? e.message}`);
     }
-    out.files.push(path6.basename(file2));
+    out.files.push(path7.basename(file2));
     if (isZip(buf)) {
       for (const entry of readZip(buf)) if (/\.(csv|tsv|txt)$/i.test(entry.name)) inputs.push({ name: entry.name, text: decodeText(entry.data) });
     } else inputs.push({ name: file2, text: decodeText(buf) });
@@ -40459,12 +40606,12 @@ function importGscFiles(files) {
   for (const { name, text: text4 } of inputs) {
     const t = parseGscTable(text4, name);
     if (!t) {
-      unknown.push(path6.basename(name));
+      unknown.push(path7.basename(name));
       continue;
     }
     out.warnings.push(...t.warnings);
     if (t.kind === "filters") out.filters.push(...t.filters);
-    else if (out.tables[t.kind]) out.warnings.push(`${path6.basename(name)}: a second ${t.kind} table was ignored.`);
+    else if (out.tables[t.kind]) out.warnings.push(`${path7.basename(name)}: a second ${t.kind} table was ignored.`);
     else out.tables[t.kind] = t.rows;
   }
   if (!Object.keys(out.tables).length) {
@@ -40734,7 +40881,7 @@ async function commandMonitor(flags) {
   const target = flags.positionals[1];
   if (!target || !/^https?:\/\//i.test(target)) throw new UsageError("monitor requires a URL");
   const kb = loadKnowledge();
-  const workspace = path7.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path8.resolve(String(v["out"] ?? process.cwd()));
   const imports = v["import"] ?? [];
   let exp;
   let importProperty;
@@ -40851,8 +40998,8 @@ function latestSearchData(root2, report) {
   };
   let sameHost2 = null;
   for (const id of RunStore.list(root2).reverse()) {
-    const f = path8.join(root2, ".searvex", "runs", id, "search-performance.json");
-    if (!fs7.existsSync(f)) continue;
+    const f = path9.join(root2, ".searvex", "runs", id, "search-performance.json");
+    if (!fs8.existsSync(f)) continue;
     const s = new RunStore(root2, id).readJson("search-performance.json");
     if (!s?.audit) continue;
     if (s.audit.runId === report.runId) return s;
@@ -40863,11 +41010,11 @@ function latestSearchData(root2, report) {
 
 // src/commands/review.ts
 import { spawn } from "node:child_process";
-import fs8 from "node:fs";
-import path9 from "node:path";
+import fs9 from "node:fs";
+import path10 from "node:path";
 function resolveRun(workspace, id) {
   const ref = id ?? "latest";
-  const withReport = RunStore.list(workspace).filter((r) => fs8.existsSync(path9.join(workspace, ".searvex", "runs", r, "report.json")));
+  const withReport = RunStore.list(workspace).filter((r) => fs9.existsSync(path10.join(workspace, ".searvex", "runs", r, "report.json")));
   const runId = ref === "latest" ? withReport.at(-1) : withReport.find((r) => r === ref);
   if (!runId) throw new UsageError(ref === "latest" ? 'No stored audit reports found (run "searvex audit" first)' : `No audit report for run ${ref}`);
   return runId;
@@ -40884,10 +41031,10 @@ function openFile(file2) {
   }
 }
 function commandOpen(flags) {
-  const workspace = path9.resolve(String(flags.values["out"] ?? process.cwd()));
+  const workspace = path10.resolve(String(flags.values["out"] ?? process.cwd()));
   const runId = resolveRun(workspace, flags.positionals[1]);
   const file2 = new RunStore(workspace, runId).file("report.html");
-  if (!fs8.existsSync(file2)) throw new UsageError(`Run ${runId} has no report.html (searvex report ${runId} --format html)`);
+  if (!fs9.existsSync(file2)) throw new UsageError(`Run ${runId} has no report.html (searvex report ${runId} --format html)`);
   openFile(file2);
   console.log(file2);
   return 0;
@@ -40898,7 +41045,7 @@ function commandReview(flags) {
   const [, runRef, target, status] = flags.positionals;
   if (!target || !status) throw new UsageError("Usage: searvex review <runId|latest> <ref|ruleId> <confirmed|rejected|fixed> [--note text]");
   if (!STATUSES.includes(status)) throw new UsageError(`Status must be one of ${STATUSES.join(", ")}`);
-  const workspace = path9.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path10.resolve(String(v["out"] ?? process.cwd()));
   const store2 = new RunStore(workspace, resolveRun(workspace, runRef));
   const report = store2.readJson("report.json");
   const [ruleId, hash] = target.split("#");
@@ -40972,16 +41119,17 @@ function renderSarif(r, kb) {
             version: r.tool.version,
             informationUri: "https://github.com/cihantopac/searvex",
             rules: ruleIds.map((id) => {
+              const f = r.findings.find((x) => x.ruleId === id);
               const rule = kb.rules.get(id);
               return {
                 id,
                 name: id.replace(/[.-](\w)/g, (_, c) => c.toUpperCase()),
-                shortDescription: { text: rule.title },
-                fullDescription: { text: rule.description },
-                help: { text: `${rule.fix}
-Sources: ${rule.sources.map((s) => s.url).join(" ")}` },
-                helpUri: rule.sources[0]?.url,
-                properties: { category: rule.category, engines: rule.engines, confidence: rule.confidence }
+                shortDescription: { text: rule?.title ?? f.title },
+                fullDescription: { text: rule?.description ?? f.message },
+                help: { text: `${rule?.fix ?? f.fix ?? ""}${rule ? `
+Sources: ${rule.sources.map((s) => s.url).join(" ")}` : ""}` },
+                helpUri: rule?.sources[0]?.url,
+                properties: { category: f.category, engines: f.engines, confidence: f.confidence, ...f.pack ? { pack: f.pack } : {} }
               };
             })
           }
@@ -41005,19 +41153,19 @@ Sources: ${rule.sources.map((s) => s.url).join(" ")}` },
 
 // src/rules/sources.ts
 import crypto6 from "node:crypto";
-import fs9 from "node:fs";
-import path10 from "node:path";
+import fs10 from "node:fs";
+import path11 from "node:path";
 init_fetcher();
 function snapshotFile(knowledgeDir) {
-  return path10.join(knowledgeDir, "source-snapshots.json");
+  return path11.join(knowledgeDir, "source-snapshots.json");
 }
 function readSnapshots(file2) {
-  if (!fs9.existsSync(file2)) return {};
-  return JSON.parse(fs9.readFileSync(file2, "utf8")).sources ?? {};
+  if (!fs10.existsSync(file2)) return {};
+  return JSON.parse(fs10.readFileSync(file2, "utf8")).sources ?? {};
 }
 function writeSnapshots(file2, sources) {
   const sorted = Object.fromEntries(Object.entries(sources).sort(([a], [b]) => a.localeCompare(b)));
-  fs9.writeFileSync(file2, JSON.stringify({ note: "Generated by `searvex rules check-sources --update`. Do not edit by hand.", sources: sorted }, null, 2) + "\n");
+  fs10.writeFileSync(file2, JSON.stringify({ note: "Generated by `searvex rules check-sources --update`. Do not edit by hand.", sources: sorted }, null, 2) + "\n");
 }
 function isBotChallenge(finalUrl, title) {
   return /showcaptcha|\/captcha|cdn-cgi\/challenge|__cf_chl/i.test(finalUrl) || /captcha|are you (not )?a robot|just a moment|attention required|verify you are human/i.test(title ?? "");
@@ -41195,13 +41343,13 @@ var IMPLEMENTED_RULES = /* @__PURE__ */ new Set([
 ]);
 
 // src/commands/repo.ts
-import path15 from "node:path";
+import path16 from "node:path";
 
 // src/repo/audit.ts
-import path14 from "node:path";
+import path15 from "node:path";
 
 // src/repo/private-routes.ts
-import path11 from "node:path";
+import path12 from "node:path";
 var LARAVEL_AUTH = /['"](auth(?::[\w-]+)?|verified)['"]/;
 function laravelAuthRanges(src) {
   const ranges = [];
@@ -41253,7 +41401,7 @@ function nextPrivacy(appRoot, files, read) {
   const guardedDirs = files.filter((f) => /(^|\/)layout\.(tsx|jsx|ts|js)$/.test(f.rel)).filter((f) => {
     const s = read(f.rel);
     return NEXT_AUTH_SIGNAL.test(s) && LOGIN_REDIRECT.test(s);
-  }).map((f) => ({ dir: path11.posix.dirname(f.rel) + "/", file: f.rel }));
+  }).map((f) => ({ dir: path12.posix.dirname(f.rel) + "/", file: f.rel }));
   return (route, file2) => {
     const p = prefixes.find((x) => route === x || route.startsWith(x + "/"));
     if (p) return `auth middleware ${mwFile.rel} (matcher ${p})`;
@@ -41264,25 +41412,25 @@ function nextPrivacy(appRoot, files, read) {
 var PRIVATE_SUPPRESSED = /^(title|description|canonical|index|social|hreflang|h1)\./;
 
 // src/repo/scan.ts
-import path13 from "node:path";
+import path14 from "node:path";
 
 // src/repo/detect.ts
-import fs10 from "node:fs";
-import path12 from "node:path";
+import fs11 from "node:fs";
+import path13 from "node:path";
 function readJson(p) {
   try {
-    return JSON.parse(fs10.readFileSync(p, "utf8"));
+    return JSON.parse(fs11.readFileSync(p, "utf8"));
   } catch {
     return null;
   }
 }
 function has2(dir, ...names) {
-  return names.some((n) => fs10.existsSync(path12.join(dir, n)));
+  return names.some((n) => fs11.existsSync(path13.join(dir, n)));
 }
 var SSR = ["nextjs-app", "nextjs-pages", "astro", "nuxt", "sveltekit", "remix", "gatsby", "laravel", "wordpress-theme", "hugo", "jekyll", "eleventy", "static-html"];
 function detectApp(dir, rel2 = ".") {
   const out = [];
-  const pkg = readJson(path12.join(dir, "package.json"));
+  const pkg = readJson(path13.join(dir, "package.json"));
   const deps = { ...pkg?.dependencies, ...pkg?.devDependencies };
   if (deps["next"]) {
     const appDir = has2(dir, "app", "src/app");
@@ -41295,7 +41443,7 @@ function detectApp(dir, rel2 = ".") {
   else if (deps["@11ty/eleventy"]) out.push({ framework: "eleventy", root: rel2, evidence: "@11ty/eleventy" });
   else if (deps["react-scripts"]) out.push({ framework: "cra-spa", root: rel2, evidence: "react-scripts (client-side rendering)" });
   else if (deps["vite"] && (deps["react"] || deps["vue"] || deps["svelte"] || deps["solid-js"])) out.push({ framework: "vite-spa", root: rel2, evidence: "vite + UI library without SSR framework" });
-  const composer = readJson(path12.join(dir, "composer.json"));
+  const composer = readJson(path13.join(dir, "composer.json"));
   if (composer?.require?.["laravel/framework"]) out.push({ framework: "laravel", root: rel2, evidence: `laravel/framework@${composer.require["laravel/framework"]}` });
   if (has2(dir, "style.css") && has2(dir, "functions.php")) out.push({ framework: "wordpress-theme", root: rel2, evidence: "style.css + functions.php" });
   else if (has2(dir, "style.css") && has2(dir, "theme.json") && has2(dir, "templates")) out.push({ framework: "wordpress-theme", root: rel2, evidence: "style.css + theme.json (block theme)" });
@@ -41308,39 +41456,39 @@ var STATIC_DIRS = ["", "public", "dist", "out", "build", "_site"];
 function staticHtmlIndexes(dir) {
   const found = [];
   for (const d of STATIC_DIRS) {
-    const base = path12.join(dir, d);
-    if (fs10.existsSync(path12.join(base, "index.html"))) {
-      found.push(path12.posix.join(d, "index.html"));
+    const base = path13.join(dir, d);
+    if (fs11.existsSync(path13.join(base, "index.html"))) {
+      found.push(path13.posix.join(d, "index.html"));
       continue;
     }
     let subs = [];
     try {
-      subs = fs10.readdirSync(base, { withFileTypes: true });
+      subs = fs11.readdirSync(base, { withFileTypes: true });
     } catch {
       continue;
     }
-    const locales = subs.filter((s) => s.isDirectory() && /^[a-z]{2,3}([-_][a-z0-9]{2,8})?$/i.test(s.name) && fs10.existsSync(path12.join(base, s.name, "index.html")));
-    if (locales.length) found.push(...locales.map((s) => path12.posix.join(d, s.name, "index.html")));
+    const locales = subs.filter((s) => s.isDirectory() && /^[a-z]{2,3}([-_][a-z0-9]{2,8})?$/i.test(s.name) && fs11.existsSync(path13.join(base, s.name, "index.html")));
+    if (locales.length) found.push(...locales.map((s) => path13.posix.join(d, s.name, "index.html")));
   }
   return found;
 }
 function detect(root2) {
   const candidates = detectApp(root2);
-  const pkg = readJson(path12.join(root2, "package.json"));
+  const pkg = readJson(path13.join(root2, "package.json"));
   const ws = Array.isArray(pkg?.workspaces) ? pkg.workspaces : pkg?.workspaces?.packages ?? [];
-  const pnpmWs = fs10.existsSync(path12.join(root2, "pnpm-workspace.yaml")) ? (fs10.readFileSync(path12.join(root2, "pnpm-workspace.yaml"), "utf8").match(/-\s*['"]?([^'"\n]+)['"]?/g) ?? []).map((l) => l.replace(/^-\s*['"]?|['"]?$/g, "")) : [];
+  const pnpmWs = fs11.existsSync(path13.join(root2, "pnpm-workspace.yaml")) ? (fs11.readFileSync(path13.join(root2, "pnpm-workspace.yaml"), "utf8").match(/-\s*['"]?([^'"\n]+)['"]?/g) ?? []).map((l) => l.replace(/^-\s*['"]?|['"]?$/g, "")) : [];
   const patterns = [...ws, ...pnpmWs];
   const workspaces = [];
   for (const pattern of patterns.length ? patterns : ["apps/*", "packages/*", "sites/*", "services/*"]) {
     const base = pattern.replace(/\/\*+$/, "");
-    const dir = path12.join(root2, base);
-    if (!fs10.existsSync(dir) || !fs10.statSync(dir).isDirectory()) continue;
-    const children2 = pattern.endsWith("*") ? fs10.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path12.posix.join(base, d.name)) : [base];
+    const dir = path13.join(root2, base);
+    if (!fs11.existsSync(dir) || !fs11.statSync(dir).isDirectory()) continue;
+    const children2 = pattern.endsWith("*") ? fs11.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path13.posix.join(base, d.name)) : [base];
     for (const c of children2) {
-      const found = detectApp(path12.join(root2, c), c);
+      const found = detectApp(path13.join(root2, c), c);
       if (!found.length) {
-        const idx = staticHtmlIndexes(path12.join(root2, c));
-        if (idx.length) found.push({ framework: "static-html", root: c, evidence: idx.slice(0, 3).map((f) => path12.posix.join(c, f)).join(", ") });
+        const idx = staticHtmlIndexes(path13.join(root2, c));
+        if (idx.length) found.push({ framework: "static-html", root: c, evidence: idx.slice(0, 3).map((f) => path13.posix.join(c, f)).join(", ") });
       }
       if (found.length) workspaces.push(c);
       candidates.push(...found);
@@ -41799,7 +41947,7 @@ function scanNextApp(appRoot, files, read, sink, scan) {
   const baseRe = new RegExp("^" + appBase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const pages = files.filter((f) => f.rel.startsWith(appBase) && /\/page\.(tsx|jsx|ts|js|mdx)$|^page\./.test(f.rel.slice(appBase.length - 1)) && !/\/(@[^/]+|\(\.+\)[^/]*)\//.test(f.rel));
   const layouts = /* @__PURE__ */ new Map();
-  for (const f of files.filter((f2) => f2.rel.startsWith(appBase) && /(^|\/)layout\.(tsx|jsx|ts|js)$/.test(f2.rel))) layouts.set(path13.posix.dirname(f.rel), metadataOf(read(f.rel), f.rel));
+  for (const f of files.filter((f2) => f2.rel.startsWith(appBase) && /(^|\/)layout\.(tsx|jsx|ts|js)$/.test(f2.rel))) layouts.set(path14.posix.dirname(f.rel), metadataOf(read(f.rel), f.rel));
   const rootLayoutPath = files.find((f) => new RegExp("^" + appBase + "layout\\.(tsx|jsx|ts|js)$").test(f.rel))?.rel ?? null;
   scan.locations.rootLayout = rootLayoutPath;
   scan.locations.layouts = [...layouts.keys()];
@@ -41807,12 +41955,12 @@ function scanNextApp(appRoot, files, read, sink, scan) {
   for (const p of pages) {
     const src = read(p.rel);
     const chain = [];
-    let dir = path13.posix.dirname(p.rel);
+    let dir = path14.posix.dirname(p.rel);
     while (dir.length >= appBase.length - 1) {
       const l = layouts.get(dir);
       if (l) chain.push(l);
       if (dir + "/" === appBase) break;
-      dir = path13.posix.dirname(dir);
+      dir = path14.posix.dirname(dir);
     }
     const route = nextRoute(p.rel, baseRe);
     const program = parseSource(src, p.rel);
@@ -41856,14 +42004,14 @@ function headMarkup(head) {
 function scanSvelteKit(appRoot, files, read, sink, scan) {
   const base = rel(appRoot, "src/routes/");
   const layouts = /* @__PURE__ */ new Map();
-  for (const f of files.filter((f2) => f2.rel.startsWith(base) && /\/\+layout\.svelte$/.test(f2.rel))) layouts.set(path13.posix.dirname(f.rel), headMarkup(svelteHead(read(f.rel))));
+  for (const f of files.filter((f2) => f2.rel.startsWith(base) && /\/\+layout\.svelte$/.test(f2.rel))) layouts.set(path14.posix.dirname(f.rel), headMarkup(svelteHead(read(f.rel))));
   scan.locations.layouts = [...layouts.keys()];
   for (const p of files.filter((f) => f.rel.startsWith(base) && /\/\+page\.svelte$/.test(f.rel))) {
-    const dir = path13.posix.dirname(p.rel);
+    const dir = path14.posix.dirname(p.rel);
     const route = "/" + dir.slice(base.length).split("/").filter((s) => s && !/^\(.+\)$/.test(s)).join("/");
     const own = headMarkup(svelteHead(read(p.rel)));
     const chain = [own];
-    for (let d = dir; d.length >= base.length - 1; d = path13.posix.dirname(d)) {
+    for (let d = dir; d.length >= base.length - 1; d = path14.posix.dirname(d)) {
       const l = layouts.get(d);
       if (l) chain.push(l);
       if (d + "/" === base || d === "." || d === "") break;
@@ -42319,7 +42467,7 @@ var emptyContent = { topTerms: [], pageTerms: [], clusters: [], cannibalization:
 function auditRepository(root2, opts = {}) {
   const kb = opts.kb ?? loadKnowledge();
   const sink = new FindingSink(kb);
-  const scan = scanRepository(path14.resolve(root2), sink, opts);
+  const scan = scanRepository(path15.resolve(root2), sink, opts);
   let geo = { bots: [], entityNames: {}, answerability: { average: 0, pages: [] }, snippetRestricted: [], citations: { measured: false, reason: "Repository mode does not observe AI systems." }, notes: [] };
   let content = emptyContent;
   let inventory = {
@@ -42394,7 +42542,7 @@ function auditRepository(root2, opts = {}) {
     schemaVersion: SCHEMA_VERSION,
     tool: toolInfo(kb, findings),
     mode: "repository",
-    target: path14.resolve(root2),
+    target: path15.resolve(root2),
     runId: "repository",
     generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
     crawl: {
@@ -42434,13 +42582,13 @@ async function commandRepo(flags) {
   const v = flags.values;
   const target = flags.positionals[1];
   if (!target) throw new UsageError("A repository path is required");
-  const root2 = path15.resolve(target);
+  const root2 = path16.resolve(target);
   const siteUrl = v["site-url"];
   if (siteUrl && !/^https?:\/\//.test(siteUrl)) throw new UsageError("--site-url must be an absolute http(s) URL");
   const kb = loadKnowledge();
   const { report, scan } = auditRepository(root2, { siteUrl, kb });
   if (v["compact"]) compactAffected(report);
-  const store2 = new RunStore(path15.resolve(String(v["out"] ?? root2)), RunStore.newRunId("repo"));
+  const store2 = new RunStore(path16.resolve(String(v["out"] ?? root2)), RunStore.newRunId("repo"));
   report.runId = store2.runId;
   store2.writeJson("meta.json", { kind: "repository", target: root2, framework: scan.detection.framework, startedAt: report.generatedAt });
   store2.writeJson("scan.json", { detection: scan.detection, apps: scan.apps.map((a) => ({ appRoot: a.appRoot, framework: a.framework, routes: a.routes, locations: a.locations, originSource: a.originSource })), skipped: scan.skipped });
@@ -42456,8 +42604,8 @@ Repository: ${root2} \xB7 ${framework} \xB7 ${scan.routes.length} routes/pages \
 
 // src/commands/optimize.ts
 import { execFileSync } from "node:child_process";
-import fs12 from "node:fs";
-import path17 from "node:path";
+import fs13 from "node:fs";
+import path18 from "node:path";
 import readline from "node:readline/promises";
 
 // src/optimize/diff.ts
@@ -42548,26 +42696,26 @@ function unifiedDiff(file2, before2, after2, context = 3) {
 
 // src/optimize/transaction.ts
 import crypto7 from "node:crypto";
-import fs11 from "node:fs";
-import path16 from "node:path";
+import fs12 from "node:fs";
+import path17 from "node:path";
 var sha = (s) => crypto7.createHash("sha256").update(s).digest("hex");
 function changesDir(root2) {
-  return path16.join(root2, ".searvex", "changes");
+  return path17.join(root2, ".searvex", "changes");
 }
 function atomicWrite(file2, content) {
-  fs11.mkdirSync(path16.dirname(file2), { recursive: true });
-  const mode = fs11.existsSync(file2) ? fs11.statSync(file2).mode & 4095 : void 0;
+  fs12.mkdirSync(path17.dirname(file2), { recursive: true });
+  const mode = fs12.existsSync(file2) ? fs12.statSync(file2).mode & 4095 : void 0;
   const tmp = `${file2}.searvex-${process.pid}.tmp`;
   try {
-    fs11.writeFileSync(tmp, content, mode === void 0 ? void 0 : { mode });
-    if (mode !== void 0) fs11.chmodSync(tmp, mode);
-    fs11.renameSync(tmp, file2);
+    fs12.writeFileSync(tmp, content, mode === void 0 ? void 0 : { mode });
+    if (mode !== void 0) fs12.chmodSync(tmp, mode);
+    fs12.renameSync(tmp, file2);
   } catch (e) {
-    fs11.rmSync(tmp, { force: true });
+    fs12.rmSync(tmp, { force: true });
     throw e;
   }
 }
-var hashOf = (abs) => fs11.existsSync(abs) ? sha(fs11.readFileSync(abs, "utf8")) : null;
+var hashOf = (abs) => fs12.existsSync(abs) ? sha(fs12.readFileSync(abs, "utf8")) : null;
 function interruptedChanges(root2) {
   return listChanges(root2).filter((m) => m.status === "applying");
 }
@@ -42575,7 +42723,7 @@ var ConflictError = class extends Error {
 };
 function applyFixes(root2, fixes) {
   const changeId = `chg-${(/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").replace(/\..+/, "").replace("T", "-")}-${crypto7.randomBytes(3).toString("hex")}`;
-  const dir = path16.join(changesDir(root2), changeId);
+  const dir = path17.join(changesDir(root2), changeId);
   const finalByPath = /* @__PURE__ */ new Map();
   for (const f of fixes) for (const c of f.changes) {
     const prev2 = finalByPath.get(c.path);
@@ -42584,12 +42732,12 @@ function applyFixes(root2, fixes) {
   for (const [p, c] of finalByPath) {
     if (isSecretPath(p)) throw new ConflictError(`Refusing to modify secret-bearing file: ${p}`);
     const abs = resolveInside(root2, p);
-    const exists = fs11.existsSync(abs);
-    if (exists && fs11.lstatSync(abs).isSymbolicLink()) throw new ConflictError(`Refusing to modify symlink: ${p}`);
+    const exists = fs12.existsSync(abs);
+    if (exists && fs12.lstatSync(abs).isSymbolicLink()) throw new ConflictError(`Refusing to modify symlink: ${p}`);
     if (c.action === "create" && exists) throw new ConflictError(`File appeared since planning: ${p}`);
-    if (c.action === "modify" && (!exists || fs11.readFileSync(abs, "utf8") !== c.before)) throw new ConflictError(`File changed since planning: ${p}`);
+    if (c.action === "modify" && (!exists || fs12.readFileSync(abs, "utf8") !== c.before)) throw new ConflictError(`File changed since planning: ${p}`);
   }
-  fs11.mkdirSync(path16.join(dir, "backup"), { recursive: true });
+  fs12.mkdirSync(path17.join(dir, "backup"), { recursive: true });
   ensureSelfIgnored(root2);
   const manifest = { changeId, createdAt: (/* @__PURE__ */ new Date()).toISOString(), root: root2, fixes: fixes.map((f) => ({ id: f.id, ruleId: f.ruleId, title: f.title })), files: [], status: "applying" };
   let n = 0;
@@ -42597,7 +42745,7 @@ function applyFixes(root2, fixes) {
     let backup = null;
     if (c.action === "modify") {
       backup = `backup/${n++}`;
-      fs11.writeFileSync(path16.join(dir, backup), c.before ?? "");
+      fs12.writeFileSync(path17.join(dir, backup), c.before ?? "");
     }
     manifest.files.push({ path: p, action: c.action, beforeHash: c.before === null ? null : sha(c.before), afterHash: sha(c.after), backup });
   }
@@ -42614,7 +42762,7 @@ function applyFixes(root2, fixes) {
     } catch (undo) {
       throw new Error(`Applying ${changeId} failed (${e.message}) and undoing it failed (${undo.message}); run "searvex rollback ${changeId}" to restore the files.`);
     }
-    fs11.rmSync(dir, { recursive: true, force: true });
+    fs12.rmSync(dir, { recursive: true, force: true });
     throw e;
   }
   manifest.status = "applied";
@@ -42623,22 +42771,22 @@ function applyFixes(root2, fixes) {
 }
 function restoreEntry(root2, dir, e) {
   const abs = resolveInside(root2, e.path);
-  if (e.action === "create") fs11.rmSync(abs, { force: true });
-  else if (e.backup) atomicWrite(abs, fs11.readFileSync(path16.join(dir, e.backup), "utf8"));
+  if (e.action === "create") fs12.rmSync(abs, { force: true });
+  else if (e.backup) atomicWrite(abs, fs12.readFileSync(path17.join(dir, e.backup), "utf8"));
 }
 function readManifest(root2, changeId) {
   if (!/^chg-[\w-]+$/.test(changeId)) throw new Error(`Invalid change id: ${changeId}`);
-  const f = path16.join(changesDir(root2), changeId, "manifest.json");
-  if (!fs11.existsSync(f)) throw new Error(`Unknown change: ${changeId}`);
-  return JSON.parse(fs11.readFileSync(f, "utf8"));
+  const f = path17.join(changesDir(root2), changeId, "manifest.json");
+  if (!fs12.existsSync(f)) throw new Error(`Unknown change: ${changeId}`);
+  return JSON.parse(fs12.readFileSync(f, "utf8"));
 }
 function writeManifest(root2, m) {
-  fs11.writeFileSync(path16.join(changesDir(root2), m.changeId, "manifest.json"), JSON.stringify(m, null, 2));
+  fs12.writeFileSync(path17.join(changesDir(root2), m.changeId, "manifest.json"), JSON.stringify(m, null, 2));
 }
 function rollback(root2, changeId, opts = {}) {
   const m = readManifest(root2, changeId);
   if (m.status === "rolled-back") throw new Error(`Change ${changeId} was already rolled back`);
-  const dir = path16.join(changesDir(root2), changeId);
+  const dir = path17.join(changesDir(root2), changeId);
   const conflicts = [];
   const pending = [];
   for (const e of m.files) {
@@ -42659,8 +42807,8 @@ function rollback(root2, changeId, opts = {}) {
 }
 function listChanges(root2) {
   const d = changesDir(root2);
-  if (!fs11.existsSync(d)) return [];
-  return fs11.readdirSync(d).filter((x) => fs11.existsSync(path16.join(d, x, "manifest.json"))).sort().map((x) => readManifest(root2, x));
+  if (!fs12.existsSync(d)) return [];
+  return fs12.readdirSync(d).filter((x) => fs12.existsSync(path17.join(d, x, "manifest.json"))).sort().map((x) => readManifest(root2, x));
 }
 
 // src/commands/optimize.ts
@@ -42696,8 +42844,8 @@ Skipped (${plan.skipped.length}):`);
 async function commandOptimize(flags) {
   const v = flags.values;
   const target = flags.positionals[1];
-  if (!target || !fs12.existsSync(target) || !fs12.statSync(target).isDirectory()) throw new UsageError("optimize requires a repository directory");
-  const root2 = fs12.realpathSync(target);
+  if (!target || !fs13.existsSync(target) || !fs13.statSync(target).isDirectory()) throw new UsageError("optimize requires a repository directory");
+  const root2 = fs13.realpathSync(target);
   const siteUrl = v["site-url"];
   if (siteUrl && !/^https?:\/\//.test(siteUrl)) throw new UsageError("--site-url must be an absolute http(s) URL");
   const lang = v["lang"];
@@ -42783,7 +42931,7 @@ function reportUndo(rb, m, target) {
 }
 async function commandRollback(flags) {
   const id = flags.positionals[1];
-  const root2 = fs12.realpathSync(path17.resolve(flags.positionals[2] ?? process.cwd()));
+  const root2 = fs13.realpathSync(path18.resolve(flags.positionals[2] ?? process.cwd()));
   if (!id) throw new UsageError('rollback requires a change id (or "list")');
   if (id === "list") {
     for (const m of listChanges(root2)) console.log(`${m.changeId}  ${m.status.padEnd(20)} ${m.files.length} file(s)  ${m.fixes.map((f) => f.ruleId).join(", ")}`);
@@ -42801,7 +42949,7 @@ Re-run with --yes to overwrite those edits with the original content.`);
 
 // src/commands/gsc.ts
 import { spawn as spawn2 } from "node:child_process";
-import path19 from "node:path";
+import path20 from "node:path";
 
 // src/analyze/search-performance.ts
 function rowsToQueryPage(rows) {
@@ -42996,9 +43144,9 @@ function analyzeSearchPerformance(input, opts) {
 }
 
 // src/integrations/preferences.ts
-import fs13 from "node:fs";
-import path18 from "node:path";
-var file = () => path18.join(configDir(), "search-data.json");
+import fs14 from "node:fs";
+import path19 from "node:path";
+var file = () => path19.join(configDir(), "search-data.json");
 function siteKey(urlOrHost) {
   let h = urlOrHost.trim().toLowerCase();
   try {
@@ -43009,7 +43157,7 @@ function siteKey(urlOrHost) {
 }
 function readAll() {
   try {
-    return JSON.parse(fs13.readFileSync(file(), "utf8"));
+    return JSON.parse(fs14.readFileSync(file(), "utf8"));
   } catch {
     return {};
   }
@@ -43021,8 +43169,8 @@ function setSitePreference(site, pref) {
   const all2 = readAll();
   const value = { ...pref, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
   all2[siteKey(site)] = value;
-  fs13.mkdirSync(configDir(), { recursive: true, mode: 448 });
-  fs13.writeFileSync(file(), JSON.stringify(all2, null, 2), { mode: 384 });
+  fs14.mkdirSync(configDir(), { recursive: true, mode: 448 });
+  fs14.writeFileSync(file(), JSON.stringify(all2, null, 2), { mode: 384 });
   return value;
 }
 
@@ -43190,7 +43338,7 @@ function spawnDetached(cmd, args) {
 async function commandGsc(flags) {
   const v = flags.values;
   const sub = flags.positionals[1];
-  const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path20.resolve(String(v["out"] ?? process.cwd()));
   if (sub === "auth") {
     if (process.env["CI"]) throw new UsageError('gsc auth is interactive (browser consent) and is disabled in CI. Use "gsc import <export.zip>" or SEARVEX_GSC_TOKEN there.');
     const existing = getCredential("gsc");
@@ -43434,7 +43582,7 @@ async function bingReport(flags, key, api) {
     throw new UsageError(`${siteUrl} is ${site ? "not verified" : "not a site"} in this Bing Webmaster account.${similar.length ? ` Did you mean: ${similar.join(", ")}?` : sites.length ? ` Sites: ${sites.map((s) => s.url).join(", ")}` : " The account has no sites."}`);
   }
   const days = num(v["days"], 28, 1, 480);
-  const workspace = path19.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path20.resolve(String(v["out"] ?? process.cwd()));
   const sel = resolveAudit(flags, workspace, property);
   const { rows, pages } = await bingQueryPageRows2(site.url, k.key, { days, maxPages: num(v["max-pages"], 25, 1, 200) });
   const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
@@ -43655,7 +43803,7 @@ async function ga4LandingPages(token, propertyId, days, maxRows = 1e3) {
 }
 
 // src/commands/ga4.ts
-import path20 from "node:path";
+import path21 from "node:path";
 async function ga4Token() {
   if (process.env["SEARVEX_GA4_TOKEN"]) return process.env["SEARVEX_GA4_TOKEN"];
   const cred = getCredential("ga4");
@@ -43820,7 +43968,7 @@ ${hint}`);
   if (!propertyId) throw new UsageError('ga4 report requires a property id (digits; list them with "searvex ga4 properties")');
   const days = num(v["days"], 28, 1, 400);
   const maxRows = num(v["max-rows"], 1e3, 1, 1e5);
-  const workspace = path20.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path21.resolve(String(v["out"] ?? process.cwd()));
   const sel = v["audit"] ? newestWebsiteAudit2(workspace, String(v["audit"])) : void 0;
   const token = await ga4Token();
   log(v, `Reading Organic Search landing pages of GA4 property ${propertyId} (${days} days)\u2026`);
@@ -43841,7 +43989,7 @@ GA4 property ${propertyId} \xB7 ${report.totals.sessions} organic sessions on ${
 }
 
 // src/commands/yandex.ts
-import path21 from "node:path";
+import path22 from "node:path";
 
 // src/integrations/yandex.ts
 import http8 from "node:http";
@@ -43878,8 +44026,8 @@ function yandexErrorMessage(status, json) {
   if (status === 429) return "Yandex Webmaster API quota reached. Try again later.";
   return `Yandex Webmaster API HTTP ${status}${code ? ` ${code}` : ""}: ${msg}`;
 }
-async function call(path26, token) {
-  const res = await get4(`${BASE5()}${path26}`, token);
+async function call(path27, token) {
+  const res = await get4(`${BASE5()}${path27}`, token);
   if (res.status !== 200) throw new YandexApiError(yandexErrorMessage(res.status, res.json));
   return res.json;
 }
@@ -44019,7 +44167,7 @@ ${hint}`);
   log(v, `Reading popular Yandex queries for ${host.url} (${days} days)\u2026`);
   const { rows, total } = await yandexPopularQueries(t.token, userId, host.id, range, maxRows);
   const report = buildYandexReport(rows, { site: host.url, days, ...range, total });
-  const workspace = path21.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path22.resolve(String(v["out"] ?? process.cwd()));
   const store2 = new RunStore(workspace, RunStore.newRunId("yandex"));
   store2.writeJson("meta.json", { kind: "yandex", target: host.url, days, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
   store2.writeJson("yandex-report.json", report);
@@ -44032,7 +44180,7 @@ Report: ${out}`);
 }
 
 // src/commands/research.ts
-import path22 from "node:path";
+import path23 from "node:path";
 function profile(r) {
   return {
     url: r.target,
@@ -44132,7 +44280,7 @@ async function commandResearch(flags) {
   if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
   for (const c of competitors) if (!/^https?:\/\//i.test(c)) throw new UsageError(`Invalid competitor URL: ${c}`);
   const kb = loadKnowledge();
-  const workspace = path22.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path23.resolve(String(v["out"] ?? process.cwd()));
   const store2 = new RunStore(workspace, RunStore.newRunId("research"));
   const perSite = num(v["max-pages"], 150, 1, 1e5);
   const base = { ...crawlOptionsFrom(v), siteUrl: void 0, maxPages: perSite };
@@ -44168,8 +44316,8 @@ async function commandResearch(flags) {
 }
 
 // src/commands/run.ts
-import fs14 from "node:fs";
-import path23 from "node:path";
+import fs15 from "node:fs";
+import path24 from "node:path";
 var top = (r, n = 5) => r.findings.filter((f) => f.severity !== "info").slice(0, n);
 function renderRunSummary(s) {
   const L = ["# Searvex run summary", ""];
@@ -44231,13 +44379,13 @@ async function runWorkflow(flags, stop) {
   const url = targets.find((t) => /^https?:\/\//i.test(t));
   const repo = targets.find((t) => !/^https?:\/\//i.test(t));
   if (!url && !repo) throw new UsageError("run requires a URL, a repository path, or both (e.g. searvex run https://example.com ./site)");
-  if (repo && !(fs14.existsSync(repo) && fs14.statSync(repo).isDirectory())) throw new UsageError(`Not a directory: ${repo}`);
+  if (repo && !(fs15.existsSync(repo) && fs15.statSync(repo).isDirectory())) throw new UsageError(`Not a directory: ${repo}`);
   const competitors = v["competitor"] ?? [];
   if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
   if (competitors.length && !url) throw new UsageError("--competitor requires a website URL");
   if (v["fail-on"] !== void 0) failOnIndex(v["fail-on"]);
-  const kb = loadKnowledge();
-  const workspace = path23.resolve(String(v["out"] ?? (repo ?? process.cwd())));
+  const { kb } = knowledgeFrom(v);
+  const workspace = path24.resolve(String(v["out"] ?? (repo ?? process.cwd())));
   const opts = crawlOptionsFrom(v);
   const summary = { steps: [] };
   const step = (n, name, status, note) => {
@@ -44294,7 +44442,7 @@ async function runWorkflow(flags, stop) {
     step(5, "Repository audit", "skipped", "run interrupted");
     step(6, "Fix plan (dry run)", "skipped", "run interrupted");
   } else if (repo) {
-    const root2 = fs14.realpathSync(repo);
+    const root2 = fs15.realpathSync(repo);
     const siteUrl = v["site-url"] ?? (url ? new URL(url).origin : void 0);
     log(v, `5. Auditing repository ${root2}\u2026`);
     const ra = auditRepository(root2, { siteUrl, kb });
@@ -44358,8 +44506,8 @@ Fix plan (dry run, nothing changed): ${summary.plan.fixes.length} automatic fix(
 }
 
 // src/commands/ecosystem.ts
-import fs15 from "node:fs";
-import path24 from "node:path";
+import fs16 from "node:fs";
+import path25 from "node:path";
 var hostOf2 = (u) => new URL(u).hostname.replace(/^www\./, "");
 var norm3 = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 function snapshot(report, pages) {
@@ -44552,7 +44700,7 @@ async function commandEcosystem(flags) {
   if (urls.length > 20) throw new UsageError("At most 20 sites");
   for (const u of urls) if (!/^https?:\/\//i.test(u)) throw new UsageError(`Invalid URL: ${u}`);
   const kb = loadKnowledge();
-  const workspace = path24.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path25.resolve(String(v["out"] ?? process.cwd()));
   const opts = { ...crawlOptionsFrom(v), siteUrl: void 0, maxPages: num(v["max-pages"], 60, 1, 1e5) };
   const snaps = new Array(urls.length);
   let next2 = 0;
@@ -44584,7 +44732,7 @@ async function commandEcosystem(flags) {
   if (v["json"]) process.stdout.write(JSON.stringify(eco, null, 2) + "\n");
   else if (!v["quiet"]) console.log(renderEcosystemMarkdown(eco) + `
 Saved: ${out}`);
-  if (!fs15.existsSync(out)) return 2;
+  if (!fs16.existsSync(out)) return 2;
   return 0;
 }
 
@@ -44657,6 +44805,10 @@ Common options
                         public URL. Lab values, never Core Web Vitals pass/fail (experimental: not yet verified
                         against the live service)
   --lab-samples <n>     Templates measured with --lab (default 5, max 20)
+  --rules-pack <name|dir>
+                        Add a community rule pack (knowledge/packs/<name> or a directory; repeatable). Pack
+                        rules are sourced like core rules, labelled in reports and never replace a core rule;
+                        also for "rules list|show|validate"
   --no-sitemap          Do not seed from sitemaps         --resume <runId>   Resume an interrupted crawl
   --max-duration <s>    Stop crawling after s seconds and write a partial report (exit 5). SIGINT/SIGTERM
                         do the same; a second signal exits at once (130/143)
@@ -44780,6 +44932,7 @@ var CLI_OPTIONS = {
   days: { type: "string" },
   audit: { type: "string" },
   "max-rows": { type: "string" },
+  "rules-pack": { type: "string", multiple: true },
   competitor: { type: "string", multiple: true },
   category: { type: "string" },
   strict: { type: "boolean" },
@@ -45044,13 +45197,24 @@ function pagesLabel(report) {
 function withReportFiles(L, files) {
   const html3 = files.find((f) => f.endsWith(".html"));
   if (html3) {
-    const ws = path25.resolve(html3, "..", "..", "..", "..");
+    const ws = path26.resolve(html3, "..", "..", "..", "..");
     L.push(`
-Open the report: ${pathToFileURL(html3).href}`, `  (or run: searvex open ${path25.basename(path25.dirname(html3))}${ws === process.cwd() ? "" : ` --out "${ws}"`})`);
+Open the report: ${pathToFileURL(html3).href}`, `  (or run: searvex open ${path26.basename(path26.dirname(html3))}${ws === process.cwd() ? "" : ` --out "${ws}"`})`);
   }
   const others = files.filter((f) => f !== html3);
-  if (others.length) L.push(`Other files: ${others.map((f) => path25.basename(f)).join(", ")} in ${path25.dirname(others[0])}`);
+  if (others.length) L.push(`Other files: ${others.map((f) => path26.basename(f)).join(", ")} in ${path26.dirname(others[0])}`);
   return L.join("\n");
+}
+function knowledgeFrom(v) {
+  const kb = loadKnowledge();
+  const refs = (v["rules-pack"] ?? []).flatMap((x) => x.split(",")).map((x) => x.trim()).filter(Boolean);
+  try {
+    const packs = refs.map((r) => loadRulePack(r));
+    return { kb: withPacks(kb, packs), packs };
+  } catch (e) {
+    if (e instanceof RulePackError) throw new UsageError(e.message);
+    throw e;
+  }
 }
 function labOptions(v) {
   if (!v["lab"]) {
@@ -45066,14 +45230,14 @@ async function commandAudit(flags) {
   const target = positionals[1];
   if (!target) throw new UsageError("audit requires a URL or a repository path");
   if (!/^https?:\/\//i.test(target)) {
-    if (fs16.existsSync(target)) return commandRepo(flags);
+    if (fs17.existsSync(target)) return commandRepo(flags);
     throw new UsageError(`Not a URL and not an existing path: ${target}`);
   }
   assertSiteUrl(v);
   if (v["fail-on"] !== void 0) failOnIndex(v["fail-on"]);
   const lab = labOptions(v);
-  const kb = loadKnowledge();
-  const workspace = path25.resolve(String(v["out"] ?? process.cwd()));
+  const { kb } = knowledgeFrom(v);
+  const workspace = path26.resolve(String(v["out"] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
   const stop = interrupter(v);
   let render3;
@@ -45120,11 +45284,11 @@ async function commandGeo(flags) {
   const target = flags.positionals[1];
   if (!target || !/^https?:\/\//i.test(target)) throw new UsageError("geo requires a URL");
   assertSiteUrl(v);
-  const kb = loadKnowledge();
+  const { kb } = knowledgeFrom(v);
   const opts = crawlOptionsFrom({ ...v, "max-pages": v["max-pages"] ?? "50" });
   suggestPreLaunch(v, target);
   const stop = interrupter(v);
-  const { report, store: store2 } = await auditWebsite(target, { workspace: path25.resolve(String(v["out"] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal, onProgress: crawlProgress(v) }, onPhase: phaseProgress, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
+  const { report, store: store2 } = await auditWebsite(target, { workspace: path26.resolve(String(v["out"] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal, onProgress: crawlProgress(v) }, onPhase: phaseProgress, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
   assertTargetAllowed(report);
   reportInterrupted(report, !!v["json"]);
   const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
@@ -45155,9 +45319,9 @@ ${files.map((f) => "  " + f).join("\n")}`);
   return report.crawl.interrupted ? EXIT.interrupted : EXIT.ok;
 }
 async function commandRules(flags) {
-  const kb = loadKnowledge();
-  const sub = flags.positionals[1] ?? "list";
   const v = flags.values;
+  const { kb, packs } = knowledgeFrom(v);
+  const sub = flags.positionals[1] ?? "list";
   if (sub === "list") {
     const rules = [...kb.rules.values()].filter((r) => !v["category"] || r.category === v["category"]);
     if (v["json"]) return process.stdout.write(JSON.stringify(rules, null, 2) + "\n"), 0;
@@ -45188,7 +45352,8 @@ Verify: ${r.verify}`);
     return 0;
   }
   if (sub === "validate") {
-    const issues = validateKnowledge(kb, { implemented: IMPLEMENTED_RULES });
+    const core = packs.length ? { ...kb, rules: new Map([...kb.rules].filter(([, r]) => !r.pack)) } : kb;
+    const issues = [...validateKnowledge(core, { implemented: IMPLEMENTED_RULES }), ...validatePacks(kb, packs)];
     const errors = issues.filter((i) => i.level === "error");
     for (const i of issues) console.log(`${i.level.toUpperCase().padEnd(7)} ${i.ruleId}: ${i.message}`);
     console.log(`
@@ -45226,9 +45391,9 @@ ${results.length} sources: ${attention.length} need review${v["update"] ? "; sna
 }
 async function commandReport(flags) {
   const v = flags.values;
-  const workspace = path25.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path26.resolve(String(v["out"] ?? process.cwd()));
   let id = flags.positionals[1] ?? "latest";
-  if (id === "latest") id = RunStore.list(workspace).filter((r) => fs16.existsSync(path25.join(workspace, ".searvex", "runs", r, "report.json"))).at(-1) ?? "";
+  if (id === "latest") id = RunStore.list(workspace).filter((r) => fs17.existsSync(path26.join(workspace, ".searvex", "runs", r, "report.json"))).at(-1) ?? "";
   if (!id) throw new UsageError("No stored runs found");
   const store2 = new RunStore(workspace, id);
   const report = store2.readJson("report.json");
@@ -45240,7 +45405,7 @@ async function commandReport(flags) {
 }
 function commandPrompt(flags) {
   const v = flags.values;
-  const workspace = path25.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path26.resolve(String(v["out"] ?? process.cwd()));
   const store2 = new RunStore(workspace, resolveRun(workspace, flags.positionals[1]));
   const report = store2.readJson("report.json");
   const lang = String(v["lang"] ?? "en");
@@ -45260,14 +45425,14 @@ function commandPrompt(flags) {
 function commandSchema(flags) {
   const name = flags.positionals[1] ?? "report";
   if (!["report", "events", "error"].includes(name)) throw new UsageError(`Unknown schema: ${name} (report, events or error)`);
-  const here = path25.dirname(fileURLToPath2(import.meta.url));
-  const file2 = [path25.resolve(here, "..", "schema", `${name}.schema.json`), path25.resolve(here, "..", "..", "schema", `${name}.schema.json`)].find((f) => fs16.existsSync(f));
+  const here = path26.dirname(fileURLToPath2(import.meta.url));
+  const file2 = [path26.resolve(here, "..", "schema", `${name}.schema.json`), path26.resolve(here, "..", "..", "schema", `${name}.schema.json`)].find((f) => fs17.existsSync(f));
   if (!file2) throw new Error(`schema/${name}.schema.json is missing from this installation`);
-  process.stdout.write(fs16.readFileSync(file2, "utf8"));
+  process.stdout.write(fs17.readFileSync(file2, "utf8"));
   return EXIT.ok;
 }
 function commandRuns(flags) {
-  const workspace = path25.resolve(String(flags.values["out"] ?? process.cwd()));
+  const workspace = path26.resolve(String(flags.values["out"] ?? process.cwd()));
   for (const id of RunStore.list(workspace)) {
     const meta = new RunStore(workspace, id).readJson("meta.json");
     console.log(`${id}  ${meta?.kind ?? ""}  ${meta?.startUrl ?? meta?.target ?? ""}`);
@@ -45365,8 +45530,8 @@ async function runCommand(cmd, flags) {
     return EXIT.runtime;
   }
 }
-var invoked = process.argv[1] ? path25.resolve(process.argv[1]) : "";
-if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path25.sep}searvex`))) {
+var invoked = process.argv[1] ? path26.resolve(process.argv[1]) : "";
+if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path26.sep}searvex`))) {
   main().then((code) => {
     process.exitCode = code;
   });
@@ -45391,6 +45556,7 @@ export {
   hostGlobs,
   interrupter,
   isPrivateTarget,
+  knowledgeFrom,
   log,
   main,
   num,

@@ -85,6 +85,8 @@ export interface Finding {
    * URL: finds one template behind unrelated URLs (flat slugs) that URL patterns miss. Since schema 1.1.
    */
   structures?: Array<{ id: string; pages: number; example: string }>;
+  /** Name of the community rule pack (`--rules-pack`) that defines this rule; absent for core rules. Since schema 1.2. */
+  pack?: string;
   /**
    * Pre-launch profile only: `environment` = depends on the test server, `launch-checklist` = a deliberate
    * pre-launch state to change before going live. Either way the finding does not count toward the score,

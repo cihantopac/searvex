@@ -38,6 +38,6 @@ Ordered by value; none is promised for a date.
    owner site.
 7. **Ecosystem:** GitHub Action with SARIF upload, MCP server exposing the engine, plugin directory
    submission (needs the final brand icon), community rule packs under the same sourcing rules. Planned for
-   1.5.0 (H1–H4).
+   1.5.0 (H1–H4); rule packs (`--rules-pack`, H4) are done.
 8. **Upstream proxy** (CONNECT-only, [design/proxy.md](design/proxy.md)) and evidence artefacts (`--save-html`,
    `--screenshots`). Done in 1.4.0 (E1, E2).

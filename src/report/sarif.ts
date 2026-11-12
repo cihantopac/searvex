@@ -18,15 +18,17 @@ export function renderSarif(r: AuditReport, kb: KnowledgeBase): object {
             version: r.tool.version,
             informationUri: 'https://github.com/cihantopac/searvex',
             rules: ruleIds.map((id) => {
-              const rule = kb.rules.get(id)!;
+              // A pack rule is unknown when a report is re-rendered without its --rules-pack: fall back to the finding.
+              const f = r.findings.find((x) => x.ruleId === id)!;
+              const rule = kb.rules.get(id);
               return {
                 id,
                 name: id.replace(/[.-](\w)/g, (_, c: string) => c.toUpperCase()),
-                shortDescription: { text: rule.title },
-                fullDescription: { text: rule.description },
-                help: { text: `${rule.fix}\nSources: ${rule.sources.map((s) => s.url).join(' ')}` },
-                helpUri: rule.sources[0]?.url,
-                properties: { category: rule.category, engines: rule.engines, confidence: rule.confidence },
+                shortDescription: { text: rule?.title ?? f.title },
+                fullDescription: { text: rule?.description ?? f.message },
+                help: { text: `${rule?.fix ?? f.fix ?? ''}${rule ? `\nSources: ${rule.sources.map((s) => s.url).join(' ')}` : ''}` },
+                helpUri: rule?.sources[0]?.url,
+                properties: { category: f.category, engines: f.engines, confidence: f.confidence, ...(f.pack ? { pack: f.pack } : {}) },
               };
             }),
           },

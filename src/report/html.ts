@@ -184,7 +184,8 @@ export function renderHtml(r: AuditReport, kb: KnowledgeBase, extras: ReportExtr
   for (const f of r.findings) {
     const rule = kb.rules.get(f.ruleId);
     rules[f.ruleId] = {
-      title: rule?.title ?? f.title,
+      // Community pack rules are labelled with their pack (they have no Turkish text).
+      title: `${rule?.title ?? f.title}${f.pack ? ` [${f.pack} pack]` : ''}`,
       fix: rule?.fix ?? f.fix,
       verify: rule?.verify,
       sources: rule?.sources.map((s) => ({ title: s.title, url: s.url, checked: s.checked })) ?? [],

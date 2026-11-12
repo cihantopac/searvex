@@ -27,6 +27,7 @@ The files ship in the npm package (`node_modules/searvex-seo/schema/`). Their `$
 
 | Version | Package | Change |
 |---|---|---|
+| 1.2 | 1.5.0 | Added `findings[].pack` and `tool.packs` (community rule packs, `--rules-pack`) |
 | 1.1 | 1.4.0 | Added `crawl.proxy` (upstream proxy endpoint and resolution mode), `crawl.artefacts` and `findings[].evidence[].artefact` (evidence artefacts), `traffic` (traffic-weighted priorities), `findings[].priority.causedBy` / `.effects` (root causes), `findings[].structures` (page-structure templates), `privateRoutes` (repository mode), `labData` (Lighthouse lab data with `--lab`) |
 | 1.0 | 1.3.0 | First published schema |
 

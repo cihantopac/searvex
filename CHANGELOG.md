@@ -5,6 +5,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Community rule packs (`--rules-pack <name|dir>`, repeatable): rule files in `knowledge/packs/<name>/` or any
+  directory whose rules carry a declarative page check (`field`: title, description, h1, lang, canonical,
+  JSON-LD types, `og:`/`twitter:` properties or a response header; `test`: missing, present, matches, not-matches,
+  longer-than, shorter-than; optional `urlPattern`). Pack rules meet the same sourcing rules as core rules, ids
+  start with the pack name and never replace a core rule; risky regular expressions are refused. Findings are
+  labelled with their pack (`findings[].pack`, `tool.packs`, schema 1.2) in every report format.
+  `rules list|show|validate --rules-pack` include them. Format and contribution guide:
+  `knowledge/packs/README.md`, `CONTRIBUTING.md`.
+
 ## [1.4.0] - 2026-11-12
 
 Root causes, more frameworks, large sites and optional lab and analytics data. Release notes:

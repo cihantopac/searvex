@@ -15,6 +15,7 @@ import { prioritise, type TrafficInput } from './priority.js';
 import { checkExternalLinks, type ExternalLinkResult } from './external-links.js';
 import { failingMetrics, queryCrux, type CruxResult } from '../integrations/crux.js';
 import { runLab, type LabData } from './lab.js';
+import { runPackChecks } from './packs.js';
 import { annotateReport, type RootCauseGroup } from '../report/remediation.js';
 import { SCHEMA_VERSION } from '../contract.js';
 
@@ -28,6 +29,8 @@ export interface AuditReport {
     rulesVersion: string;
     /** Version of the rule file of each rule that produced a finding. Since 1.3.0. */
     rules?: Record<string, string>;
+    /** Community rule packs loaded with `--rules-pack` (name, version, rule count). Since schema 1.2. */
+    packs?: Array<{ name: string; version: string; rules: number }>;
   };
   mode: 'website' | 'repository';
   target: string;
@@ -191,7 +194,7 @@ export function toolInfo(kb: KnowledgeBase, findings: Array<Pick<Finding, 'ruleI
     const v = kb.ruleVersions?.get(f.ruleId);
     if (v) rules[f.ruleId] = v;
   }
-  return { name: 'searvex', version: SEARVEX_VERSION, rulesVersion: kb.version, rules };
+  return { name: 'searvex', version: SEARVEX_VERSION, rulesVersion: kb.version, rules, ...(kb.packs?.length ? { packs: kb.packs } : {}) };
 }
 
 /** Point each evidence item at the artefacts of its page (`--save-html`, `--screenshots`). */
@@ -384,6 +387,8 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
   if (launch) emitLaunchNoindex(ctx, launch.noindex, sink);
   const geo = runGeoChecks(ctx, sink, llms);
   const content = runContentChecks(ctx, sink);
+  // Community rule packs (--rules-pack): declarative page checks.
+  if (kb.packs?.length) runPackChecks(ctx, kb, sink);
   let externalLinks: ExternalLinkResult | undefined;
   if (opts.checkExternal && !interrupted) externalLinks = await checkExternalLinks(ctx, sink, { ...netOpts, robotsAgent: opts.robotsAgent });
   let fieldData: CruxResult | undefined;
