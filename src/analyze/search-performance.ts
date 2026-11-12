@@ -64,6 +64,11 @@ export interface SearchPerformanceReport {
   multiPageQueries: Array<{ query: string; impressions: number; pattern: SharedQueryPattern; needsReview: boolean; reason: string; pages: Array<{ page: string; impressions: number; clicks: number; position: number }> }>;
   /** Crawled indexable pages inside the property with no impressions in the period (only when an audit is joined). */
   noImpressions: string[];
+  /**
+   * Clicks and impressions of every page (not only the top 100): the input of traffic-weighted priorities in the
+   * joined audit. Absent when the input has no page dimension.
+   */
+  pageTotals?: Array<{ page: string; clicks: number; impressions: number }>;
   /** Audit findings on pages that actually receive search traffic, ranked by clicks. */
   findingsOnTrafficPages: Array<{ ruleId: string; title: string; severity: string; pages: number; clicks: number; impressions: number }>;
   breakdowns: { countries: DimRow[]; devices: DimRow[] };
@@ -270,12 +275,14 @@ export function analyzeSearchPerformance(
     const pageStats = new Map(topPages.map((p) => [normalizeUrl(p.page) ?? p.page, p]));
     for (const f of opts.audit.findings) {
       if (f.severity === 'info') continue;
-      const hit = f.evidence.map((e) => (e.url ? pageStats.get(normalizeUrl(e.url) ?? e.url) : undefined)).filter((x): x is NonNullable<typeof x> => !!x);
+      // Every affected page when the audit has the list (since 1.3.0), else the evidence sample.
+      const urls = f.affected?.urls ?? f.evidence.map((e) => e.url).filter((u): u is string => !!u);
+      const hit = urls.map((u) => pageStats.get(normalizeUrl(u) ?? u)).filter((x): x is NonNullable<typeof x> => !!x);
       if (!hit.length) continue;
       findingsOnTrafficPages.push({ ruleId: f.ruleId, title: f.title, severity: f.severity, pages: hit.length, clicks: hit.reduce((a, p) => a + p.clicks, 0), impressions: hit.reduce((a, p) => a + p.impressions, 0) });
     }
     findingsOnTrafficPages.sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
-    notes.push('Findings-on-traffic uses the evidence URLs recorded in the audit (up to 50 per rule).');
+    if (opts.audit.findings.some((f) => f.severity !== 'info' && !f.affected?.urls)) notes.push('Findings-on-traffic uses the evidence URLs recorded in the audit (up to 50 per rule) for findings without a complete affected-URL list.');
   } else if (!opts.audit) notMeasured.push('Findings on traffic pages and pages without impressions: no audit joined (use --audit latest).');
 
   if (opts.audit && joined) {
@@ -299,6 +306,7 @@ export function analyzeSearchPerformance(
     totals: { clicks: totalClicks, impressions: totalImpr, ctr: r4(totalClicks / Math.max(1, totalImpr)), queries: queryAgg.length, pages: pageAgg.length, basis },
     topQueries: topQueries.slice(0, 100),
     topPages: topPages.slice(0, 100),
+    ...(pageAgg.length ? { pageTotals: pageAgg.map((p) => ({ page: p.page, clicks: p.clicks, impressions: p.impressions })) } : {}),
     strikingDistance,
     lowCtr,
     multiPageQueries: multiPageQueries.slice(0, 100),

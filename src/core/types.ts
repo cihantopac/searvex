@@ -56,6 +56,11 @@ export interface Evidence {
    * prompts and `searvex review` use). Set on reports written since 1.3.0.
    */
   ref?: string;
+  /**
+   * Evidence artefacts of the page this occurrence is on, relative to the run directory: the HTML body as served
+   * (`--save-html`, saved as `.html.txt`) and a viewport screenshot (`--screenshots`). Since schema 1.1.
+   */
+  artefact?: { html?: string; screenshot?: string };
 }
 
 export interface Finding {
@@ -75,6 +80,11 @@ export interface Finding {
   priority?: Priority;
   /** URL-pattern templates the affected pages belong to ("fix once" signal). */
   templates?: Array<{ pattern: string; pages: number }>;
+  /**
+   * Page-structure templates of the affected pages (layout skeleton hash, see PageData.skeleton) with an example
+   * URL: finds one template behind unrelated URLs (flat slugs) that URL patterns miss. Since schema 1.1.
+   */
+  structures?: Array<{ id: string; pages: number; example: string }>;
   /**
    * Pre-launch profile only: `environment` = depends on the test server, `launch-checklist` = a deliberate
    * pre-launch state to change before going live. Either way the finding does not count toward the score,
@@ -105,6 +115,13 @@ export interface Priority {
   reach: number;
   effort: 'low' | 'medium' | 'high';
   reasons: string[];
+  /**
+   * The observed root cause this finding is likely a consequence of (fix that first, then re-run). Stated as
+   * "likely": the check cannot prove it. Since schema 1.1.
+   */
+  causedBy?: { ruleId: string; why: string };
+  /** For a root cause: the findings that are likely its consequences. Since schema 1.1. */
+  effects?: string[];
 }
 
 export interface RedirectHop {

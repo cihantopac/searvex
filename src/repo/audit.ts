@@ -9,7 +9,8 @@ import { runGeoChecks, type GeoReport } from '../analyze/geo.js';
 import { buildInventory, type SiteInventory } from '../analyze/inventory.js';
 import { runTechnicalChecks } from '../analyze/technical.js';
 import { SEARVEX_VERSION } from '../net/fetcher.js';
-import { FindingSink, loadKnowledge, type KnowledgeBase } from '../rules/engine.js';
+import { affectedSummary, FindingSink, loadKnowledge, type KnowledgeBase } from '../rules/engine.js';
+import { PRIVATE_SUPPRESSED } from './private-routes.js';
 import { MISSING_IN_REPO, PLACEHOLDER_ORIGIN, routeMatches, scanRepository, type RepoScan } from './scan.js';
 import { prioritise } from '../analyze/priority.js';
 
@@ -67,8 +68,21 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
       );
     }
   }
-  const findings = sink.findings().filter((f) => !NETWORK_ONLY.has(f.ruleId));
-  prioritise(findings, (id) => sink.affected(id), undefined, Math.max(1, scan.routes.length));
+  // Login-protected routes: their metadata and indexability findings are not reported (pages behind a login are
+  // not indexed). Only files that serve private routes alone are filtered (a Laravel route file serves both).
+  const privateRoutes = scan.routes.filter((r) => r.private).map((r) => ({ route: r.route, file: r.file, reason: r.private! }));
+  const privateFiles = new Set([...new Set(privateRoutes.map((r) => r.file))].filter((f) => scan.routes.filter((r) => r.file === f).every((r) => r.private)));
+  const visible = (id: string) => (privateFiles.size && PRIVATE_SUPPRESSED.test(id) ? sink.affected(id).filter((f) => !privateFiles.has(f)) : sink.affected(id));
+  let suppressed = 0;
+  const findings = sink.findings().filter((f) => !NETWORK_ONLY.has(f.ruleId)).flatMap((f) => {
+    if (!privateFiles.size || !PRIVATE_SUPPRESSED.test(f.ruleId)) return [f];
+    const removed = sink.affected(f.ruleId).filter((x) => privateFiles.has(x)).length;
+    if (!removed) return [f];
+    suppressed += removed;
+    const count = f.count - removed;
+    return count > 0 ? [{ ...f, count, evidence: f.evidence.filter((e) => !e.file || !privateFiles.has(e.file)), affected: affectedSummary(visible(f.ruleId)) }] : [];
+  });
+  prioritise(findings, visible, undefined, Math.max(1, scan.routes.length));
   const limitations = [
     'Repository mode analyses source files statically. Values computed at runtime (CMS data, generateMetadata fetching, i18n) cannot be fully resolved; such cases are reported conservatively.',
     'HTTP behaviour (status codes, redirects, headers, compression, speed) requires website mode against a running deployment.',
@@ -81,7 +95,11 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
   // No framework, no routes, no HTML pages: a library or CLI repository. Say so instead of scoring 100.
   const nothingToAudit = !scan.routes.length && scan.apps.every((a) => a.framework === 'unknown' && !a.staticSite) && !findings.some((f) => f.severity !== 'info');
   if (nothingToAudit) limitations.unshift(NOTHING_TO_AUDIT);
-  if (scan.skipped.secrets) limitations.push(`${scan.skipped.secrets} secret-bearing file(s) (.env, keys, credentials) were skipped and never read.`);
+  if (privateRoutes.length) {
+    const why = [...new Set(privateRoutes.map((r) => r.reason))].slice(0, 3).join('; ');
+    limitations.push(`${privateRoutes.length} route(s) need a login (${why}). Search engines do not index pages behind a login, so ${suppressed} metadata/indexability finding(s) on them were not reported; the routes are listed under privateRoutes.`);
+  }
+    if (scan.skipped.secrets) limitations.push(`${scan.skipped.secrets} secret-bearing file(s) (.env, keys, credentials) were skipped and never read.`);
   if (scan.skipped.symlinks) limitations.push(`${scan.skipped.symlinks} symlink(s) were not followed.`);
   if (scan.skipped.truncated) limitations.push('File limit reached; repository scan is partial.');
 
@@ -108,7 +126,8 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
       unmeasurable: findings.filter((f) => f.confidence === 'unmeasurable').length,
     },
     limitations,
-    affectedUrls: countAffected(findings, (id) => sink.affected(id)),
+    affectedUrls: countAffected(findings, visible),
+    ...(privateRoutes.length ? { privateRoutes: privateRoutes.slice(0, 200) } : {}),
   };
   return { report, scan };
 }

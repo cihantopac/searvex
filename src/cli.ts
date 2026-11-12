@@ -80,6 +80,8 @@ Common options
   --concurrency <n>     Parallel requests (default 4)     --delay <ms>       Per-host delay (default 250)
   --timeout <ms>        Per-request timeout (default 15000, 1000–120000)
   --render              Execute JavaScript with Playwright (optional dependency) and compare DOMs
+  --save-html           Keep each fetched HTML body (as served, ≤ 2 MB) under artefacts/ in the run
+  --screenshots         With --render: one viewport screenshot per rendered page (≤ 200 MB per run in all)
   --include <regex>     Only crawl matching URLs          --exclude <regex>  Skip matching URLs
   --check-external      Check outbound links (HEAD, robots.txt-aware, max 200)
   --no-sitemap          Do not seed from sitemaps         --resume <runId>   Resume an interrupted crawl
@@ -180,6 +182,8 @@ export const CLI_OPTIONS = {
   resume: { type: 'string' },
   'max-duration': { type: 'string' },
   compact: { type: 'boolean' },
+  'save-html': { type: 'boolean' },
+  screenshots: { type: 'boolean' },
   progress: { type: 'string' },
   rules: { type: 'string', multiple: true },
   format: { type: 'string' },
@@ -397,6 +401,12 @@ export function policyFrom(v: GlobalFlags['values'], env: Record<string, string 
   }
 }
 
+/** --save-html / --screenshots (screenshots need a rendered page, so --render). */
+export function artefactsFrom(v: GlobalFlags['values']): { html: boolean; screenshots: boolean } | undefined {
+  if (v['screenshots'] && !v['render']) throw new UsageError('--screenshots needs --render (screenshots are taken of the rendered page)');
+  return v['save-html'] || v['screenshots'] ? { html: !!v['save-html'], screenshots: !!v['screenshots'] } : undefined;
+}
+
 export function crawlOptionsFrom(v: GlobalFlags['values']) {
   return {
     maxPages: num(v['max-pages'], 500, 1, 1_000_000),
@@ -408,6 +418,7 @@ export function crawlOptionsFrom(v: GlobalFlags['values']) {
     include: (v['include'] as string[] | undefined)?.map((r) => new RegExp(r)),
     exclude: (v['exclude'] as string[] | undefined)?.map((r) => new RegExp(r)),
     policy: policyFrom(v),
+    artefacts: artefactsFrom(v),
     // monitor also accepts a Search Console property (sc-domain:…) here; only URLs map origins.
     siteUrl: typeof v['site-url'] === 'string' && /^https?:\/\//i.test(v['site-url']) ? v['site-url'] : undefined,
   };
@@ -521,6 +532,7 @@ export function summaryText(report: AuditReport, files: string[], autoRules: str
   } else L.push('No significant issues found.');
   const launch = report.findings.filter((f) => f.context === 'launch-checklist');
   const env = report.findings.filter((f) => f.context === 'environment');
+  if (report.privateRoutes?.length) L.push(`Private routes (login required; metadata and indexability not checked): ${report.privateRoutes.length} — ${report.privateRoutes.slice(0, 4).map((r) => r.route).join(', ')}${report.privateRoutes.length > 4 ? ', …' : ''}`);
   if (launch.length) L.push(`Launch checklist (change before going live, not scored): ${launch.map((f) => `${f.title} (${f.count})`).join('; ')}`);
   if (env.length) L.push(`Environment-dependent (check on the production server, not scored): ${env.map((f) => f.title).join('; ')}`);
   if (auto.length) L.push(`Automatic fixes: ${auto.length} (${auto.map((f) => f.ruleId).join(', ')}) — preview with "searvex optimize ${report.mode === 'repository' ? report.target : '<repo>'}"`);

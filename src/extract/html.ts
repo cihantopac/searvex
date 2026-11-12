@@ -145,6 +145,11 @@ export interface PageData {
   likelyClientRendered: boolean;
   formsCount: number;
   iframes: number;
+  /**
+   * Short hash of the page's layout skeleton (landmarks, body children with their first class, main-content child
+   * tags, content heading levels). Pages built from one template share it even under unrelated URLs.
+   */
+  skeleton: string;
   /** Framework hints from markup (e.g. Next.js), used to explain UA-dependent behaviour. */
   generator: string | null;
   /** Structure signals used by content/GEO heuristics. */
@@ -207,6 +212,51 @@ function collectTypes(node: unknown, out: Set<string>, depth = 0): void {
 export function loadHtml(html: string): cheerio.CheerioAPI {
   const doc = parseHtml(html, { treeAdapter: htmlparser2Adapter, scriptingEnabled: false });
   return cheerio.load(doc as unknown as Parameters<typeof cheerio.load>[0]);
+}
+
+/** Class token without per-page parts (digits, hashes): `card-12` → `card`, `css-1x9a` → `css`. */
+function stableClass(c: string | undefined): string {
+  const first = (c ?? '').trim().split(/\s+/)[0] ?? '';
+  return first.toLowerCase().replace(/[-_]?[0-9a-f]*\d[0-9a-z]*$/i, '').slice(0, 30);
+}
+
+/** Layout signature hash (see `PageData.skeleton`). FNV-1a, base36. */
+function layoutSkeleton($: cheerio.CheerioAPI): string {
+  const landmarks: string[] = [];
+  $('header, nav, main, aside, footer, [role="main"], [role="navigation"]').each((_, el) => {
+    const name = 'tagName' in el ? String(el.tagName).toLowerCase() : '';
+    const role = $(el).attr('role');
+    const tag = role ? `${name}[${role}]` : name;
+    if (landmarks.at(-1) !== tag) landmarks.push(tag);
+  });
+  const children = (sel: string, limit: number) => {
+    const out: string[] = [];
+    $(sel)
+      .first()
+      .children()
+      .each((_, el) => {
+        const tag = 'tagName' in el ? String(el.tagName).toLowerCase() : '';
+        if (!tag || tag === 'script' || tag === 'style' || tag === 'noscript' || tag === 'template') return;
+        const sig = `${tag}.${stableClass($(el).attr('class'))}`;
+        if (out.at(-1) !== sig && out.length < limit) out.push(sig);
+      });
+    return out;
+  };
+  const body = children('body', 12);
+  const main = children('main, [role="main"], article', 20);
+  const levels: number[] = [];
+  $('h1, h2, h3, h4').each((_, el) => {
+    if ($(el).closest('header, nav, footer, aside').length) return;
+    const l = Number(String('tagName' in el ? el.tagName : 'h0').slice(1));
+    if (!levels.includes(l)) levels.push(l);
+  });
+  const sig = [landmarks.join('>'), body.join('|'), main.join('|'), levels.join(',')].join(';');
+  let h = 0x811c9dc5;
+  for (let i = 0; i < sig.length; i++) {
+    h ^= sig.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36);
 }
 
 export function extractPage(html: string, pageUrl: string): PageData {
@@ -328,6 +378,7 @@ export function extractPage(html: string, pageUrl: string): PageData {
   const hasNoscriptContent = collapse($('noscript').text()).length > 20;
   const formsCount = $('form').length;
   const iframes = $('iframe').length;
+  const skeleton = layoutSkeleton($);
 
   // <title> inside inline SVG labels the graphic, not the document.
   const docTitles = $('title').filter((_, el) => $(el).closest('svg').length === 0);
@@ -414,6 +465,7 @@ export function extractPage(html: string, pageUrl: string): PageData {
     hasNoscriptContent,
     likelyClientRendered,
     formsCount,
+    skeleton,
     iframes,
     generator: $('script[src*="/_next/static/"]').length || $('#__next').length
       ? 'next.js'
