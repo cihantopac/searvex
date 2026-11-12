@@ -90,7 +90,7 @@ Then run `/searvex <url> [path]`. Requires Node.js ≥ 20.10. Full reference: [d
 - **Repositories** — findings with `file:line` in framework source, plus 12 rule types fixed automatically (dry run → approval → apply → verify → rollback).
 - **Search data, optional and read-only** — Search Console (API or CSV export) and Chrome UX Report; experimental: Bing Webmaster, Lighthouse lab data (`--lab`), Google Analytics 4 and Yandex Webmaster. Without them, clicks and Core Web Vitals are shown as *not measured*, never estimated.
 - **Competitors** — topic and page-type coverage gaps, labelled as hypotheses.
-- **For pipelines and agents** — a versioned `report.json` with a published JSON Schema (`searvex schema`), every affected URL per finding, distinct exit codes (unreachable or robots-blocked `4`, interrupted `5`), `--progress ndjson`, `--max-duration`, host and port limits, and `searvex prompt` for repair prompts outside the browser.
+- **For pipelines and agents** — a read-only MCP server (`searvex mcp`), a versioned `report.json` with a published JSON Schema (`searvex schema`), every affected URL per finding, distinct exit codes (unreachable or robots-blocked `4`, interrupted `5`), `--progress ndjson`, `--max-duration`, host and port limits, and `searvex prompt` for repair prompts outside the browser.
 
 ## Evidence, not claims
 

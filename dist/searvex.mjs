@@ -1196,35 +1196,35 @@ var require_Robots = __commonJS({
       }
       return formattedUserAgent.trim();
     }
-    function normaliseEncoding(path27) {
+    function normaliseEncoding(path28) {
       try {
-        return urlEncodeToUpper(encodeURI(path27).replace(/%25/g, "%"));
+        return urlEncodeToUpper(encodeURI(path28).replace(/%25/g, "%"));
       } catch (e) {
-        return path27;
+        return path28;
       }
     }
-    function urlEncodeToUpper(path27) {
-      return path27.replace(/%[0-9a-fA-F]{2}/g, function(match) {
+    function urlEncodeToUpper(path28) {
+      return path28.replace(/%[0-9a-fA-F]{2}/g, function(match) {
         return match.toUpperCase();
       });
     }
-    function matches(pattern, path27) {
-      var matchingLengths = new Array(path27.length + 1);
+    function matches(pattern, path28) {
+      var matchingLengths = new Array(path28.length + 1);
       var numMatchingLengths = 1;
       matchingLengths[0] = 0;
       for (var p = 0; p < pattern.length; p++) {
         if (pattern[p] === "$" && p + 1 === pattern.length) {
-          return matchingLengths[numMatchingLengths - 1] === path27.length;
+          return matchingLengths[numMatchingLengths - 1] === path28.length;
         }
         if (pattern[p] == "*") {
-          numMatchingLengths = path27.length - matchingLengths[0] + 1;
+          numMatchingLengths = path28.length - matchingLengths[0] + 1;
           for (var i = 1; i < numMatchingLengths; i++) {
             matchingLengths[i] = matchingLengths[i - 1] + 1;
           }
         } else {
           var numMatches = 0;
           for (var i = 0; i < numMatchingLengths; i++) {
-            if (matchingLengths[i] < path27.length && path27[matchingLengths[i]] === pattern[p]) {
+            if (matchingLengths[i] < path28.length && path28[matchingLengths[i]] === pattern[p]) {
               matchingLengths[numMatches++] = matchingLengths[i] + 1;
             }
           }
@@ -1278,11 +1278,11 @@ var require_Robots = __commonJS({
         isNoneUserAgentState = line[0].toLowerCase() !== "user-agent";
       }
     }
-    function findRule(path27, rules) {
+    function findRule(path28, rules) {
       var matchedRule = null;
       for (var i = 0; i < rules.length; i++) {
         var rule = rules[i];
-        if (!matches(rule.pattern, path27)) {
+        if (!matches(rule.pattern, path28)) {
           continue;
         }
         if (!matchedRule || rule.pattern.length > matchedRule.pattern.length) {
@@ -1349,8 +1349,8 @@ var require_Robots = __commonJS({
         return;
       }
       var rules = this._rules[userAgent] || this._rules["*"] || [];
-      var path27 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
-      var rule = findRule(path27, rules);
+      var path28 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
+      var rule = findRule(path28, rules);
       return rule;
     };
     Robots.prototype.isAllowed = function(url, ua) {
@@ -16417,8 +16417,8 @@ var init_render = __esm({
 });
 
 // src/cli.ts
-import fs17 from "node:fs";
-import path26 from "node:path";
+import fs18 from "node:fs";
+import path27 from "node:path";
 import { parseArgs } from "node:util";
 
 // src/crawl/crawler.ts
@@ -33083,16 +33083,16 @@ var MatcherView = class {
    * @returns {string|undefined}
    */
   getCurrentTag() {
-    const path27 = this._matcher.path;
-    return path27.length > 0 ? path27[path27.length - 1].tag : void 0;
+    const path28 = this._matcher.path;
+    return path28.length > 0 ? path28[path28.length - 1].tag : void 0;
   }
   /**
    * Get current namespace.
    * @returns {string|undefined}
    */
   getCurrentNamespace() {
-    const path27 = this._matcher.path;
-    return path27.length > 0 ? path27[path27.length - 1].namespace : void 0;
+    const path28 = this._matcher.path;
+    return path28.length > 0 ? path28[path28.length - 1].namespace : void 0;
   }
   /**
    * Get current node's attribute value.
@@ -33100,9 +33100,9 @@ var MatcherView = class {
    * @returns {*}
    */
   getAttrValue(attrName) {
-    const path27 = this._matcher.path;
-    if (path27.length === 0) return void 0;
-    return path27[path27.length - 1].values?.[attrName];
+    const path28 = this._matcher.path;
+    if (path28.length === 0) return void 0;
+    return path28[path28.length - 1].values?.[attrName];
   }
   /**
    * Check if current node has an attribute.
@@ -33110,9 +33110,9 @@ var MatcherView = class {
    * @returns {boolean}
    */
   hasAttr(attrName) {
-    const path27 = this._matcher.path;
-    if (path27.length === 0) return false;
-    const current2 = path27[path27.length - 1];
+    const path28 = this._matcher.path;
+    if (path28.length === 0) return false;
+    const current2 = path28[path28.length - 1];
     return current2.values !== void 0 && attrName in current2.values;
   }
   /**
@@ -33138,18 +33138,18 @@ var MatcherView = class {
    * @returns {number}
    */
   getPosition() {
-    const path27 = this._matcher.path;
-    if (path27.length === 0) return -1;
-    return path27[path27.length - 1].position ?? 0;
+    const path28 = this._matcher.path;
+    if (path28.length === 0) return -1;
+    return path28[path28.length - 1].position ?? 0;
   }
   /**
    * Get current node's repeat counter (occurrence count of this tag name).
    * @returns {number}
    */
   getCounter() {
-    const path27 = this._matcher.path;
-    if (path27.length === 0) return -1;
-    return path27[path27.length - 1].counter ?? 0;
+    const path28 = this._matcher.path;
+    if (path28.length === 0) return -1;
+    return path28[path28.length - 1].counter ?? 0;
   }
   /**
    * Get current node's sibling index (alias for getPosition).
@@ -36377,10 +36377,10 @@ function buildInventory(ctx) {
     if (!f || p.status !== 200 || p.redirects.length) continue;
     const types = /* @__PURE__ */ new Set();
     for (const b of f.jsonLd) for (const n of typedNodes(b.data)) for (const t of [].concat(n["@type"] ?? [])) if (typeof t === "string") types.add(t);
-    const path27 = new URL(p.finalUrl).pathname;
+    const path28 = new URL(p.finalUrl).pathname;
     let type = "other";
     let basis = "default";
-    if (p === ctx.homepage || path27 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path27)) {
+    if (p === ctx.homepage || path28 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path28)) {
       type = "home";
       basis = "url";
     } else {
@@ -36389,7 +36389,7 @@ function buildInventory(ctx) {
         type = s;
         basis = "schema";
       } else {
-        const r = URL_RULES.find(([re]) => re.test(path27));
+        const r = URL_RULES.find(([re]) => re.test(path28));
         if (r) {
           type = r[1];
           basis = "url";
@@ -36461,7 +36461,7 @@ function buildInventory(ctx) {
       pagesWithStructuredData: pagesWithSd,
       invalidJsonLdPages
     },
-    sections: [...sectionsMap.entries()].map(([path27, c]) => ({ path: path27, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
+    sections: [...sectionsMap.entries()].map(([path28, c]) => ({ path: path28, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
   };
 }
 function classifyBusiness(ctx, byType, sd) {
@@ -37202,8 +37202,8 @@ function runTechnicalChecks(ctx, sink) {
     const ttfb = p.ttfbMs ?? p.timingMs;
     if (ttfb > 800 && !p.redirects.length) sink.emit("perf.slow-ttfb", { url: p.url, observed: `TTFB ${ttfb} ms (single sample from the crawler's location; full response ${p.timingMs} ms)` });
     if (p.bytes > 10 * 1024 && !p.headers["content-encoding"]) sink.emit("perf.no-compression", { url: p.url, observed: `${Math.round(p.bytes / 1024)} KB uncompressed` });
-    const path27 = new URL(p.finalUrl).pathname;
-    if (path27.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
+    const path28 = new URL(p.finalUrl).pathname;
+    if (path28.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
     const declared = primaryTag(f.lang);
     if (declared && ["en", "tr", "de", "fr", "es", "it", "pt", "nl"].includes(declared) && !noindex) {
       const detected = detectLanguage(mainTextOf(ctx, f));
@@ -37311,11 +37311,11 @@ function checkFacetsAndPagination(ctx, sink) {
     const key = u.origin + u.pathname;
     (variants.get(key) ?? variants.set(key, /* @__PURE__ */ new Set()).get(key)).add(u.search);
   }
-  for (const [path27, set] of variants) {
+  for (const [path28, set] of variants) {
     if (set.size < 10) continue;
     const paramCount = /* @__PURE__ */ new Map();
     for (const q of set) for (const k of new URLSearchParams(q).keys()) if (!PAGE_PARAM.test(k)) paramCount.set(k, (paramCount.get(k) ?? 0) + 1);
-    const crawled = ctx.pages.filter((p) => p.url.startsWith(path27 + "?"));
+    const crawled = ctx.pages.filter((p) => p.url.startsWith(path28 + "?"));
     const blocked = crawled.filter((p) => p.blockedByRobots).length;
     const canonicalised = crawled.filter((p) => {
       const f = factsOf(p);
@@ -37323,7 +37323,7 @@ function checkFacetsAndPagination(ctx, sink) {
     }).length;
     const params = [...paramCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => `${k} (${n})`).join(", ");
     sink.emit("crawl.facet-explosion", {
-      url: path27,
+      url: path28,
       observed: `${set.size} parameter variants linked internally; parameters: ${params}; of ${crawled.length} crawled variants, ${blocked} robots-blocked, ${canonicalised} canonicalised elsewhere`
     });
   }
@@ -37341,13 +37341,13 @@ function checkFacetsAndPagination(ctx, sink) {
 // src/analyze/priority.ts
 var SEVERITY = { critical: 1, high: 0.7, medium: 0.4, low: 0.15, info: 0 };
 function urlPattern(urlOrPath) {
-  let path27;
+  let path28;
   try {
-    path27 = new URL(urlOrPath).pathname;
+    path28 = new URL(urlOrPath).pathname;
   } catch {
-    path27 = urlOrPath.startsWith("/") ? urlOrPath : "/" + urlOrPath;
+    path28 = urlOrPath.startsWith("/") ? urlOrPath : "/" + urlOrPath;
   }
-  const segs = path27.split("/").filter(Boolean);
+  const segs = path28.split("/").filter(Boolean);
   if (!segs.length) return "/";
   const out = [];
   if (/^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0])) out.push(segs.shift());
@@ -38459,7 +38459,7 @@ function scoreLabel(s) {
 }
 var WEIGHT = { critical: 25, high: 10, medium: 4, low: 1.5, info: 0 };
 function computeScores(findings, pageCount) {
-  const penalty = (fs18) => fs18.reduce((sum, f) => {
+  const penalty = (fs19) => fs19.reduce((sum, f) => {
     if (!countsTowardScore(f)) return sum;
     const share = pageCount > 0 ? Math.min(1, f.count / pageCount) : 1;
     return sum + WEIGHT[f.severity] * Math.max(share, f.severity === "critical" ? 1 : share) * (f.confidence === "heuristic" ? 0.5 : 1);
@@ -44026,8 +44026,8 @@ function yandexErrorMessage(status, json) {
   if (status === 429) return "Yandex Webmaster API quota reached. Try again later.";
   return `Yandex Webmaster API HTTP ${status}${code ? ` ${code}` : ""}: ${msg}`;
 }
-async function call(path27, token) {
-  const res = await get4(`${BASE5()}${path27}`, token);
+async function call(path28, token) {
+  const res = await get4(`${BASE5()}${path28}`, token);
   if (res.status !== 200) throw new YandexApiError(yandexErrorMessage(res.status, res.json));
   return res.json;
 }
@@ -44179,8 +44179,207 @@ Report: ${out}`);
   return 0;
 }
 
-// src/commands/research.ts
+// src/mcp/server.ts
+import fs15 from "node:fs";
 import path23 from "node:path";
+import readline2 from "node:readline";
+init_fetcher();
+var SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"];
+var MCP_VERSIONS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"];
+var META_VERSION = "io.modelcontextprotocol/protocolVersion";
+var runIdArg = { type: "string", description: 'Run id from .searvex/runs, or "latest" (default)' };
+function latestReport(workspace, ref) {
+  const want = typeof ref === "string" && ref ? ref : "latest";
+  const ids = want === "latest" ? RunStore.list(workspace).filter((r) => fs15.existsSync(path23.join(workspace, ".searvex", "runs", r, "report.json"))) : [want];
+  const id = ids.at(-1);
+  if (!id || !/^[\w.-]+$/.test(id)) throw new ToolError(want === "latest" ? `No stored report in ${workspace}. Run the audit tool first.` : `Invalid run id: ${want}`);
+  const store2 = new RunStore(workspace, id);
+  const report = store2.readJson("report.json");
+  if (!report) throw new ToolError(`Run ${id} has no report.json`);
+  return { store: store2, report };
+}
+var ToolError = class extends Error {
+};
+function reportSummary(r) {
+  const bySeverity = {};
+  for (const f of r.findings) bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1;
+  const top2 = [...r.findings].filter((f) => f.severity !== "info" && !f.context).sort((a, b) => (b.priority?.score ?? 0) - (a.priority?.score ?? 0)).slice(0, 10).map((f) => ({ ruleId: f.ruleId, title: f.title, severity: f.severity, affected: f.affected?.count ?? f.count ?? f.evidence.length, ...f.pack ? { pack: f.pack } : {} }));
+  return { runId: r.runId, schemaVersion: r.schemaVersion, mode: r.mode, target: r.target, status: r.crawl?.status, scores: r.scores, findings: r.findings.length, bySeverity, top: top2 };
+}
+function buildTools(o, queue) {
+  const cap = o.maxPagesCap ?? 500;
+  const audit = async (args, maxDefault) => {
+    const url = String(args["url"] ?? "");
+    if (!/^https?:\/\//i.test(url)) throw new ToolError("url must be an http(s) URL");
+    const maxPages = Math.max(1, Math.min(cap, Number(args["maxPages"] ?? maxDefault) || maxDefault));
+    return queue(async () => {
+      const { report } = await auditWebsite(url, { workspace: o.workspace, kb: o.kb, probes: true, compact: false, crawl: { ...o.crawl, policy: o.policy, maxPages } });
+      if (report.crawl.status === "unreachable") throw new ToolError(`${url} was not audited (run ${report.runId}): ${report.crawl.error ?? "unreachable"}`);
+      return report;
+    });
+  };
+  return [
+    {
+      name: "audit",
+      title: "Audit a website",
+      description: "Crawl a public website (robots.txt respected) and audit technical SEO, GEO and content. Returns a summary; the full report is stored and readable with the report and findings tools.",
+      inputSchema: { type: "object", properties: { url: { type: "string", description: "Start URL (http or https)" }, maxPages: { type: "integer", minimum: 1, maximum: cap, description: `Pages to crawl (default 50, at most ${cap})` } }, required: ["url"] },
+      run: async (args) => {
+        const r = await audit(args, 50);
+        const s = reportSummary(r);
+        return { text: JSON.stringify(s, null, 2), structured: s };
+      }
+    },
+    {
+      name: "geo",
+      title: "GEO / AI-search readiness",
+      description: "Audit a website (default 20 pages) and return its GEO section: AI crawler access by purpose, snippet controls, llms.txt, entity and content clarity notes.",
+      inputSchema: { type: "object", properties: { url: { type: "string" }, maxPages: { type: "integer", minimum: 1, maximum: cap } }, required: ["url"] },
+      run: async (args) => {
+        const r = await audit(args, 20);
+        const out = { runId: r.runId, target: r.target, scores: r.scores, geo: r.geo, findings: r.findings.filter((f) => f.category === "geo").map((f) => ({ ruleId: f.ruleId, title: f.title, severity: f.severity, observed: f.evidence[0]?.observed })) };
+        return { text: JSON.stringify(out, null, 2), structured: out };
+      }
+    },
+    {
+      name: "report",
+      title: "Stored report",
+      description: 'The stored report.json of a run (schema in "searvex schema report"), with per-finding affected URLs reduced to counts. Use findings for filtered lists.',
+      inputSchema: { type: "object", properties: { runId: runIdArg } },
+      run: async (args) => {
+        const { report } = latestReport(o.workspace, args["runId"]);
+        const compact = compactAffected(structuredClone(report));
+        return { text: JSON.stringify(reportSummary(report), null, 2), structured: compact };
+      }
+    },
+    {
+      name: "findings",
+      title: "Findings of a run",
+      description: "Findings of a stored run, filtered by severity (minimum), category or rule id, most important first.",
+      inputSchema: {
+        type: "object",
+        properties: { runId: runIdArg, minSeverity: { type: "string", enum: [...SEVERITY_ORDER] }, category: { type: "string" }, ruleId: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 200, description: "default 25" } }
+      },
+      run: async (args) => {
+        const { report } = latestReport(o.workspace, args["runId"]);
+        const min = typeof args["minSeverity"] === "string" ? SEVERITY_ORDER.indexOf(args["minSeverity"]) : -1;
+        const limit = Math.max(1, Math.min(200, Number(args["limit"] ?? 25) || 25));
+        const list = report.findings.filter((f) => min < 0 ? true : SEVERITY_ORDER.indexOf(f.severity) <= min).filter((f) => !args["category"] || f.category === args["category"]).filter((f) => !args["ruleId"] || f.ruleId === args["ruleId"]).sort((a, b) => (b.priority?.score ?? 0) - (a.priority?.score ?? 0)).slice(0, limit).map((f) => ({ ...f, evidence: f.evidence.slice(0, 5), affected: f.affected ? { count: f.affected.count } : void 0 }));
+        const out = { runId: report.runId, total: report.findings.length, returned: list.length, findings: list };
+        return { text: JSON.stringify(out, null, 2), structured: out };
+      }
+    },
+    {
+      name: "prompt",
+      title: "Repair prompt",
+      description: "The repair prompt the HTML action center builds for a run (exact URLs or file:line, evidence, fix and verification), for a coding agent. Optionally limited to rule ids.",
+      inputSchema: { type: "object", properties: { runId: runIdArg, rules: { type: "array", items: { type: "string" } }, lang: { type: "string", enum: ["en", "tr"] } } },
+      run: async (args) => {
+        const { store: store2, report } = latestReport(o.workspace, args["runId"]);
+        const rules = Array.isArray(args["rules"]) ? args["rules"].map(String) : void 0;
+        const unknown = rules?.filter((id) => !report.findings.some((f) => f.ruleId === id)) ?? [];
+        if (unknown.length) throw new ToolError(`Not a finding of run ${report.runId}: ${unknown.join(", ")}`);
+        const input = repairPromptInput(report, o.kb, loadExtras(store2, report), { lang: args["lang"] === "tr" ? "tr" : "en", rules });
+        if (!input.items.length) throw new ToolError(`Run ${report.runId} has no issues to repair`);
+        const prompt = buildRepairPrompt(input);
+        return { text: prompt, structured: { runId: report.runId, rules: input.items.map((i) => i.ruleId), prompt } };
+      }
+    },
+    {
+      name: "rules",
+      title: "Rule base",
+      description: "The sourced rule base: a list (optionally by category), or one rule with its description, fix, verification and official sources.",
+      inputSchema: { type: "object", properties: { id: { type: "string" }, category: { type: "string" } } },
+      run: async (args) => {
+        if (args["id"]) {
+          const r = o.kb.rules.get(String(args["id"]));
+          if (!r) throw new ToolError(`Unknown rule: ${String(args["id"])}`);
+          return { text: JSON.stringify(r, null, 2), structured: r };
+        }
+        const rules = [...o.kb.rules.values()].filter((r) => !args["category"] || r.category === args["category"]).map((r) => ({ id: r.id, title: r.title, category: r.category, severity: r.severity, confidence: r.confidence, ...r.pack ? { pack: r.pack } : {} }));
+        const out = { version: o.kb.version, count: rules.length, rules };
+        return { text: JSON.stringify(out, null, 2), structured: out };
+      }
+    }
+  ];
+}
+async function handleMessage(msg, tools) {
+  const err = (id, code, message, data2) => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message, ...data2 !== void 0 ? { data: data2 } : {} } });
+  if (Array.isArray(msg)) return err(null, -32600, "Batches are not supported");
+  if (!msg || typeof msg !== "object" || msg["jsonrpc"] !== "2.0" || typeof msg["method"] !== "string") return err(msg?.["id"], -32600, "Invalid request");
+  const m = msg;
+  const isNotification = m.id === void 0;
+  const params = m.params ?? {};
+  const meta = params["_meta"] ?? {};
+  const requested = meta[META_VERSION];
+  if (typeof requested === "string" && !MCP_VERSIONS.includes(requested)) return isNotification ? null : err(m.id, -32022, "Unsupported protocol version", { supported: MCP_VERSIONS, requested });
+  const ok = (result) => ({ jsonrpc: "2.0", id: m.id, result: typeof requested === "string" ? { ...result, _meta: { "io.modelcontextprotocol/serverInfo": { name: "searvex", version: SEARVEX_VERSION } } } : result });
+  if (isNotification) return null;
+  switch (m.method) {
+    case "initialize": {
+      const v = String(params["protocolVersion"] ?? "");
+      const version = MCP_VERSIONS.includes(v) && v !== "2026-07-28" ? v : "2025-11-25";
+      return ok({
+        protocolVersion: version,
+        capabilities: { tools: {} },
+        serverInfo: { name: "searvex", title: "Searvex", version: SEARVEX_VERSION },
+        instructions: 'Searvex audits websites for technical SEO, GEO and content (read-only). Run "audit" first, then read results with "findings", "report" or "prompt". Findings cite official sources ("rules"). Never claims rankings or traffic.'
+      });
+    }
+    case "ping":
+      return ok({});
+    case "tools/list":
+      return ok({ tools: tools.map(({ name, title, description, inputSchema }) => ({ name, title, description, inputSchema, annotations: { readOnlyHint: true, openWorldHint: name === "audit" || name === "geo" } })) });
+    case "tools/call": {
+      const tool = tools.find((t) => t.name === params["name"]);
+      if (!tool) return err(m.id, -32602, `Unknown tool: ${String(params["name"])}`);
+      try {
+        const r = await tool.run(params["arguments"] ?? {});
+        return ok({ content: [{ type: "text", text: r.text }], ...r.structured ? { structuredContent: r.structured } : {}, isError: false });
+      } catch (e) {
+        return ok({ content: [{ type: "text", text: e.message }], isError: true });
+      }
+    }
+    default:
+      return err(m.id, -32601, `Method not found: ${m.method}`);
+  }
+}
+async function serveMcp(o, input = process.stdin, output = process.stdout) {
+  let chain = Promise.resolve();
+  const queue = (fn) => {
+    const next2 = chain.then(fn, fn);
+    chain = next2.catch(() => void 0);
+    return next2;
+  };
+  const tools = buildTools(o, queue);
+  const log2 = console.log;
+  console.log = (...a) => console.error(...a);
+  const pending = /* @__PURE__ */ new Set();
+  const rl = readline2.createInterface({ input, crlfDelay: Infinity });
+  try {
+    for await (const line of rl) {
+      if (!line.trim()) continue;
+      let msg;
+      try {
+        msg = JSON.parse(line);
+      } catch {
+        output.write(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }) + "\n");
+        continue;
+      }
+      const p = handleMessage(msg, tools).then((res) => {
+        if (res) output.write(JSON.stringify(res) + "\n");
+      });
+      pending.add(p);
+      void p.finally(() => pending.delete(p));
+    }
+    await Promise.all(pending);
+  } finally {
+    console.log = log2;
+  }
+}
+
+// src/commands/research.ts
+import path24 from "node:path";
 function profile(r) {
   return {
     url: r.target,
@@ -44280,7 +44479,7 @@ async function commandResearch(flags) {
   if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
   for (const c of competitors) if (!/^https?:\/\//i.test(c)) throw new UsageError(`Invalid competitor URL: ${c}`);
   const kb = loadKnowledge();
-  const workspace = path23.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path24.resolve(String(v["out"] ?? process.cwd()));
   const store2 = new RunStore(workspace, RunStore.newRunId("research"));
   const perSite = num(v["max-pages"], 150, 1, 1e5);
   const base = { ...crawlOptionsFrom(v), siteUrl: void 0, maxPages: perSite };
@@ -44316,8 +44515,8 @@ async function commandResearch(flags) {
 }
 
 // src/commands/run.ts
-import fs15 from "node:fs";
-import path24 from "node:path";
+import fs16 from "node:fs";
+import path25 from "node:path";
 var top = (r, n = 5) => r.findings.filter((f) => f.severity !== "info").slice(0, n);
 function renderRunSummary(s) {
   const L = ["# Searvex run summary", ""];
@@ -44379,13 +44578,13 @@ async function runWorkflow(flags, stop) {
   const url = targets.find((t) => /^https?:\/\//i.test(t));
   const repo = targets.find((t) => !/^https?:\/\//i.test(t));
   if (!url && !repo) throw new UsageError("run requires a URL, a repository path, or both (e.g. searvex run https://example.com ./site)");
-  if (repo && !(fs15.existsSync(repo) && fs15.statSync(repo).isDirectory())) throw new UsageError(`Not a directory: ${repo}`);
+  if (repo && !(fs16.existsSync(repo) && fs16.statSync(repo).isDirectory())) throw new UsageError(`Not a directory: ${repo}`);
   const competitors = v["competitor"] ?? [];
   if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
   if (competitors.length && !url) throw new UsageError("--competitor requires a website URL");
   if (v["fail-on"] !== void 0) failOnIndex(v["fail-on"]);
   const { kb } = knowledgeFrom(v);
-  const workspace = path24.resolve(String(v["out"] ?? (repo ?? process.cwd())));
+  const workspace = path25.resolve(String(v["out"] ?? (repo ?? process.cwd())));
   const opts = crawlOptionsFrom(v);
   const summary = { steps: [] };
   const step = (n, name, status, note) => {
@@ -44442,7 +44641,7 @@ async function runWorkflow(flags, stop) {
     step(5, "Repository audit", "skipped", "run interrupted");
     step(6, "Fix plan (dry run)", "skipped", "run interrupted");
   } else if (repo) {
-    const root2 = fs15.realpathSync(repo);
+    const root2 = fs16.realpathSync(repo);
     const siteUrl = v["site-url"] ?? (url ? new URL(url).origin : void 0);
     log(v, `5. Auditing repository ${root2}\u2026`);
     const ra = auditRepository(root2, { siteUrl, kb });
@@ -44506,8 +44705,8 @@ Fix plan (dry run, nothing changed): ${summary.plan.fixes.length} automatic fix(
 }
 
 // src/commands/ecosystem.ts
-import fs16 from "node:fs";
-import path25 from "node:path";
+import fs17 from "node:fs";
+import path26 from "node:path";
 var hostOf2 = (u) => new URL(u).hostname.replace(/^www\./, "");
 var norm3 = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 function snapshot(report, pages) {
@@ -44700,7 +44899,7 @@ async function commandEcosystem(flags) {
   if (urls.length > 20) throw new UsageError("At most 20 sites");
   for (const u of urls) if (!/^https?:\/\//i.test(u)) throw new UsageError(`Invalid URL: ${u}`);
   const kb = loadKnowledge();
-  const workspace = path25.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path26.resolve(String(v["out"] ?? process.cwd()));
   const opts = { ...crawlOptionsFrom(v), siteUrl: void 0, maxPages: num(v["max-pages"], 60, 1, 1e5) };
   const snaps = new Array(urls.length);
   let next2 = 0;
@@ -44732,7 +44931,7 @@ async function commandEcosystem(flags) {
   if (v["json"]) process.stdout.write(JSON.stringify(eco, null, 2) + "\n");
   else if (!v["quiet"]) console.log(renderEcosystemMarkdown(eco) + `
 Saved: ${out}`);
-  if (!fs16.existsSync(out)) return 2;
+  if (!fs17.existsSync(out)) return 2;
   return 0;
 }
 
@@ -44773,6 +44972,9 @@ Commands
                         Google Analytics 4 (read-only OAuth, same Desktop client as gsc): "ga4 report <propertyId>
                         [--audit latest]" lists Organic Search landing pages and the audit's issues on pages with
                         traffic (experimental: not yet verified against a live property)
+  mcp                   Read-only MCP server on stdio (tools: audit, geo, report, findings, prompt, rules) for AI
+                        clients; the network policy is fixed at start (--allow-private, host/port limits, --proxy),
+                        --max-pages caps tool audits (default 500), --out sets the workspace
   yandex <auth|status|sites|report|logout>
                         Yandex Webmaster (OAuth token, read-only): "yandex report <siteUrl>" lists popular queries
                         of a verified site (experimental: not yet verified against a live site)
@@ -44876,7 +45078,7 @@ Exit codes
 
 Searvex is read-only by default. It never publishes content, submits URLs or changes live sites.
 `;
-var SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"];
+var SEVERITY_ORDER2 = ["critical", "high", "medium", "low", "info"];
 var HELP_TEXT = HELP;
 function parse8(argv) {
   const { values, positionals } = parseArgs({
@@ -45125,14 +45327,14 @@ function writeReports(store2, report, kb, formats) {
   return out;
 }
 function failOnIndex(failOn) {
-  const idx = SEVERITY_ORDER.indexOf(String(failOn));
+  const idx = SEVERITY_ORDER2.indexOf(String(failOn));
   if (idx < 0 || failOn === "info") throw new UsageError("--fail-on must be critical|high|medium|low");
   return idx;
 }
 function failOnExit(report, failOn) {
   if (!failOn) return EXIT.ok;
   const idx = failOnIndex(failOn);
-  return report.findings.some((f) => SEVERITY_ORDER.indexOf(f.severity) <= idx && countsTowardScore(f)) ? EXIT.failOn : EXIT.ok;
+  return report.findings.some((f) => SEVERITY_ORDER2.indexOf(f.severity) <= idx && countsTowardScore(f)) ? EXIT.failOn : EXIT.ok;
 }
 function printSummary(report, files, v, autoRules = []) {
   if (v["json"]) {
@@ -45197,12 +45399,12 @@ function pagesLabel(report) {
 function withReportFiles(L, files) {
   const html3 = files.find((f) => f.endsWith(".html"));
   if (html3) {
-    const ws = path26.resolve(html3, "..", "..", "..", "..");
+    const ws = path27.resolve(html3, "..", "..", "..", "..");
     L.push(`
-Open the report: ${pathToFileURL(html3).href}`, `  (or run: searvex open ${path26.basename(path26.dirname(html3))}${ws === process.cwd() ? "" : ` --out "${ws}"`})`);
+Open the report: ${pathToFileURL(html3).href}`, `  (or run: searvex open ${path27.basename(path27.dirname(html3))}${ws === process.cwd() ? "" : ` --out "${ws}"`})`);
   }
   const others = files.filter((f) => f !== html3);
-  if (others.length) L.push(`Other files: ${others.map((f) => path26.basename(f)).join(", ")} in ${path26.dirname(others[0])}`);
+  if (others.length) L.push(`Other files: ${others.map((f) => path27.basename(f)).join(", ")} in ${path27.dirname(others[0])}`);
   return L.join("\n");
 }
 function knowledgeFrom(v) {
@@ -45230,14 +45432,14 @@ async function commandAudit(flags) {
   const target = positionals[1];
   if (!target) throw new UsageError("audit requires a URL or a repository path");
   if (!/^https?:\/\//i.test(target)) {
-    if (fs17.existsSync(target)) return commandRepo(flags);
+    if (fs18.existsSync(target)) return commandRepo(flags);
     throw new UsageError(`Not a URL and not an existing path: ${target}`);
   }
   assertSiteUrl(v);
   if (v["fail-on"] !== void 0) failOnIndex(v["fail-on"]);
   const lab = labOptions(v);
   const { kb } = knowledgeFrom(v);
-  const workspace = path26.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path27.resolve(String(v["out"] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
   const stop = interrupter(v);
   let render3;
@@ -45288,7 +45490,7 @@ async function commandGeo(flags) {
   const opts = crawlOptionsFrom({ ...v, "max-pages": v["max-pages"] ?? "50" });
   suggestPreLaunch(v, target);
   const stop = interrupter(v);
-  const { report, store: store2 } = await auditWebsite(target, { workspace: path26.resolve(String(v["out"] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal, onProgress: crawlProgress(v) }, onPhase: phaseProgress, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
+  const { report, store: store2 } = await auditWebsite(target, { workspace: path27.resolve(String(v["out"] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal, onProgress: crawlProgress(v) }, onPhase: phaseProgress, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
   assertTargetAllowed(report);
   reportInterrupted(report, !!v["json"]);
   const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
@@ -45391,9 +45593,9 @@ ${results.length} sources: ${attention.length} need review${v["update"] ? "; sna
 }
 async function commandReport(flags) {
   const v = flags.values;
-  const workspace = path26.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path27.resolve(String(v["out"] ?? process.cwd()));
   let id = flags.positionals[1] ?? "latest";
-  if (id === "latest") id = RunStore.list(workspace).filter((r) => fs17.existsSync(path26.join(workspace, ".searvex", "runs", r, "report.json"))).at(-1) ?? "";
+  if (id === "latest") id = RunStore.list(workspace).filter((r) => fs18.existsSync(path27.join(workspace, ".searvex", "runs", r, "report.json"))).at(-1) ?? "";
   if (!id) throw new UsageError("No stored runs found");
   const store2 = new RunStore(workspace, id);
   const report = store2.readJson("report.json");
@@ -45405,7 +45607,7 @@ async function commandReport(flags) {
 }
 function commandPrompt(flags) {
   const v = flags.values;
-  const workspace = path26.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path27.resolve(String(v["out"] ?? process.cwd()));
   const store2 = new RunStore(workspace, resolveRun(workspace, flags.positionals[1]));
   const report = store2.readJson("report.json");
   const lang = String(v["lang"] ?? "en");
@@ -45425,14 +45627,14 @@ function commandPrompt(flags) {
 function commandSchema(flags) {
   const name = flags.positionals[1] ?? "report";
   if (!["report", "events", "error"].includes(name)) throw new UsageError(`Unknown schema: ${name} (report, events or error)`);
-  const here = path26.dirname(fileURLToPath2(import.meta.url));
-  const file2 = [path26.resolve(here, "..", "schema", `${name}.schema.json`), path26.resolve(here, "..", "..", "schema", `${name}.schema.json`)].find((f) => fs17.existsSync(f));
+  const here = path27.dirname(fileURLToPath2(import.meta.url));
+  const file2 = [path27.resolve(here, "..", "schema", `${name}.schema.json`), path27.resolve(here, "..", "..", "schema", `${name}.schema.json`)].find((f) => fs18.existsSync(f));
   if (!file2) throw new Error(`schema/${name}.schema.json is missing from this installation`);
-  process.stdout.write(fs17.readFileSync(file2, "utf8"));
+  process.stdout.write(fs18.readFileSync(file2, "utf8"));
   return EXIT.ok;
 }
 function commandRuns(flags) {
-  const workspace = path26.resolve(String(flags.values["out"] ?? process.cwd()));
+  const workspace = path27.resolve(String(flags.values["out"] ?? process.cwd()));
   for (const id of RunStore.list(workspace)) {
     const meta = new RunStore(workspace, id).readJson("meta.json");
     console.log(`${id}  ${meta?.kind ?? ""}  ${meta?.startUrl ?? meta?.target ?? ""}`);
@@ -45487,6 +45689,13 @@ async function runCommand(cmd, flags) {
         return await commandGa4(flags);
       case "yandex":
         return await commandYandex(flags);
+      case "mcp": {
+        const v = flags.values;
+        const { kb } = knowledgeFrom(v);
+        const { maxPages, ...crawl2 } = crawlOptionsFrom(v);
+        await serveMcp({ workspace: path27.resolve(String(v["out"] ?? process.cwd())), kb, policy: policyFrom(v), crawl: crawl2, maxPagesCap: v["max-pages"] === void 0 ? 500 : maxPages });
+        return EXIT.ok;
+      }
       case "connect":
         return await commandConnect(flags);
       case "audit":
@@ -45530,8 +45739,8 @@ async function runCommand(cmd, flags) {
     return EXIT.runtime;
   }
 }
-var invoked = process.argv[1] ? path26.resolve(process.argv[1]) : "";
-if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path26.sep}searvex`))) {
+var invoked = process.argv[1] ? path27.resolve(process.argv[1]) : "";
+if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path27.sep}searvex`))) {
   main().then((code) => {
     process.exitCode = code;
   });
@@ -45542,7 +45751,7 @@ export {
   HELP_TEXT,
   HELP_TRAILER,
   PolicyError,
-  SEVERITY_ORDER,
+  SEVERITY_ORDER2 as SEVERITY_ORDER,
   UsageError,
   artefactsFrom,
   assertSiteUrl,

@@ -57,6 +57,10 @@ injection). Defaults are read-only and deny-by-default.
   come from the CLI.
 - HTML reports embed data as escaped JSON, render via `textContent`/`createElement` only (no `innerHTML`),
   allow only `http(s)` links, and ship a restrictive Content-Security-Policy (no network access).
+- The MCP server (`searvex mcp`) is read-only: no tool writes to a repository (`optimize --apply` is not
+  exposed). Its network policy is fixed by the flags it was started with, so a tool call from a model cannot
+  reach private or local addresses unless the server was started with `--allow-private`. stdout carries only
+  JSON-RPC messages; logs go to stderr.
 
 ## Supply chain
 
