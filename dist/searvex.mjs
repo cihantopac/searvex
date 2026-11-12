@@ -5167,12 +5167,12 @@ var require_lib = __commonJS({
         const endOfInit = () => this.match(12) || this.match(8);
         switch (this.state.type) {
           case 135: {
-            const literal = this.parseNumericLiteral(this.state.value);
+            const literal2 = this.parseNumericLiteral(this.state.value);
             if (endOfInit()) {
               return {
                 type: "number",
-                loc: literal.loc.start,
-                value: literal
+                loc: literal2.loc.start,
+                value: literal2
               };
             }
             return {
@@ -5181,12 +5181,12 @@ var require_lib = __commonJS({
             };
           }
           case 134: {
-            const literal = this.parseStringLiteral(this.state.value);
+            const literal2 = this.parseStringLiteral(this.state.value);
             if (endOfInit()) {
               return {
                 type: "string",
-                loc: literal.loc.start,
-                value: literal
+                loc: literal2.loc.start,
+                value: literal2
               };
             }
             return {
@@ -5196,12 +5196,12 @@ var require_lib = __commonJS({
           }
           case 85:
           case 86: {
-            const literal = this.parseBooleanLiteral(this.match(85));
+            const literal2 = this.parseBooleanLiteral(this.match(85));
             if (endOfInit()) {
               return {
                 type: "boolean",
-                loc: literal.loc.start,
-                value: literal
+                loc: literal2.loc.start,
+                value: literal2
               };
             }
             return {
@@ -30450,6 +30450,16 @@ var VOID_ELEMENTS = /* @__PURE__ */ new Set([
 function parse6(html3, options) {
   return Parser2.parse(html3, options);
 }
+function parseFragment(fragmentContext, html3, options) {
+  if (typeof fragmentContext === "string") {
+    options = html3;
+    html3 = fragmentContext;
+    fragmentContext = null;
+  }
+  const parser2 = Parser2.getFragmentParser(fragmentContext, options);
+  parser2.tokenizer.write(html3, true);
+  return parser2.getFragment();
+}
 
 // node_modules/parse5-htmlparser2-tree-adapter/dist/index.js
 function enquoteDoctypeId(id) {
@@ -36425,16 +36435,16 @@ function classifyBusiness(ctx, byType, sd) {
     score[label] = (score[label] ?? 0) + pts;
     (why[label] ??= []).push(reason);
   };
-  const has3 = (t) => (sd.get(t)?.pages ?? 0) > 0;
+  const has4 = (t) => (sd.get(t)?.pages ?? 0) > 0;
   const n = (t) => byType[t] ?? 0;
   const linkPaths = /* @__PURE__ */ new Set();
   for (const p of ctx.htmlPages) for (const l of factsOf(p).links) if (l.url) linkPaths.add(new URL(l.url).pathname.toLowerCase() + " " + l.text.toLowerCase());
   const linked = (re) => [...linkPaths].some((x) => re.test(x));
-  if (has3("SoftwareApplication") || has3("WebApplication") || has3("MobileApplication")) add2("SaaS / software product", 5, "SoftwareApplication/WebApplication structured data");
+  if (has4("SoftwareApplication") || has4("WebApplication") || has4("MobileApplication")) add2("SaaS / software product", 5, "SoftwareApplication/WebApplication structured data");
   if (linked(/\/(login|signin|sign-in|register|signup|sign-up|giris|kayit|app)(\/|\s|$)/)) add2("SaaS / software product", 2, "login/sign-up links");
   if (n("pricing")) add2("SaaS / software product", 2, "pricing page");
   if (n("docs") >= 3 && score["SaaS / software product"]) add2("SaaS / software product", 1, `${n("docs")} docs/help pages`);
-  if (has3("Product") || has3("ProductGroup")) add2("e-commerce", 4, "Product structured data");
+  if (has4("Product") || has4("ProductGroup")) add2("e-commerce", 4, "Product structured data");
   if (n("product") >= 3) add2("e-commerce", 3, `${n("product")} product pages`);
   if (n("category") >= 2) add2("e-commerce", 1, `${n("category")} category pages`);
   if (linked(/\/(cart|basket|checkout|sepet|odeme)(\/|\s|$)/)) add2("e-commerce", 3, "cart/checkout links");
@@ -36443,9 +36453,9 @@ function classifyBusiness(ctx, byType, sd) {
   if (articles / pages > 0.5) add2("publisher / blog", 4, `${articles} of ${pages} pages are articles`);
   const articleSd = Math.max(sd.get("Article")?.pages ?? 0, sd.get("BlogPosting")?.pages ?? 0, sd.get("NewsArticle")?.pages ?? 0);
   if (articles / pages > 0.2 || articleSd / pages > 0.2) add2("publisher / blog", 2, `${Math.max(articles, articleSd)} article pages (${Math.round(Math.max(articles, articleSd) / pages * 100)}%)`);
-  if (has3("NewsArticle") || has3("BlogPosting")) add2("publisher / blog", 1, "Article structured data");
-  if (n("service") >= 2 || has3("Service") || has3("ProfessionalService")) add2("service business", 3, "service pages / Service structured data");
-  if (has3("LocalBusiness") || [...sd.keys()].some((t) => /Restaurant|Store|Dentist|Clinic|Hotel|Agency/.test(t))) add2("local business", 4, "LocalBusiness structured data");
+  if (has4("NewsArticle") || has4("BlogPosting")) add2("publisher / blog", 1, "Article structured data");
+  if (n("service") >= 2 || has4("Service") || has4("ProfessionalService")) add2("service business", 3, "service pages / Service structured data");
+  if (has4("LocalBusiness") || [...sd.keys()].some((t) => /Restaurant|Store|Dentist|Clinic|Hotel|Agency/.test(t))) add2("local business", 4, "LocalBusiness structured data");
   if (n("legal") + n("about") + n("careers") + n("contact") >= pages * 0.5) add2("content / corporate site", 2, "mostly company pages (about, careers, legal, contact)");
   add2("content / corporate site", 1, "default");
   const ranked = Object.entries(score).sort((a, b) => b[1] - a[1]);
@@ -41329,6 +41339,122 @@ function jsxAnchorsWithoutHref(program) {
   }).map((t) => t.line);
 }
 
+// src/repo/sfc.ts
+var HEAD_CALLS = /* @__PURE__ */ new Set(["useHead", "useSeoMeta", "useServerHead", "useServerSeoMeta", "definePageMeta"]);
+var literal = (n) => n && (n.type === "StringLiteral" || n.type === "TemplateLiteral") ? n.type === "StringLiteral" ? n["value"] : n["quasis"].map((q) => q["value"].cooked).join("") : null;
+function has3(obj, key) {
+  const v = prop2(obj, key);
+  if (v === null) return null;
+  if (v === void 0) return false;
+  const s = literal(v);
+  return s === null ? true : s.trim().length > 0;
+}
+function metaEntry(obj, name) {
+  const meta = prop2(obj, "meta");
+  if (!meta || meta.type !== "ArrayExpression") return null;
+  for (const e of meta["elements"]) if (e?.type === "ObjectExpression" && literal(prop2(e, "name") ?? null)?.toLowerCase() === name) return e;
+  return null;
+}
+var or = (a, b) => a === true || b === true ? true : a === null || b === null ? null : false;
+function scriptHeadMeta(code, file2) {
+  const program = parseSource(code, file2);
+  const out = { hasTitle: false, hasDescription: false, noindex: false, calls: 0 };
+  if (!program) return { hasTitle: null, hasDescription: null, noindex: false, calls: 0 };
+  walkAst(program, (n) => {
+    if (n.type !== "CallExpression") return;
+    const callee = n["callee"];
+    const name = callee.type === "Identifier" ? callee["name"] : null;
+    if (!name || !HEAD_CALLS.has(name)) return;
+    out.calls++;
+    const arg = n["arguments"][0];
+    if (!arg || arg.type !== "ObjectExpression") {
+      out.hasTitle = or(out.hasTitle, null);
+      out.hasDescription = or(out.hasDescription, null);
+      return;
+    }
+    out.hasTitle = or(out.hasTitle, or(has3(arg, "title"), has3(arg, "titleTemplate")));
+    const desc = metaEntry(arg, "description");
+    out.hasDescription = or(out.hasDescription, or(has3(arg, "description"), desc ? true : false));
+    const robots = literal(prop2(arg, "robots") ?? null) ?? literal(metaEntry(arg, "robots") ? prop2(metaEntry(arg, "robots"), "content") ?? null : null);
+    if (robots && /noindex/i.test(robots)) out.noindex = true;
+  });
+  return out;
+}
+function vueScripts(src) {
+  const out = [];
+  for (const m of src.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    const lang = /\blang\s*=\s*["']?(ts|tsx|js|jsx)/i.exec(m[1] ?? "")?.[1]?.toLowerCase() ?? "js";
+    out.push({ code: m[2] ?? "", lang });
+  }
+  return out;
+}
+function vuePageMeta(src) {
+  let meta = { hasTitle: false, hasDescription: false, noindex: false };
+  for (const s of vueScripts(src)) {
+    const m = scriptHeadMeta(s.code, `component.${s.lang === "js" ? "js" : s.lang}`);
+    meta = { hasTitle: or(meta.hasTitle, m.hasTitle), hasDescription: or(meta.hasDescription, m.hasDescription), noindex: meta.noindex || m.noindex };
+  }
+  const template = /<template\b[^>]*>([\s\S]*)<\/template>/i.exec(src)?.[1] ?? "";
+  if (/<Title\b/.test(template)) meta.hasTitle = true;
+  if (/<Meta\b[^>]*name\s*=\s*["']description["']/i.test(template)) meta.hasDescription = true;
+  if (/<Meta\b[^>]*name\s*=\s*["']robots["'][^>]*noindex/i.test(template)) meta.noindex = true;
+  return meta;
+}
+function astroPageMeta(src, file2) {
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(src);
+  const front = fm?.[1] ?? "";
+  const template = fm ? src.slice(fm[0].length) : src;
+  if (/\.mdx?$/i.test(file2)) {
+    return {
+      hasTitle: /^title\s*:\s*\S/m.test(front) || /<title\b/i.test(template),
+      hasDescription: /^description\s*:\s*\S/m.test(front),
+      noindex: /^(robots|noindex)\s*:.*(noindex|true)/m.test(front)
+    };
+  }
+  let hasTitle = false;
+  let hasDescription = false;
+  let noindex = false;
+  const root2 = parseFragment(template, { sourceCodeLocationInfo: true });
+  const visit = (n) => {
+    if (n.tagName) {
+      const at = n.sourceCodeLocation?.startOffset;
+      const component = at !== void 0 && /^<[A-Z]/.test(template.slice(at, at + 2));
+      const attrs = n.attrs ?? [];
+      const attr2 = (name) => attrs.find((a) => a.name === name || a.name === `:${name}`);
+      if (n.tagName === "title") hasTitle = true;
+      if (n.tagName === "meta") {
+        const name = attr2("name")?.value.toLowerCase();
+        if (name === "description") hasDescription = true;
+        if (name === "robots" && /noindex/i.test(attr2("content")?.value ?? "")) noindex = true;
+      }
+      if (component) {
+        if (attr2("title")) hasTitle = true;
+        if (attr2("description")) hasDescription = true;
+        if (attr2("noindex") || /noindex/i.test(attr2("robots")?.value ?? "")) noindex = true;
+        if (attrs.some((a) => a.name.startsWith("{..."))) {
+          hasTitle = hasTitle === true ? true : null;
+          hasDescription = hasDescription === true ? true : null;
+        }
+      }
+    }
+    for (const c of n.childNodes ?? []) visit(c);
+    if (n.content) visit(n.content);
+  };
+  visit(root2);
+  if (front) {
+    const program = parseSource(front, "frontmatter.ts");
+    if (program)
+      walkAst(program, (n) => {
+        if (n.type === "Identifier" && n["name"] === "Astro") return;
+        if (n.type === "ObjectProperty" && !n["computed"] && n["key"]?.type === "Identifier" && n["key"]["name"] === "noindex" && n["value"]?.type === "BooleanLiteral" && n["value"]["value"] === true) noindex = true;
+      });
+  }
+  return { hasTitle, hasDescription, noindex };
+}
+function bladeMarkup(src) {
+  return src.replace(/\{\{--[\s\S]*?--\}\}/g, "").replace(/@verbatim[\s\S]*?@endverbatim/g, "").replace(/@php\b[\s\S]*?@endphp/g, "").replace(/<!--[\s\S]*?-->/g, "");
+}
+
 // src/repo/scan.ts
 var PLACEHOLDER_ORIGIN = "https://site.invalid";
 var SOURCE_EXT = /\.(tsx|jsx|ts|js|mjs|vue|svelte|astro|mdx?|php|html?|twig|njk|liquid|hbs)$/i;
@@ -41667,10 +41793,9 @@ function scanApp(root2, appRoot, framework, files, read, sink, opts) {
       scanLayouts(layouts.length ? layouts : find4(appFiles, /\.astro$/).map((f) => f.rel).filter((f) => /<head/i.test(read(f))), read, sink, scan, { titleRe: /<title\b/i, langRe: /\blang\s*=/ });
       for (const p of find4(appFiles, /src\/pages\/.+\.(astro|md|mdx)$/)) {
         const route = "/" + p.rel.replace(/^.*src\/pages\//, "").replace(/\.(astro|mdx?)$/, "").replace(/(^|\/)index$/, "");
-        const src = read(p.rel);
-        const spread = /<[A-Z]\w*\s+[^>]*\{\s*\.\.\.[^}]+\}/.test(src);
-        const hasTitle = /<title\b/i.test(src) || /\btitle\s*=\s*[{"']/.test(src) || /^---[\s\S]*?\ntitle\s*:/m.test(src) ? true : spread ? null : false;
-        scan.routes.push({ route, file: p.rel, framework: "astro", dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: /description\s*[=:]/.test(src), noindex: /noindex/.test(src) });
+        const meta = astroPageMeta(read(p.rel), p.rel);
+        const hasTitle = meta.hasTitle;
+        scan.routes.push({ route, file: p.rel, framework: "astro", dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: meta.hasDescription, noindex: meta.noindex });
         if (hasTitle === false) sink.emit("title.missing", { file: p.rel, observed: `route ${route}: no title passed to layout and no <title>` });
       }
       const cfg = appFiles.find((f) => /astro\.config\.\w+$/.test(f.rel));
@@ -41685,15 +41810,17 @@ function scanApp(root2, appRoot, framework, files, read, sink, opts) {
       for (const p of find4(appFiles, /(^|\/)pages\/.+\.vue$/)) {
         const src = read(p.rel);
         const route = "/" + p.rel.replace(/^.*pages\//, "").replace(/\.vue$/, "").replace(/(^|\/)index$/, "");
-        const hasTitle = /useHead|useSeoMeta|definePageMeta\s*\(\s*\{[^}]*title/s.test(src) || /title\s*:/.test(cfgSrc);
-        scan.routes.push({ route, file: p.rel, framework: "nuxt", dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: /description/.test(src), noindex: /noindex/.test(src) });
-        if (!hasTitle) sink.emit("title.missing", { file: p.rel, observed: `route ${route}: no useHead/useSeoMeta title` });
+        const meta = vuePageMeta(src);
+        const hasTitle = meta.hasTitle === false && /title\s*:/.test(cfgSrc) ? true : meta.hasTitle;
+        scan.routes.push({ route, file: p.rel, framework: "nuxt", dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: meta.hasDescription, noindex: meta.noindex });
+        if (hasTitle === false) sink.emit("title.missing", { file: p.rel, observed: `route ${route}: no useHead/useSeoMeta title` });
       }
       break;
     }
     case "laravel": {
-      const layouts = find4(appFiles, /resources\/views\/.*\.blade\.php$/).map((f) => f.rel).filter((f) => !ADMIN_VIEWS.test(f) && /<head\b/i.test(read(f)));
-      scanLayouts(layouts, read, sink, scan, { titleRe: /<title\b/i, langRe: /\blang\s*=/ });
+      const blade = (f) => bladeMarkup(read(f));
+      const layouts = find4(appFiles, /resources\/views\/.*\.blade\.php$/).map((f) => f.rel).filter((f) => !ADMIN_VIEWS.test(f) && /<head\b/i.test(blade(f)));
+      scanLayouts(layouts, blade, sink, scan, { titleRe: /<title\b/i, langRe: /\blang\s*=/ });
       const routeFiles = appFiles.filter((f) => f.rel.startsWith(rel(appRoot, "routes") + "/") && /\.php$/.test(f.rel) && !/\/(api|console|channels)\.php$/.test(f.rel));
       for (const routes of routeFiles) {
         const src = read(routes.rel);
