@@ -1196,35 +1196,35 @@ var require_Robots = __commonJS({
       }
       return formattedUserAgent.trim();
     }
-    function normaliseEncoding(path24) {
+    function normaliseEncoding(path25) {
       try {
-        return urlEncodeToUpper(encodeURI(path24).replace(/%25/g, "%"));
+        return urlEncodeToUpper(encodeURI(path25).replace(/%25/g, "%"));
       } catch (e) {
-        return path24;
+        return path25;
       }
     }
-    function urlEncodeToUpper(path24) {
-      return path24.replace(/%[0-9a-fA-F]{2}/g, function(match) {
+    function urlEncodeToUpper(path25) {
+      return path25.replace(/%[0-9a-fA-F]{2}/g, function(match) {
         return match.toUpperCase();
       });
     }
-    function matches(pattern, path24) {
-      var matchingLengths = new Array(path24.length + 1);
+    function matches(pattern, path25) {
+      var matchingLengths = new Array(path25.length + 1);
       var numMatchingLengths = 1;
       matchingLengths[0] = 0;
       for (var p = 0; p < pattern.length; p++) {
         if (pattern[p] === "$" && p + 1 === pattern.length) {
-          return matchingLengths[numMatchingLengths - 1] === path24.length;
+          return matchingLengths[numMatchingLengths - 1] === path25.length;
         }
         if (pattern[p] == "*") {
-          numMatchingLengths = path24.length - matchingLengths[0] + 1;
+          numMatchingLengths = path25.length - matchingLengths[0] + 1;
           for (var i = 1; i < numMatchingLengths; i++) {
             matchingLengths[i] = matchingLengths[i - 1] + 1;
           }
         } else {
           var numMatches = 0;
           for (var i = 0; i < numMatchingLengths; i++) {
-            if (matchingLengths[i] < path24.length && path24[matchingLengths[i]] === pattern[p]) {
+            if (matchingLengths[i] < path25.length && path25[matchingLengths[i]] === pattern[p]) {
               matchingLengths[numMatches++] = matchingLengths[i] + 1;
             }
           }
@@ -1278,11 +1278,11 @@ var require_Robots = __commonJS({
         isNoneUserAgentState = line[0].toLowerCase() !== "user-agent";
       }
     }
-    function findRule(path24, rules) {
+    function findRule(path25, rules) {
       var matchedRule = null;
       for (var i = 0; i < rules.length; i++) {
         var rule = rules[i];
-        if (!matches(rule.pattern, path24)) {
+        if (!matches(rule.pattern, path25)) {
           continue;
         }
         if (!matchedRule || rule.pattern.length > matchedRule.pattern.length) {
@@ -1349,8 +1349,8 @@ var require_Robots = __commonJS({
         return;
       }
       var rules = this._rules[userAgent] || this._rules["*"] || [];
-      var path24 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
-      var rule = findRule(path24, rules);
+      var path25 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
+      var rule = findRule(path25, rules);
       return rule;
     };
     Robots.prototype.isAllowed = function(url, ua) {
@@ -16109,7 +16109,7 @@ var init_bing = __esm({
 
 // src/net/policy-proxy.ts
 import crypto8 from "node:crypto";
-import http7 from "node:http";
+import http8 from "node:http";
 import net2 from "node:net";
 async function startPolicyProxy(policy, opts = {}) {
   const maxBytes = opts.maxBytesPerWindow ?? 64 * 1024 * 1024;
@@ -16161,7 +16161,7 @@ Connection: close\r
       return null;
     }
   };
-  const server = http7.createServer((req, res) => {
+  const server = http8.createServer((req, res) => {
     stats.requests++;
     if (!authorized(req)) {
       res.writeHead(407, { "proxy-authenticate": 'Basic realm="searvex"', connection: "close" }).end();
@@ -16187,7 +16187,7 @@ Connection: close\r
       forward(via ? { agent: void 0, createConnection: () => via } : { lookup: guardedLookup(policy), agent: false });
     }).catch(fail);
     const forward = (connection) => {
-      const upstream = http7.request(
+      const upstream = http8.request(
         { host, port: port2, path: `${u.pathname}${u.search}`, method: req.method, headers, ...connection, timeout: idle },
         (up) => {
           const out = {};
@@ -16418,7 +16418,7 @@ var init_render = __esm({
 
 // src/cli.ts
 import fs16 from "node:fs";
-import path23 from "node:path";
+import path24 from "node:path";
 import { parseArgs } from "node:util";
 
 // src/crawl/crawler.ts
@@ -33083,16 +33083,16 @@ var MatcherView = class {
    * @returns {string|undefined}
    */
   getCurrentTag() {
-    const path24 = this._matcher.path;
-    return path24.length > 0 ? path24[path24.length - 1].tag : void 0;
+    const path25 = this._matcher.path;
+    return path25.length > 0 ? path25[path25.length - 1].tag : void 0;
   }
   /**
    * Get current namespace.
    * @returns {string|undefined}
    */
   getCurrentNamespace() {
-    const path24 = this._matcher.path;
-    return path24.length > 0 ? path24[path24.length - 1].namespace : void 0;
+    const path25 = this._matcher.path;
+    return path25.length > 0 ? path25[path25.length - 1].namespace : void 0;
   }
   /**
    * Get current node's attribute value.
@@ -33100,9 +33100,9 @@ var MatcherView = class {
    * @returns {*}
    */
   getAttrValue(attrName) {
-    const path24 = this._matcher.path;
-    if (path24.length === 0) return void 0;
-    return path24[path24.length - 1].values?.[attrName];
+    const path25 = this._matcher.path;
+    if (path25.length === 0) return void 0;
+    return path25[path25.length - 1].values?.[attrName];
   }
   /**
    * Check if current node has an attribute.
@@ -33110,9 +33110,9 @@ var MatcherView = class {
    * @returns {boolean}
    */
   hasAttr(attrName) {
-    const path24 = this._matcher.path;
-    if (path24.length === 0) return false;
-    const current2 = path24[path24.length - 1];
+    const path25 = this._matcher.path;
+    if (path25.length === 0) return false;
+    const current2 = path25[path25.length - 1];
     return current2.values !== void 0 && attrName in current2.values;
   }
   /**
@@ -33138,18 +33138,18 @@ var MatcherView = class {
    * @returns {number}
    */
   getPosition() {
-    const path24 = this._matcher.path;
-    if (path24.length === 0) return -1;
-    return path24[path24.length - 1].position ?? 0;
+    const path25 = this._matcher.path;
+    if (path25.length === 0) return -1;
+    return path25[path25.length - 1].position ?? 0;
   }
   /**
    * Get current node's repeat counter (occurrence count of this tag name).
    * @returns {number}
    */
   getCounter() {
-    const path24 = this._matcher.path;
-    if (path24.length === 0) return -1;
-    return path24[path24.length - 1].counter ?? 0;
+    const path25 = this._matcher.path;
+    if (path25.length === 0) return -1;
+    return path25[path25.length - 1].counter ?? 0;
   }
   /**
    * Get current node's sibling index (alias for getPosition).
@@ -36376,10 +36376,10 @@ function buildInventory(ctx) {
     if (!f || p.status !== 200 || p.redirects.length) continue;
     const types = /* @__PURE__ */ new Set();
     for (const b of f.jsonLd) for (const n of typedNodes(b.data)) for (const t of [].concat(n["@type"] ?? [])) if (typeof t === "string") types.add(t);
-    const path24 = new URL(p.finalUrl).pathname;
+    const path25 = new URL(p.finalUrl).pathname;
     let type = "other";
     let basis = "default";
-    if (p === ctx.homepage || path24 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path24)) {
+    if (p === ctx.homepage || path25 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path25)) {
       type = "home";
       basis = "url";
     } else {
@@ -36388,7 +36388,7 @@ function buildInventory(ctx) {
         type = s;
         basis = "schema";
       } else {
-        const r = URL_RULES.find(([re]) => re.test(path24));
+        const r = URL_RULES.find(([re]) => re.test(path25));
         if (r) {
           type = r[1];
           basis = "url";
@@ -36460,7 +36460,7 @@ function buildInventory(ctx) {
       pagesWithStructuredData: pagesWithSd,
       invalidJsonLdPages
     },
-    sections: [...sectionsMap.entries()].map(([path24, c]) => ({ path: path24, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
+    sections: [...sectionsMap.entries()].map(([path25, c]) => ({ path: path25, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
   };
 }
 function classifyBusiness(ctx, byType, sd) {
@@ -37201,8 +37201,8 @@ function runTechnicalChecks(ctx, sink) {
     const ttfb = p.ttfbMs ?? p.timingMs;
     if (ttfb > 800 && !p.redirects.length) sink.emit("perf.slow-ttfb", { url: p.url, observed: `TTFB ${ttfb} ms (single sample from the crawler's location; full response ${p.timingMs} ms)` });
     if (p.bytes > 10 * 1024 && !p.headers["content-encoding"]) sink.emit("perf.no-compression", { url: p.url, observed: `${Math.round(p.bytes / 1024)} KB uncompressed` });
-    const path24 = new URL(p.finalUrl).pathname;
-    if (path24.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
+    const path25 = new URL(p.finalUrl).pathname;
+    if (path25.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
     const declared = primaryTag(f.lang);
     if (declared && ["en", "tr", "de", "fr", "es", "it", "pt", "nl"].includes(declared) && !noindex) {
       const detected = detectLanguage(mainTextOf(ctx, f));
@@ -37310,11 +37310,11 @@ function checkFacetsAndPagination(ctx, sink) {
     const key = u.origin + u.pathname;
     (variants.get(key) ?? variants.set(key, /* @__PURE__ */ new Set()).get(key)).add(u.search);
   }
-  for (const [path24, set] of variants) {
+  for (const [path25, set] of variants) {
     if (set.size < 10) continue;
     const paramCount = /* @__PURE__ */ new Map();
     for (const q of set) for (const k of new URLSearchParams(q).keys()) if (!PAGE_PARAM.test(k)) paramCount.set(k, (paramCount.get(k) ?? 0) + 1);
-    const crawled = ctx.pages.filter((p) => p.url.startsWith(path24 + "?"));
+    const crawled = ctx.pages.filter((p) => p.url.startsWith(path25 + "?"));
     const blocked = crawled.filter((p) => p.blockedByRobots).length;
     const canonicalised = crawled.filter((p) => {
       const f = factsOf(p);
@@ -37322,7 +37322,7 @@ function checkFacetsAndPagination(ctx, sink) {
     }).length;
     const params = [...paramCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => `${k} (${n})`).join(", ");
     sink.emit("crawl.facet-explosion", {
-      url: path24,
+      url: path25,
       observed: `${set.size} parameter variants linked internally; parameters: ${params}; of ${crawled.length} crawled variants, ${blocked} robots-blocked, ${canonicalised} canonicalised elsewhere`
     });
   }
@@ -37340,13 +37340,13 @@ function checkFacetsAndPagination(ctx, sink) {
 // src/analyze/priority.ts
 var SEVERITY = { critical: 1, high: 0.7, medium: 0.4, low: 0.15, info: 0 };
 function urlPattern(urlOrPath) {
-  let path24;
+  let path25;
   try {
-    path24 = new URL(urlOrPath).pathname;
+    path25 = new URL(urlOrPath).pathname;
   } catch {
-    path24 = urlOrPath.startsWith("/") ? urlOrPath : "/" + urlOrPath;
+    path25 = urlOrPath.startsWith("/") ? urlOrPath : "/" + urlOrPath;
   }
-  const segs = path24.split("/").filter(Boolean);
+  const segs = path25.split("/").filter(Boolean);
   if (!segs.length) return "/";
   const out = [];
   if (/^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0])) out.push(segs.shift());
@@ -38368,10 +38368,10 @@ async function probeLocaleAdaptive(startUrl, opts, sink) {
 async function probeHostVariants(startUrl, opts, sink) {
   const u = new URL(startUrl);
   if (u.protocol === "https:") {
-    const http8 = new URL(startUrl);
-    http8.protocol = "http:";
-    const res2 = await safeFetch(http8.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
-    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http8.toString(), observed: "HTTP 200 without redirect to HTTPS" });
+    const http9 = new URL(startUrl);
+    http9.protocol = "http:";
+    const res2 = await safeFetch(http9.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
+    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http9.toString(), observed: "HTTP 200 without redirect to HTTPS" });
   }
   if (/^[\d.]+$/.test(u.hostname) || u.hostname === "localhost" || u.hostname.split(".").length < 2) return;
   const alt = new URL(startUrl);
@@ -40849,16 +40849,16 @@ function latestSearchData(root2, report) {
       return "";
     }
   };
-  let sameHost = null;
+  let sameHost2 = null;
   for (const id of RunStore.list(root2).reverse()) {
     const f = path8.join(root2, ".searvex", "runs", id, "search-performance.json");
     if (!fs7.existsSync(f)) continue;
     const s = new RunStore(root2, id).readJson("search-performance.json");
     if (!s?.audit) continue;
     if (s.audit.runId === report.runId) return s;
-    if (!sameHost && host(s.audit.target) === host(report.target)) sameHost = s;
+    if (!sameHost2 && host(s.audit.target) === host(report.target)) sameHost2 = s;
   }
-  return sameHost;
+  return sameHost2;
 }
 
 // src/commands/review.ts
@@ -43429,8 +43429,8 @@ async function bingReport(flags, key, api) {
   const norm4 = (u) => u.toLowerCase().replace(/\/+$/, "");
   const site = sites.find((s) => norm4(s.url) === norm4(siteUrl));
   if (!site?.verified) {
-    const hostOf2 = (u) => new URL(u).host;
-    const similar = sites.filter((s) => s.url && commonDomain([hostOf2(s.url), hostOf2(siteUrl)])).map((s) => s.url);
+    const hostOf3 = (u) => new URL(u).host;
+    const similar = sites.filter((s) => s.url && commonDomain([hostOf3(s.url), hostOf3(siteUrl)])).map((s) => s.url);
     throw new UsageError(`${siteUrl} is ${site ? "not verified" : "not a site"} in this Bing Webmaster account.${similar.length ? ` Did you mean: ${similar.join(", ")}?` : sites.length ? ` Sites: ${sites.map((s) => s.url).join(", ")}` : " The account has no sites."}`);
   }
   const days = num(v["days"], 28, 1, 480);
@@ -43579,8 +43579,269 @@ ${hint}`);
   throw new UsageError("psi subcommands: auth [--force] | status | logout");
 }
 
-// src/commands/research.ts
+// src/integrations/ga4.ts
+import http7 from "node:http";
+import https7 from "node:https";
+var GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
+var DATA = () => process.env["SEARVEX_GA4_DATA_API_BASE"] ?? "https://analyticsdata.googleapis.com/v1beta";
+var ADMIN = () => process.env["SEARVEX_GA4_ADMIN_API_BASE"] ?? "https://analyticsadmin.googleapis.com/v1beta";
+function request2(method, url, token, body) {
+  return new Promise((resolve, reject) => {
+    const payload = body === void 0 ? void 0 : JSON.stringify(body);
+    const req = (url.startsWith("https:") ? https7 : http7).request(
+      url,
+      { method, timeout: 6e4, headers: { authorization: `Bearer ${token}`, ...payload ? { "content-type": "application/json" } : {} } },
+      (r) => {
+        const chunks = [];
+        r.on("data", (c) => chunks.push(c));
+        r.on("end", () => {
+          const text4 = Buffer.concat(chunks).toString("utf8");
+          let json = {};
+          try {
+            json = JSON.parse(text4);
+          } catch {
+            json = { raw: text4.slice(0, 300) };
+          }
+          resolve({ status: r.statusCode ?? 0, json });
+        });
+      }
+    );
+    req.on("timeout", () => req.destroy(new Error("Google Analytics request timed out")));
+    req.on("error", reject);
+    req.end(payload);
+  });
+}
+function ga4ErrorMessage(status, json) {
+  const e = json["error"];
+  const reason = `${e?.status ?? ""} ${e?.message ?? String(json["raw"] ?? "")}`.trim().slice(0, 200);
+  if (status === 401) return 'Google rejected the access token. Run "searvex ga4 auth --client <file>" again.';
+  if (status === 403 && /has not been used|is disabled|SERVICE_DISABLED/i.test(reason)) return `The Google Analytics Data/Admin API is not enabled in the OAuth client's Google Cloud project (${reason}). Enable "Google Analytics Data API" and "Google Analytics Admin API" there.`;
+  if (status === 403) return `No access to this Google Analytics property with the authorized account (${reason}). List readable properties with "searvex ga4 properties".`;
+  if (status === 429) return "Google Analytics API quota reached for this property. Try again later.";
+  return `Google Analytics API HTTP ${status}: ${reason}`;
+}
+async function listGa4Properties(token) {
+  const out = [];
+  let pageToken = "";
+  for (let i = 0; i < 20; i++) {
+    const res = await request2("GET", `${ADMIN()}/accountSummaries?pageSize=200${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`, token);
+    if (res.status !== 200) throw new Error(ga4ErrorMessage(res.status, res.json));
+    for (const a of res.json["accountSummaries"] ?? [])
+      for (const p of a.propertySummaries ?? []) if (p.property) out.push({ id: p.property.replace(/^properties\//, ""), name: p.displayName ?? "", account: a.displayName ?? "" });
+    pageToken = String(res.json["nextPageToken"] ?? "");
+    if (!pageToken) break;
+  }
+  return out;
+}
+async function ga4LandingPages(token, propertyId, days, maxRows = 1e3) {
+  if (!/^\d+$/.test(propertyId)) throw new Error(`Not a GA4 property id: ${propertyId} (expected digits, e.g. 123456789; see "searvex ga4 properties")`);
+  const { startDate, endDate } = dateRange(days);
+  const res = await request2("POST", `${DATA()}/properties/${propertyId}:runReport`, token, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: "hostName" }, { name: "landingPage" }],
+    metrics: [{ name: "sessions" }, { name: "engagedSessions" }, { name: "keyEvents" }],
+    dimensionFilter: { filter: { fieldName: "sessionDefaultChannelGroup", stringFilter: { value: "Organic Search" } } },
+    orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+    limit: String(maxRows)
+  });
+  if (res.status !== 200) throw new Error(ga4ErrorMessage(res.status, res.json));
+  const rows = (res.json["rows"] ?? []).map((r) => {
+    const d = r.dimensionValues ?? [];
+    const m = r.metricValues ?? [];
+    const num2 = (i) => Number(m[i]?.value ?? 0) || 0;
+    return { host: (d[0]?.value ?? "").toLowerCase(), path: d[1]?.value ?? "", sessions: num2(0), engagedSessions: num2(1), keyEvents: num2(2) };
+  });
+  return { rows, rowCount: Number(res.json["rowCount"] ?? rows.length) || rows.length, startDate, endDate };
+}
+
+// src/commands/ga4.ts
 import path20 from "node:path";
+async function ga4Token() {
+  if (process.env["SEARVEX_GA4_TOKEN"]) return process.env["SEARVEX_GA4_TOKEN"];
+  const cred = getCredential("ga4");
+  if (!cred) throw new UsageError('No Google Analytics authorization: run "searvex ga4 auth --client <client_secret.json>" (or set SEARVEX_GA4_TOKEN).');
+  return accessToken(cred);
+}
+var hostOf = (u) => {
+  try {
+    return new URL(u).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+};
+var sameHost = (a, b) => a.replace(/^www\./, "") === b.replace(/^www\./, "");
+function newestWebsiteAudit2(workspace, ref) {
+  const ids = ref === "latest" ? [...RunStore.list(workspace)].reverse() : [ref];
+  for (const id of ids) {
+    const audit = new RunStore(workspace, id).readJson("report.json");
+    if (audit?.mode === "website") return { runId: id, audit };
+  }
+  throw new UsageError(ref === "latest" ? `No website audit in ${workspace}. Run "searvex audit <url>" first.` : `No website audit report found for --audit ${ref}`);
+}
+function buildGa4Report(rows, meta, sel) {
+  const sum = (k, rs) => rs.reduce((a, r) => a + r[k], 0);
+  const report = {
+    source: `Google Analytics 4 property ${meta.propertyId} (Organic Search sessions)`,
+    propertyId: meta.propertyId,
+    period: { days: meta.days, startDate: meta.startDate, endDate: meta.endDate },
+    landingPages: meta.rowCount,
+    totals: { sessions: sum("sessions", rows), engagedSessions: sum("engagedSessions", rows), keyEvents: sum("keyEvents", rows) },
+    pages: rows.map((r) => ({ url: `https://${r.host}${r.path.startsWith("/") ? r.path : `/${r.path}`}`, sessions: r.sessions, engagedSessions: r.engagedSessions, keyEvents: r.keyEvents })),
+    notes: [
+      'Sessions are GA4 sessions whose default channel group is "Organic Search" (all search engines). They count visits that GA4 recorded, so consent banners, blockers and tagging gaps lower them; they are not Search Console clicks.',
+      "Landing pages are paths without query strings (GA4 landingPage); URLs are shown with https://."
+    ]
+  };
+  if (meta.rowCount > rows.length) report.notes.push(`Only the top ${rows.length} of ${meta.rowCount} landing pages by sessions are listed (--max-rows).`);
+  if (sel) {
+    const host = hostOf(sel.audit.target);
+    const onHost = rows.filter((r) => sameHost(r.host, host));
+    const pathKey = (u) => {
+      try {
+        const x = new URL(normalizeUrl(u) ?? u);
+        return x.pathname.replace(/\/+$/, "") || "/";
+      } catch {
+        return u;
+      }
+    };
+    const traffic = /* @__PURE__ */ new Map();
+    for (const r of onHost) {
+      const k = r.path.replace(/\/+$/, "") || "/";
+      const e = traffic.get(k);
+      traffic.set(k, e ? { ...e, sessions: e.sessions + r.sessions, engagedSessions: e.engagedSessions + r.engagedSessions, keyEvents: e.keyEvents + r.keyEvents } : r);
+    }
+    const issues = /* @__PURE__ */ new Map();
+    for (const f of sel.audit.findings) {
+      if (f.severity === "info") continue;
+      for (const u of f.affected?.urls ?? f.evidence.map((e) => e.url).filter((x) => !!x)) (issues.get(pathKey(u)) ?? issues.set(pathKey(u), /* @__PURE__ */ new Set()).get(pathKey(u))).add(f.ruleId);
+    }
+    const indexable = sel.audit.inventory.pages.filter((p) => p.indexable);
+    const crawled = new Map(indexable.map((p) => [pathKey(p.url), p.url]));
+    report.audit = {
+      runId: sel.runId,
+      target: sel.audit.target,
+      host,
+      issuesOnTrafficPages: [...traffic.entries()].filter(([k]) => crawled.has(k) && issues.has(k)).map(([k, r]) => ({ url: crawled.get(k), sessions: r.sessions, keyEvents: r.keyEvents, issues: [...issues.get(k)].sort() })).sort((a, b) => b.sessions - a.sessions),
+      indexableWithoutSessions: indexable.filter((p) => !traffic.has(pathKey(p.url))).length,
+      indexablePages: indexable.length
+    };
+    if (!onHost.length) report.notes.push(`No organic landing page in this property is on ${host}: check that the property measures this site.`);
+    if (meta.rowCount > rows.length) report.notes.push('Pages beyond --max-rows count as "without sessions" in the audit join.');
+  }
+  return report;
+}
+function renderGa4Markdown(r) {
+  const L = [`# GA4 organic landing pages \u2014 property ${md(r.propertyId)}`, "", `_Experimental: not yet verified against a live property. ${md(r.period.startDate)} \u2013 ${md(r.period.endDate)} (${r.period.days} days)._`, ""];
+  L.push(`Organic Search sessions: **${r.totals.sessions}** (engaged ${r.totals.engagedSessions}, key events ${r.totals.keyEvents}) on ${r.landingPages} landing page(s).`, "");
+  if (r.pages.length) {
+    L.push("| Landing page | Sessions | Engaged | Key events |", "|---|---|---|---|");
+    for (const p of r.pages.slice(0, 50)) L.push(`| ${md(p.url)} | ${p.sessions} | ${p.engagedSessions} | ${p.keyEvents} |`);
+    L.push("");
+  }
+  if (r.audit) {
+    L.push(`## Joined audit ${md(r.audit.runId)} (${md(r.audit.target)})`, "");
+    L.push(`Indexable crawled pages without organic sessions in this period: ${r.audit.indexableWithoutSessions} of ${r.audit.indexablePages}.`, "");
+    if (r.audit.issuesOnTrafficPages.length) {
+      L.push("Pages with organic traffic and open audit issues (fix these first):", "", "| Page | Sessions | Key events | Issues |", "|---|---|---|---|");
+      for (const p of r.audit.issuesOnTrafficPages.slice(0, 30)) L.push(`| ${md(p.url)} | ${p.sessions} | ${p.keyEvents} | ${p.issues.map((i) => `\`${i}\``).join(", ")} |`);
+      L.push("");
+    }
+  }
+  L.push("## Notes", "", ...r.notes.map((n) => `- ${md(n)}`), "");
+  return L.join("\n");
+}
+async function commandGa4(flags) {
+  const v = flags.values;
+  const sub = flags.positionals[1];
+  const usage = "ga4 subcommands: auth --client <file> [--force] | status | properties | report <propertyId> [--days 28] [--audit latest|<runId>] [--max-rows 1000] | logout";
+  if (sub === "auth") {
+    if (process.env["CI"]) throw new UsageError("ga4 auth is interactive (browser consent) and is disabled in CI. Use SEARVEX_GA4_TOKEN there.");
+    const existing = getCredential("ga4");
+    if (existing && !v["force"]) {
+      console.log(`Already authorized for Google Analytics (since ${existing.createdAt}). Use --force to authorize again, or "ga4 logout".`);
+      return 0;
+    }
+    const clientFile = v["client"];
+    if (!clientFile) throw new UsageError('ga4 auth requires --client <client_secret.json> (the same kind of "Desktop app" OAuth client as gsc auth; enable the Google Analytics Data and Admin APIs in its project).');
+    let client;
+    try {
+      client = loadClientFile(clientFile);
+    } catch (e) {
+      if (e instanceof OAuthClientFileError) throw new UsageError(e.message);
+      throw e;
+    }
+    const cred = await authorize(client, GA4_SCOPE, (url) => {
+      const opened = !v["no-browser"] && process.stdout.isTTY && openBrowser(url);
+      console.log(opened ? "\nOpened your browser. If it did not open, visit this URL and approve read-only Google Analytics access:\n" : "\nOpen this URL in your browser and approve read-only Google Analytics access:\n");
+      console.log(url + "\n");
+      console.log("Waiting for Google to redirect back to http://127.0.0.1 \u2026 (Ctrl+C to cancel; times out after 5 minutes)");
+    });
+    saveCredential("ga4", cred);
+    console.log(`Authorized (scope: ${cred.scope}). Refresh token stored in ${defaultCredentialStore().describe()}. Google Analytics is experimental in Searvex.`);
+    return 0;
+  }
+  if (sub === "logout") {
+    const cred = getCredential("ga4");
+    const revoked = cred ? await revokeToken(cred.refreshToken).catch(() => false) : false;
+    const removed = deleteCredential("ga4");
+    console.log(removed ? `Removed the Google Analytics authorization${revoked ? " and revoked it at Google" : " (revocation at Google failed; remove access at myaccount.google.com/permissions)"}.` : "No stored Google Analytics authorization.");
+    return 0;
+  }
+  if (sub === "status" || sub === "properties") {
+    const cred = getCredential("ga4");
+    if (!cred && !process.env["SEARVEX_GA4_TOKEN"]) {
+      const hint = 'No Google Analytics authorization: run "searvex ga4 auth --client <client_secret.json>".';
+      if (v["json"]) process.stdout.write(JSON.stringify({ credential: "none", valid: false, hint }, null, 2) + "\n");
+      else console.log(`credential: none
+${hint}`);
+      return 1;
+    }
+    let props;
+    try {
+      props = await listGa4Properties(await ga4Token());
+    } catch (e) {
+      const status2 = { credential: cred ? "stored" : "SEARVEX_GA4_TOKEN", valid: false, error: e.message };
+      if (v["json"]) process.stdout.write(JSON.stringify(status2, null, 2) + "\n");
+      else for (const [n, x] of Object.entries(status2)) console.log(`${n}: ${String(x)}`);
+      return 1;
+    }
+    if (sub === "properties") {
+      if (v["json"]) process.stdout.write(JSON.stringify(props, null, 2) + "\n");
+      else for (const p of props) console.log(`${p.id}	${p.name}	(${p.account})`);
+      return 0;
+    }
+    const status = { credential: cred ? "stored" : "SEARVEX_GA4_TOKEN", valid: true, properties: props.length, experimental: true };
+    if (v["json"]) process.stdout.write(JSON.stringify(status, null, 2) + "\n");
+    else for (const [n, x] of Object.entries(status)) console.log(`${n}: ${String(x)}`);
+    return 0;
+  }
+  if (sub !== "report") throw new UsageError(usage);
+  const propertyId = flags.positionals[2];
+  if (!propertyId) throw new UsageError('ga4 report requires a property id (digits; list them with "searvex ga4 properties")');
+  const days = num(v["days"], 28, 1, 400);
+  const maxRows = num(v["max-rows"], 1e3, 1, 1e5);
+  const workspace = path20.resolve(String(v["out"] ?? process.cwd()));
+  const sel = v["audit"] ? newestWebsiteAudit2(workspace, String(v["audit"])) : void 0;
+  const token = await ga4Token();
+  log(v, `Reading Organic Search landing pages of GA4 property ${propertyId} (${days} days)\u2026`);
+  const res = await ga4LandingPages(token, propertyId, days, maxRows);
+  const report = buildGa4Report(res.rows, { propertyId, days, startDate: res.startDate, endDate: res.endDate, rowCount: res.rowCount }, sel);
+  const store2 = new RunStore(workspace, RunStore.newRunId("ga4"));
+  store2.writeJson("meta.json", { kind: "ga4", propertyId, days, audit: sel?.runId, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
+  store2.writeJson("ga4-report.json", report);
+  const out = store2.writeText("ga4-report.md", renderGa4Markdown(report));
+  if (v["json"]) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+  else if (!v["quiet"]) {
+    console.log(`
+GA4 property ${propertyId} \xB7 ${report.totals.sessions} organic sessions on ${report.landingPages} landing page(s) \xB7 experimental`);
+    if (report.audit) console.log(`Joined ${report.audit.runId}: ${report.audit.issuesOnTrafficPages.length} page(s) with traffic and open issues; ${report.audit.indexableWithoutSessions} of ${report.audit.indexablePages} indexable pages without organic sessions.`);
+    console.log(`Report: ${out}`);
+  }
+  return 0;
+}
+
+// src/commands/research.ts
+import path21 from "node:path";
 function profile(r) {
   return {
     url: r.target,
@@ -43680,7 +43941,7 @@ async function commandResearch(flags) {
   if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
   for (const c of competitors) if (!/^https?:\/\//i.test(c)) throw new UsageError(`Invalid competitor URL: ${c}`);
   const kb = loadKnowledge();
-  const workspace = path20.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path21.resolve(String(v["out"] ?? process.cwd()));
   const store2 = new RunStore(workspace, RunStore.newRunId("research"));
   const perSite = num(v["max-pages"], 150, 1, 1e5);
   const base = { ...crawlOptionsFrom(v), siteUrl: void 0, maxPages: perSite };
@@ -43717,7 +43978,7 @@ async function commandResearch(flags) {
 
 // src/commands/run.ts
 import fs14 from "node:fs";
-import path21 from "node:path";
+import path22 from "node:path";
 var top = (r, n = 5) => r.findings.filter((f) => f.severity !== "info").slice(0, n);
 function renderRunSummary(s) {
   const L = ["# Searvex run summary", ""];
@@ -43785,7 +44046,7 @@ async function runWorkflow(flags, stop) {
   if (competitors.length && !url) throw new UsageError("--competitor requires a website URL");
   if (v["fail-on"] !== void 0) failOnIndex(v["fail-on"]);
   const kb = loadKnowledge();
-  const workspace = path21.resolve(String(v["out"] ?? (repo ?? process.cwd())));
+  const workspace = path22.resolve(String(v["out"] ?? (repo ?? process.cwd())));
   const opts = crawlOptionsFrom(v);
   const summary = { steps: [] };
   const step = (n, name, status, note) => {
@@ -43907,17 +44168,17 @@ Fix plan (dry run, nothing changed): ${summary.plan.fixes.length} automatic fix(
 
 // src/commands/ecosystem.ts
 import fs15 from "node:fs";
-import path22 from "node:path";
-var hostOf = (u) => new URL(u).hostname.replace(/^www\./, "");
+import path23 from "node:path";
+var hostOf2 = (u) => new URL(u).hostname.replace(/^www\./, "");
 var norm3 = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 function snapshot(report, pages) {
-  const host = hostOf(report.target);
+  const host = hostOf2(report.target);
   const outbound = {};
   for (const p of pages) {
     if (p.status !== 200 || p.redirects.length || !p.data) continue;
     for (const l of (p.rendered ?? p.data).links) {
       if (!l.url || l.internal) continue;
-      const h = hostOf(l.url);
+      const h = hostOf2(l.url);
       if (h !== host) outbound[h] = (outbound[h] ?? 0) + 1;
     }
   }
@@ -43960,13 +44221,13 @@ function analyzeEcosystem(snaps) {
   for (const s of snaps) for (const n of [...s.siteNames, ...s.orgNames]) if (!nameToHost.has(norm3(n))) nameToHost.set(norm3(n), s.host);
   for (const s of snaps) {
     for (const p of s.parents) {
-      const parentHost = p.url ? hostOf(p.url) : nameToHost.get(norm3(p.name));
+      const parentHost = p.url ? hostOf2(p.url) : nameToHost.get(norm3(p.name));
       const parent2 = snaps.find((x) => x.host === parentHost);
       if (!parent2) continue;
       if (!parent2.orgNames.some((n) => norm3(n) === norm3(p.name))) {
         obs.push({ kind: "entity", confidence: "verified", sites: [s.host, parent2.host], message: `${s.host} names its parent "${p.name}", but ${parent2.host} declares its organisation as ${parent2.orgNames.map((n) => `"${n}"`).join(", ") || "(none)"}.`, recommendation: "Use the same organisation name and URL on both sites." });
       }
-      const declared = parent2.children.some((c) => c.url && hostOf(c.url) === s.host || s.siteNames.concat(s.orgNames).some((n) => norm3(n) === norm3(c.name)));
+      const declared = parent2.children.some((c) => c.url && hostOf2(c.url) === s.host || s.siteNames.concat(s.orgNames).some((n) => norm3(n) === norm3(c.name)));
       if (!declared) {
         obs.push({ kind: "entity", confidence: "verified", sites: [parent2.host, s.host], message: `${s.host} declares parentOrganization "${p.name}", but ${parent2.host} does not reference ${s.siteNames[0] ?? s.host} in its structured data (subOrganization / brand / owns).`, recommendation: `On ${parent2.host}, describe the relationship from the parent side too (schema.org subOrganization or brand on the Organization node), using names and URLs that match the product sites. This makes the family explicit to search engines and AI systems; it is not a rich-result feature.` });
       }
@@ -43975,7 +44236,7 @@ function analyzeEcosystem(snaps) {
     else {
       const own = s.orgNames.filter((n) => s.siteNames.some((sn) => norm3(sn) === norm3(n)));
       const parentNames = new Set(s.parents.flatMap((p) => {
-        const ph = p.url ? hostOf(p.url) : nameToHost.get(norm3(p.name));
+        const ph = p.url ? hostOf2(p.url) : nameToHost.get(norm3(p.name));
         return [norm3(p.name), ...(snaps.find((x) => x.host === ph)?.orgNames ?? []).map(norm3)];
       }));
       const other = s.orgNames.filter((n) => !own.includes(n) && !parentNames.has(norm3(n)));
@@ -43987,7 +44248,7 @@ function analyzeEcosystem(snaps) {
     links[s.host] = {};
     for (const h of hosts) if (h !== s.host) links[s.host][h] = s.outbound[h] ?? 0;
   }
-  const parentHosts = new Set(snaps.flatMap((s) => s.parents.map((p) => p.url ? hostOf(p.url) : nameToHost.get(norm3(p.name))).filter((x) => !!x)));
+  const parentHosts = new Set(snaps.flatMap((s) => s.parents.map((p) => p.url ? hostOf2(p.url) : nameToHost.get(norm3(p.name))).filter((x) => !!x)));
   for (const ph of parentHosts) {
     const parent2 = snaps.find((s) => s.host === ph);
     if (!parent2) continue;
@@ -44086,7 +44347,7 @@ function reuseLatest(workspace, url) {
   for (const id of RunStore.list(workspace).reverse()) {
     const store2 = new RunStore(workspace, id);
     const report = store2.readJson("report.json");
-    if (report?.mode === "website" && hostOf(report.target) === hostOf(target)) {
+    if (report?.mode === "website" && hostOf2(report.target) === hostOf2(target)) {
       const pages = store2.readLines("pages.jsonl");
       if (pages.length) return { report, pages };
     }
@@ -44100,7 +44361,7 @@ async function commandEcosystem(flags) {
   if (urls.length > 20) throw new UsageError("At most 20 sites");
   for (const u of urls) if (!/^https?:\/\//i.test(u)) throw new UsageError(`Invalid URL: ${u}`);
   const kb = loadKnowledge();
-  const workspace = path22.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path23.resolve(String(v["out"] ?? process.cwd()));
   const opts = { ...crawlOptionsFrom(v), siteUrl: void 0, maxPages: num(v["max-pages"], 60, 1, 1e5) };
   const snaps = new Array(urls.length);
   let next2 = 0;
@@ -44169,6 +44430,10 @@ Commands
   psi <auth|status|logout>
                         PageSpeed Insights API key for Lighthouse lab data with --lab (hidden input, stored in
                         the credential store)
+  ga4 <auth|status|properties|report|logout>
+                        Google Analytics 4 (read-only OAuth, same Desktop client as gsc): "ga4 report <propertyId>
+                        [--audit latest]" lists Organic Search landing pages and the audit's issues on pages with
+                        traffic (experimental: not yet verified against a live property)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and
@@ -44246,6 +44511,7 @@ Command options
 Environment (all optional, read-only integrations)
   SEARVEX_CRUX_API_KEY  Chrome UX Report API key (instead of "searvex crux auth")
   SEARVEX_PSI_API_KEY   PageSpeed Insights API key for --lab (instead of "searvex psi auth")
+  SEARVEX_GA4_TOKEN     OAuth access token (analytics.readonly); alternative to "searvex ga4 auth"
   SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
   SEARVEX_BING_API_KEY  Bing Webmaster Tools API key (instead of "searvex bing auth")
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
@@ -44583,12 +44849,12 @@ function pagesLabel(report) {
 function withReportFiles(L, files) {
   const html3 = files.find((f) => f.endsWith(".html"));
   if (html3) {
-    const ws = path23.resolve(html3, "..", "..", "..", "..");
+    const ws = path24.resolve(html3, "..", "..", "..", "..");
     L.push(`
-Open the report: ${pathToFileURL(html3).href}`, `  (or run: searvex open ${path23.basename(path23.dirname(html3))}${ws === process.cwd() ? "" : ` --out "${ws}"`})`);
+Open the report: ${pathToFileURL(html3).href}`, `  (or run: searvex open ${path24.basename(path24.dirname(html3))}${ws === process.cwd() ? "" : ` --out "${ws}"`})`);
   }
   const others = files.filter((f) => f !== html3);
-  if (others.length) L.push(`Other files: ${others.map((f) => path23.basename(f)).join(", ")} in ${path23.dirname(others[0])}`);
+  if (others.length) L.push(`Other files: ${others.map((f) => path24.basename(f)).join(", ")} in ${path24.dirname(others[0])}`);
   return L.join("\n");
 }
 function labOptions(v) {
@@ -44612,7 +44878,7 @@ async function commandAudit(flags) {
   if (v["fail-on"] !== void 0) failOnIndex(v["fail-on"]);
   const lab = labOptions(v);
   const kb = loadKnowledge();
-  const workspace = path23.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path24.resolve(String(v["out"] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
   const stop = interrupter(v);
   let render3;
@@ -44663,7 +44929,7 @@ async function commandGeo(flags) {
   const opts = crawlOptionsFrom({ ...v, "max-pages": v["max-pages"] ?? "50" });
   suggestPreLaunch(v, target);
   const stop = interrupter(v);
-  const { report, store: store2 } = await auditWebsite(target, { workspace: path23.resolve(String(v["out"] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal, onProgress: crawlProgress(v) }, onPhase: phaseProgress, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
+  const { report, store: store2 } = await auditWebsite(target, { workspace: path24.resolve(String(v["out"] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal, onProgress: crawlProgress(v) }, onPhase: phaseProgress, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
   assertTargetAllowed(report);
   reportInterrupted(report, !!v["json"]);
   const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
@@ -44765,9 +45031,9 @@ ${results.length} sources: ${attention.length} need review${v["update"] ? "; sna
 }
 async function commandReport(flags) {
   const v = flags.values;
-  const workspace = path23.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path24.resolve(String(v["out"] ?? process.cwd()));
   let id = flags.positionals[1] ?? "latest";
-  if (id === "latest") id = RunStore.list(workspace).filter((r) => fs16.existsSync(path23.join(workspace, ".searvex", "runs", r, "report.json"))).at(-1) ?? "";
+  if (id === "latest") id = RunStore.list(workspace).filter((r) => fs16.existsSync(path24.join(workspace, ".searvex", "runs", r, "report.json"))).at(-1) ?? "";
   if (!id) throw new UsageError("No stored runs found");
   const store2 = new RunStore(workspace, id);
   const report = store2.readJson("report.json");
@@ -44779,7 +45045,7 @@ async function commandReport(flags) {
 }
 function commandPrompt(flags) {
   const v = flags.values;
-  const workspace = path23.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path24.resolve(String(v["out"] ?? process.cwd()));
   const store2 = new RunStore(workspace, resolveRun(workspace, flags.positionals[1]));
   const report = store2.readJson("report.json");
   const lang = String(v["lang"] ?? "en");
@@ -44799,14 +45065,14 @@ function commandPrompt(flags) {
 function commandSchema(flags) {
   const name = flags.positionals[1] ?? "report";
   if (!["report", "events", "error"].includes(name)) throw new UsageError(`Unknown schema: ${name} (report, events or error)`);
-  const here = path23.dirname(fileURLToPath2(import.meta.url));
-  const file2 = [path23.resolve(here, "..", "schema", `${name}.schema.json`), path23.resolve(here, "..", "..", "schema", `${name}.schema.json`)].find((f) => fs16.existsSync(f));
+  const here = path24.dirname(fileURLToPath2(import.meta.url));
+  const file2 = [path24.resolve(here, "..", "schema", `${name}.schema.json`), path24.resolve(here, "..", "..", "schema", `${name}.schema.json`)].find((f) => fs16.existsSync(f));
   if (!file2) throw new Error(`schema/${name}.schema.json is missing from this installation`);
   process.stdout.write(fs16.readFileSync(file2, "utf8"));
   return EXIT.ok;
 }
 function commandRuns(flags) {
-  const workspace = path23.resolve(String(flags.values["out"] ?? process.cwd()));
+  const workspace = path24.resolve(String(flags.values["out"] ?? process.cwd()));
   for (const id of RunStore.list(workspace)) {
     const meta = new RunStore(workspace, id).readJson("meta.json");
     console.log(`${id}  ${meta?.kind ?? ""}  ${meta?.startUrl ?? meta?.target ?? ""}`);
@@ -44857,6 +45123,8 @@ async function runCommand(cmd, flags) {
         return await commandCrux(flags);
       case "psi":
         return await commandPsi(flags);
+      case "ga4":
+        return await commandGa4(flags);
       case "connect":
         return await commandConnect(flags);
       case "audit":
@@ -44900,8 +45168,8 @@ async function runCommand(cmd, flags) {
     return EXIT.runtime;
   }
 }
-var invoked = process.argv[1] ? path23.resolve(process.argv[1]) : "";
-if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path23.sep}searvex`))) {
+var invoked = process.argv[1] ? path24.resolve(process.argv[1]) : "";
+if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path24.sep}searvex`))) {
   main().then((code) => {
     process.exitCode = code;
   });

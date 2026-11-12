@@ -27,6 +27,7 @@ import { commandOptimize, commandRollback } from './commands/optimize.js';
 import { commandMonitor } from './commands/monitor.js';
 import { commandCrux, cruxKey } from './commands/crux.js';
 import { commandPsi, psiKey } from './commands/psi.js';
+import { commandGa4 } from './commands/ga4.js';
 import { LAB_DEFAULT_SAMPLES } from './analyze/lab.js';
 import { commandResearch } from './commands/research.js';
 import { commandRun } from './commands/run.js';
@@ -65,6 +66,10 @@ Commands
   psi <auth|status|logout>
                         PageSpeed Insights API key for Lighthouse lab data with --lab (hidden input, stored in
                         the credential store)
+  ga4 <auth|status|properties|report|logout>
+                        Google Analytics 4 (read-only OAuth, same Desktop client as gsc): "ga4 report <propertyId>
+                        [--audit latest]" lists Organic Search landing pages and the audit's issues on pages with
+                        traffic (experimental: not yet verified against a live property)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and
@@ -142,6 +147,7 @@ Command options
 Environment (all optional, read-only integrations)
   SEARVEX_CRUX_API_KEY  Chrome UX Report API key (instead of "searvex crux auth")
   SEARVEX_PSI_API_KEY   PageSpeed Insights API key for --lab (instead of "searvex psi auth")
+  SEARVEX_GA4_TOKEN     OAuth access token (analytics.readonly); alternative to "searvex ga4 auth"
   SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
   SEARVEX_BING_API_KEY  Bing Webmaster Tools API key (instead of "searvex bing auth")
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
@@ -843,6 +849,8 @@ async function runCommand(cmd: string, flags: GlobalFlags): Promise<number> {
         return await commandCrux(flags);
       case 'psi':
         return await commandPsi(flags);
+      case 'ga4':
+        return await commandGa4(flags);
       case 'connect':
         return await commandConnect(flags);
       case 'audit':
