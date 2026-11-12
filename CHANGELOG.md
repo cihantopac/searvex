@@ -48,6 +48,11 @@ All notable changes to this project are documented here. The format follows
   theme.json + templates, no `header.php`) are detected; a post title block without `"level":1` in
   `templates/single.html` / `page.html` is reported as a missing `<h1>`. `optimize` writes sitemaps and robots.txt
   to `static/` (SvelteKit) and `public/` (Remix) and gives canonical hints for both.
+- Lighthouse lab data (`--lab`, `--lab-samples`; experimental until verified against the live API): one PageSpeed Insights run (mobile) per sampled URL template,
+  the homepage and the largest templates first, stored as `labData` in `report.json` (schema 1.1) and as a
+  "Lab data" table in `report.md`. A score below 50 is reported as `perf.lab-poor` (new rule); lab values are
+  never Core Web Vitals pass/fail. The key is stored with `searvex psi auth|status|logout` or read from
+  `SEARVEX_PSI_API_KEY`; local and private hosts are skipped (Google fetches the pages).
 
 ### Changed
 - Disk-backed page texts: a crawl with a run directory writes each page's main text to `texts.txt` and keeps

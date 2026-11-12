@@ -60,6 +60,7 @@ export const OFFICIAL_DOMAINS = [
   'search.google.com',
   'blog.google',
   'web.dev',
+  'developer.chrome.com',
   'www.bing.com',
   'blogs.bing.com',
   'learn.microsoft.com',

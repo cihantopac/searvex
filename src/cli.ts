@@ -26,6 +26,8 @@ import { commandRepo } from './commands/repo.js';
 import { commandOptimize, commandRollback } from './commands/optimize.js';
 import { commandMonitor } from './commands/monitor.js';
 import { commandCrux, cruxKey } from './commands/crux.js';
+import { commandPsi, psiKey } from './commands/psi.js';
+import { LAB_DEFAULT_SAMPLES } from './analyze/lab.js';
 import { commandResearch } from './commands/research.js';
 import { commandRun } from './commands/run.js';
 import { commandEcosystem } from './commands/ecosystem.js';
@@ -60,6 +62,9 @@ Commands
   crux <auth|status|logout>
                         Chrome UX Report API key for real-user Core Web Vitals (hidden input, stored in the
                         credential store)
+  psi <auth|status|logout>
+                        PageSpeed Insights API key for Lighthouse lab data with --lab (hidden input, stored in
+                        the credential store)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and
@@ -84,6 +89,11 @@ Common options
   --screenshots         With --render: one viewport screenshot per rendered page (≤ 200 MB per run in all)
   --include <regex>     Only crawl matching URLs          --exclude <regex>  Skip matching URLs
   --check-external      Check outbound links (HEAD, robots.txt-aware, max 200)
+  --lab                 Lighthouse lab data (PageSpeed Insights, mobile) for one page per URL template, the
+                        homepage and the largest templates first; needs "psi auth" or SEARVEX_PSI_API_KEY and a
+                        public URL. Lab values, never Core Web Vitals pass/fail (experimental: not yet verified
+                        against the live service)
+  --lab-samples <n>     Templates measured with --lab (default 5, max 20)
   --no-sitemap          Do not seed from sitemaps         --resume <runId>   Resume an interrupted crawl
   --max-duration <s>    Stop crawling after s seconds and write a partial report (exit 5). SIGINT/SIGTERM
                         do the same; a second signal exits at once (130/143)
@@ -131,6 +141,7 @@ Command options
 
 Environment (all optional, read-only integrations)
   SEARVEX_CRUX_API_KEY  Chrome UX Report API key (instead of "searvex crux auth")
+  SEARVEX_PSI_API_KEY   PageSpeed Insights API key for --lab (instead of "searvex psi auth")
   SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
   SEARVEX_BING_API_KEY  Bing Webmaster Tools API key (instead of "searvex bing auth")
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
@@ -206,6 +217,8 @@ export const CLI_OPTIONS = {
   'site-url': { type: 'string' },
   lang: { type: 'string' },
   'check-external': { type: 'boolean' },
+  lab: { type: 'boolean' },
+  'lab-samples': { type: 'string' },
   reuse: { type: 'boolean' },
   update: { type: 'boolean' },
   client: { type: 'string' },
@@ -566,6 +579,17 @@ function withReportFiles(L: string[], files: string[]): string {
   return L.join('\n');
 }
 
+/** --lab / --lab-samples: PageSpeed Insights lab runs; a missing key is a usage error, not a silent skip. */
+function labOptions(v: Record<string, unknown>): { apiKey: string; samples: number } | undefined {
+  if (!v['lab']) {
+    if (v['lab-samples'] !== undefined) throw new UsageError('--lab-samples needs --lab');
+    return undefined;
+  }
+  const key = psiKey();
+  if (!key) throw new UsageError('--lab needs a PageSpeed Insights API key: run "searvex psi auth", or set SEARVEX_PSI_API_KEY.');
+  return { apiKey: key.key, samples: v['lab-samples'] === undefined ? LAB_DEFAULT_SAMPLES : num(v['lab-samples'], LAB_DEFAULT_SAMPLES, 1, 20) };
+}
+
 async function commandAudit(flags: GlobalFlags): Promise<number> {
   const { values: v, positionals } = flags;
   const target = positionals[1];
@@ -576,6 +600,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
   }
   assertSiteUrl(v);
   if (v['fail-on'] !== undefined) failOnIndex(v['fail-on']);
+  const lab = labOptions(v);
   const kb = loadKnowledge();
   const workspace = path.resolve(String(v['out'] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
@@ -592,6 +617,7 @@ async function commandAudit(flags: GlobalFlags): Promise<number> {
       kb,
       checkExternal: !!v['check-external'],
       cruxApiKey: cruxKey()?.key,
+      ...(lab ? { lab } : {}),
       preLaunch: !!v['pre-launch'],
       compact: !!v['compact'],
       crawl: {
@@ -815,6 +841,8 @@ async function runCommand(cmd: string, flags: GlobalFlags): Promise<number> {
         return await commandBing(flags);
       case 'crux':
         return await commandCrux(flags);
+      case 'psi':
+        return await commandPsi(flags);
       case 'connect':
         return await commandConnect(flags);
       case 'audit':

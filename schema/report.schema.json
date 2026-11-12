@@ -463,6 +463,14 @@
         }
       ]
     },
+    "labData": {
+      "description": "Lighthouse lab data from PageSpeed Insights for sampled URL templates (`--lab`). Lab values from one simulated load: never Core Web Vitals pass/fail (that is `fieldData`). Since schema 1.1.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/LabData"
+        }
+      ]
+    },
     "externalLinks": {
       "$ref": "#/definitions/ExternalLinkResult"
     },
@@ -1073,6 +1081,116 @@
         "depth",
         "inlinks",
         "words"
+      ]
+    },
+    "LabData": {
+      "description": "Lab data (plan F6): one Lighthouse run through PageSpeed Insights per sampled URL template, the most common templates first and the homepage always included. Labelled \"lab\" and kept apart from CrUX field data: it never decides Core Web Vitals pass/fail.",
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "const": "pagespeed-insights"
+        },
+        "strategy": {
+          "type": "string",
+          "const": "mobile"
+        },
+        "samples": {
+          "description": "One measured page per template, with the template's size in this crawl.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string"
+              },
+              "finalUrl": {
+                "description": "URL Lighthouse ended on after redirects.",
+                "type": "string"
+              },
+              "strategy": {
+                "type": "string",
+                "enum": [
+                  "desktop",
+                  "mobile"
+                ]
+              },
+              "score": {
+                "description": "Lighthouse performance score 0–100 (0–49 poor, 50–89 needs improvement, 90–100 good).",
+                "type": "number"
+              },
+              "lcpMs": {
+                "type": "number"
+              },
+              "fcpMs": {
+                "type": "number"
+              },
+              "tbtMs": {
+                "type": "number"
+              },
+              "cls": {
+                "type": "number"
+              },
+              "speedIndexMs": {
+                "type": "number"
+              },
+              "ttfbMs": {
+                "type": "number"
+              },
+              "lighthouseVersion": {
+                "type": "string"
+              },
+              "fetchTime": {
+                "type": "string"
+              },
+              "template": {
+                "type": "string"
+              },
+              "pages": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "url",
+              "finalUrl",
+              "strategy",
+              "template",
+              "pages"
+            ]
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string"
+              },
+              "template": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "url",
+              "template",
+              "message"
+            ]
+          }
+        },
+        "skipped": {
+          "description": "Set when nothing was measured (no public URL, interrupted run).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "strategy",
+        "samples",
+        "errors"
       ]
     },
     "LlmsTxtStatus": {

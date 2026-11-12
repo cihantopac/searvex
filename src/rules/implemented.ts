@@ -25,7 +25,7 @@ export const IMPLEMENTED_RULES = new Set<string>([
   // structured data
   'sd.invalid-json', 'sd.missing-context', 'sd.missing-required', 'sd.retired-type', 'sd.none', 'geo.organization-missing',
   // performance / security
-  'perf.slow-ttfb', 'perf.no-compression', 'perf.cwv-unmeasured', 'perf.cwv-poor', 'https.not-used', 'https.mixed-content',
+  'perf.slow-ttfb', 'perf.no-compression', 'perf.cwv-unmeasured', 'perf.cwv-poor', 'perf.lab-poor', 'https.not-used', 'https.mixed-content',
   // geo
   'geo.search-bot-blocked', 'geo.ai-search-bot-blocked', 'geo.training-bots', 'geo.snippet-restricted', 'geo.llms-txt',
   'geo.entity-inconsistent', 'geo.answerability', 'geo.citations-unmeasured',

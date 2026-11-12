@@ -96,7 +96,7 @@ Then run `/searvex <url> [path]`. Requires Node.js ≥ 20.10. Full reference: [d
 
 Status: **v1.3.0** ([release notes](docs/release-notes-1.3.0.md), [changelog](CHANGELOG.md)).
 
-- **91 rules**, each tied to an official source: 72 verified, 17 heuristic, 2 reported as unmeasurable. `searvex rules show <id>`
+- **92 rules**, each tied to an official source: 72 verified, 18 heuristic, 2 reported as unmeasurable. `searvex rules show <id>`
 - **Tested** with unit, integration, browser and end-to-end runs; CI on Linux, macOS and Windows with Node 20, 22 and 24 ([quality report](docs/quality.md)).
 - **Validated** on 13 public sites and 9 repositories; live Search Console and CrUX values matched the official exports.
 - **Safe by default** — read-only, SSRF protection, robots.txt honoured, secret files never read, every change journaled with byte-for-byte rollback.
