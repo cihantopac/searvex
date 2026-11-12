@@ -14,6 +14,14 @@ describe('H1: GitHub Action definition', () => {
     for (const l of runs) expect(l).not.toMatch(/\$\{\{/);
   });
 
+  it('is valid YAML for GitHub: no plain (unquoted) value contains ": "', () => {
+    // GitHub's parser rejects "description: text (needs \"a: b\")" unless the value is quoted.
+    for (const [i, l] of actionYml.split('\n').entries()) {
+      const m = /^\s*[\w-]+: (.*)$/.exec(l);
+      if (m && !/^["'|>]/.test(m[1]!) && !m[1]!.startsWith('${{')) expect(m[1], `action.yml line ${i + 1}`).not.toMatch(/: /);
+    }
+  });
+
   it('defaults to the searvex-seo version of this release', () => {
     const version = JSON.parse(fs.readFileSync('package.json', 'utf8')).version as string;
     expect(/version:\n\s+description:[^\n]*\n\s+default: "([^"]+)"/.exec(actionYml)?.[1]).toBe(version);
