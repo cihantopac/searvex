@@ -15,6 +15,8 @@
 - **Repository secrets** (`.env`, keys, credentials) are never read.
 - **Reports may contain page content** (titles, excerpts, URLs) of audited sites. Treat them like the
   sites themselves when sharing.
+- **Run directories keep the main text of crawled pages** (`texts.txt`, up to 20,000 characters per page) so the
+  analysis does not hold every page in memory; before 1.4.0 the same text was inside `pages.jsonl`.
 - **Evidence artefacts** (`--save-html`, `--screenshots`) are opt-in. They keep each fetched HTML body as served
   (up to 2 MB, saved as `.html.txt` so a browser shows the source and does not run the page's scripts) and one
   viewport screenshot per rendered page, under `.searvex/runs/<runId>/artefacts/`, 200 MB per run at most. A body

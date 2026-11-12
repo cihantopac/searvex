@@ -35465,7 +35465,11 @@ async function crawl(startUrl, partial = {}, store2) {
     for (const d of [rec.data, rec.rendered]) {
       if (!d) continue;
       d.textContent = "";
-      d.mainText = d.mainText.slice(0, 2e4);
+      const main2 = d.mainText.slice(0, 2e4);
+      if (store2) {
+        d.mainTextRef = store2.appendText(main2);
+        d.mainText = "";
+      } else d.mainText = main2;
     }
     pages.push(rec);
     store2?.append("pages.jsonl", rec);
@@ -35520,7 +35524,8 @@ async function crawl(startUrl, partial = {}, store2) {
     ...map2 ? { siteUrl: map2.from } : {},
     ...interruptionOf(opts.stop) ? { interrupted: interruptionOf(opts.stop) } : {},
     ...opts.policy.upstream ? { proxy: proxySummary(opts.policy.upstream) } : {},
-    ...opts.artefacts?.html || opts.artefacts?.screenshots ? { artefacts } : {}
+    ...opts.artefacts?.html || opts.artefacts?.screenshots ? { artefacts } : {},
+    ...store2 ? { readText: (ref) => store2.readText(ref) } : {}
   };
   store2?.writeJson("crawl-summary.json", {
     ...result,
@@ -35550,6 +35555,7 @@ var RunStore = class {
   root;
   runId;
   dir;
+  textBytes;
   static newRunId(prefix = "run") {
     const ts = (/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").replace(/\..+/, "").replace("T", "-");
     return `${prefix}-${ts}-${crypto2.randomBytes(3).toString("hex")}`;
@@ -35614,6 +35620,31 @@ var RunStore = class {
     fs.chmodSync(path.join(this.dir, "artefacts"), 448);
     fs.writeFileSync(path.join(dir, name), data2, { mode: 384 });
     return `artefacts/${kind}/${name}`;
+  }
+  /**
+   * Append a page's main text to `texts.txt` and return its byte range. Page records keep only this reference,
+   * so large crawls do not hold every page's text in memory; analysis reads it back with `readText`.
+   */
+  appendText(text4) {
+    this.ensure();
+    const f = this.file("texts.txt");
+    this.textBytes ??= fs.existsSync(f) ? fs.statSync(f).size : 0;
+    const buf = Buffer.from(text4, "utf8");
+    fs.appendFileSync(f, buf);
+    const ref = { offset: this.textBytes, length: buf.length };
+    this.textBytes += buf.length;
+    return ref;
+  }
+  /** Read a text written by `appendText`. The file is opened per read: no descriptor stays open. */
+  readText(ref) {
+    const fd = fs.openSync(this.file("texts.txt"), "r");
+    try {
+      const buf = Buffer.alloc(ref.length);
+      fs.readSync(fd, buf, 0, ref.length, ref.offset);
+      return buf.toString("utf8");
+    } finally {
+      fs.closeSync(fd);
+    }
   }
   writeText(name, text4) {
     this.ensure();
@@ -35831,6 +35862,9 @@ var FindingSink = class {
 // src/analyze/context.ts
 function factsOf(p) {
   return p.rendered ?? p.data;
+}
+function mainTextOf(ctx, f) {
+  return f.mainTextRef && ctx.crawl.readText ? ctx.crawl.readText(f.mainTextRef) : f.mainText;
 }
 function robotsDirectives(p, bots = ["googlebot"]) {
   const d = [...p.data?.metaRobots ?? [], ...p.xRobots];
@@ -36516,7 +36550,26 @@ function fnv1a(str, seed = 2166136261) {
 function shingles(words2, k = 5) {
   const s = /* @__PURE__ */ new Set();
   for (let i = 0; i + k <= words2.length; i++) s.add(fnv1a(words2.slice(i, i + k).join(" ")));
-  return s;
+  return Uint32Array.from(s).sort();
+}
+function frequentShingles(arrays, min) {
+  let total = 0;
+  for (const a of arrays) total += a.length;
+  const all2 = new Uint32Array(total);
+  let o = 0;
+  for (const a of arrays) {
+    all2.set(a, o);
+    o += a.length;
+  }
+  all2.sort();
+  const out = /* @__PURE__ */ new Set();
+  for (let i = 0; i < all2.length; ) {
+    let j = i + 1;
+    while (j < all2.length && all2[j] === all2[i]) j++;
+    if (j - i >= min) out.add(all2[i]);
+    i = j;
+  }
+  return out;
 }
 var MINHASH_N = 64;
 function minhash(sh) {
@@ -36533,8 +36586,15 @@ function minhash(sh) {
 }
 function jaccard(a, b) {
   let inter = 0;
-  for (const x of a) if (b.has(x)) inter++;
-  return inter / (a.size + b.size - inter || 1);
+  for (let i = 0, j = 0; i < a.length && j < b.length; ) {
+    if (a[i] === b[j]) {
+      inter++;
+      i++;
+      j++;
+    } else if (a[i] < b[j]) i++;
+    else j++;
+  }
+  return inter / (a.length + b.length - inter || 1);
 }
 function runContentChecks(ctx, sink) {
   const pages = ctx.indexable.map((p) => ({ p, f: factsOf(p) }));
@@ -36543,45 +36603,74 @@ function runContentChecks(ctx, sink) {
     const locale = segs[0] && /^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0]) ? segs.shift() : "";
     return `${locale}/${segs[0] ?? ""}`;
   };
-  const docTerms = /* @__PURE__ */ new Map();
-  const df = /* @__PURE__ */ new Map();
+  const vocab = /* @__PURE__ */ new Map();
+  const termOf = [];
+  const df = [];
+  const idOf = (t) => {
+    let id = vocab.get(t);
+    if (id === void 0) {
+      id = termOf.length;
+      vocab.set(t, id);
+      termOf.push(t);
+      df.push(0);
+    }
+    return id;
+  };
+  const dfOf = (t) => {
+    const id = vocab.get(t);
+    return id === void 0 ? 0 : df[id];
+  };
+  const docs = [];
+  const secSize = /* @__PURE__ */ new Map();
+  const secDf = /* @__PURE__ */ new Map();
+  const byHash = /* @__PURE__ */ new Map();
+  const allSh = /* @__PURE__ */ new Map();
   for (const { p, f } of pages) {
+    const text4 = mainTextOf(ctx, f);
     const tf = /* @__PURE__ */ new Map();
-    const weighted = [
-      ...tokenize(f.title ?? "").flatMap((t) => [t, t, t]),
-      // Headings in site chrome (footer "Product family", "Legal"…) repeat on every page: not page topics.
-      ...f.headings.filter((h) => !h.chrome).flatMap((h) => tokenize(h.text).flatMap((t) => h.level === 1 ? [t, t, t] : [t, t])),
-      ...tokenize(f.mainText.slice(0, 2e4))
-    ];
-    for (const t of weighted) tf.set(t, (tf.get(t) ?? 0) + 1);
-    docTerms.set(p.url, tf);
-    for (const t of tf.keys()) df.set(t, (df.get(t) ?? 0) + 1);
+    const count = (t, n) => {
+      const id = idOf(t);
+      tf.set(id, (tf.get(id) ?? 0) + n);
+    };
+    for (const t of tokenize(f.title ?? "")) count(t, 3);
+    for (const h of f.headings) if (!h.chrome) for (const t of tokenize(h.text)) count(t, h.level === 1 ? 3 : 2);
+    for (const t of tokenize(text4.slice(0, 2e4))) count(t, 1);
+    const g = groupOf(p.url);
+    secSize.set(g, (secSize.get(g) ?? 0) + 1);
+    const m = secDf.get(g) ?? secDf.set(g, /* @__PURE__ */ new Map()).get(g);
+    for (const id of tf.keys()) {
+      df[id]++;
+      m.set(id, (m.get(id) ?? 0) + 1);
+    }
+    docs.push({ url: p.url, group: g, ids: Uint32Array.from(tf.keys()), counts: Uint32Array.from(tf.values()) });
+    if (f.mainWordCount >= 30) {
+      const h = crypto3.createHash("sha1").update(text4.toLowerCase()).digest("hex");
+      const a = byHash.get(h);
+      if (a) a.push(p.url);
+      else byHash.set(h, [p.url]);
+    }
+    const words2 = text4.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words2.length >= 50) allSh.set(p.url, shingles(words2));
   }
   const N = Math.max(1, pages.length);
   const pageTerms = [];
   const vectors = /* @__PURE__ */ new Map();
-  const secSize = /* @__PURE__ */ new Map();
-  const secDf = /* @__PURE__ */ new Map();
-  for (const [url, tf] of docTerms) {
-    const g = groupOf(url);
-    secSize.set(g, (secSize.get(g) ?? 0) + 1);
-    const m = secDf.get(g) ?? secDf.set(g, /* @__PURE__ */ new Map()).get(g);
-    for (const t of tf.keys()) m.set(t, (m.get(t) ?? 0) + 1);
+  for (const d of docs) {
+    const gs = secSize.get(d.group);
+    const gm = secDf.get(d.group);
+    const sectionTemplate = (id) => gs >= 4 && (gm.get(id) ?? 0) >= gs * 0.8;
+    const scored = Array.from(d.ids, (id, k) => [id, d.counts[k] * Math.log(1 + N / df[id])]).sort((a, b) => b[1] - a[1]);
+    pageTerms.push({ url: d.url, terms: scored.slice(0, 8).map(([id]) => termOf[id]) });
+    vectors.set(d.url, new Map(scored.filter(([id]) => df[id] <= Math.max(3, N * 0.5) && !sectionTemplate(id)).slice(0, 20).map(([id, w]) => [termOf[id], w])));
   }
-  for (const [url, tf] of docTerms) {
-    const g = groupOf(url);
-    const gs = secSize.get(g);
-    const sectionTemplate = (t) => gs >= 4 && (secDf.get(g).get(t) ?? 0) >= gs * 0.8;
-    const scored = [...tf.entries()].map(([t, c]) => [t, c * Math.log(1 + N / (df.get(t) ?? 1))]).sort((a, b) => b[1] - a[1]);
-    pageTerms.push({ url, terms: scored.slice(0, 8).map(([t]) => t) });
-    vectors.set(url, new Map(scored.filter(([t]) => (df.get(t) ?? 0) <= Math.max(3, N * 0.5) && !sectionTemplate(t)).slice(0, 20)));
-  }
+  docs.length = 0;
+  secDf.clear();
   const langOf = new Map(pages.map(({ p, f }) => [p.url, (f.lang ?? "").toLowerCase().split("-")[0]]));
   const linkOpportunities = findLinkOpportunities(ctx, vectors, langOf);
   if (linkOpportunities.length) {
     sink.emit("links.internal-opportunity", linkOpportunities.slice(0, 50).map((o) => ({ url: o.to, observed: `link from ${o.from} (topic similarity ${Math.round(o.similarity * 100)}%: ${o.sharedTerms.slice(0, 4).join(", ")}); target has ${o.toInlinks} internal inlink(s)` })));
   }
-  const topTerms = [...df.entries()].filter(([, c]) => c >= Math.min(2, N) && c <= Math.max(2, N * 0.8)).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([term, n]) => ({ term, pages: n }));
+  const topTerms = df.map((c, id) => [termOf[id], c]).filter(([, c]) => c >= Math.min(2, N) && c <= Math.max(2, N * 0.8)).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([term, n]) => ({ term, pages: n }));
   const utility = /\/(contact|login|signin|sign-in|register|signup|cart|checkout|account|search|404|privacy|terms|legal|cookie|impressum|iletisim|giris)(\/|$|\?)/i;
   for (const { p, f } of pages) {
     const linkDensity = f.mainWordCount ? (f.mainLinkWordCount ?? 0) / f.mainWordCount : 0;
@@ -36589,48 +36678,28 @@ function runContentChecks(ctx, sink) {
       sink.emit("content.low-text", { url: p.url, observed: `${f.mainWordCount} words of main content (${f.wordCount} incl. navigation/footer)` });
     }
   }
-  const byHash = /* @__PURE__ */ new Map();
-  for (const { p, f } of pages) {
-    if (f.mainWordCount < 30) continue;
-    const h = crypto3.createHash("sha1").update(f.mainText.toLowerCase()).digest("hex");
-    const a = byHash.get(h);
-    if (a) a.push(p.url);
-    else byHash.set(h, [p.url]);
-  }
   const exactDuplicates = [...byHash.values()].filter((g) => g.length > 1);
   for (const g of exactDuplicates) {
     sink.emit("duplicate.content", { url: g[0], observed: `identical text on ${g.length} URLs: ${g.slice(0, 5).join(", ")}` });
     sink.markAffected("duplicate.content", g);
   }
-  const allSh = /* @__PURE__ */ new Map();
-  for (const { p, f } of pages) {
-    const words2 = f.mainText.toLowerCase().split(/\s+/).filter(Boolean);
-    if (words2.length >= 50) allSh.set(p.url, shingles(words2));
-  }
-  const siteDf = /* @__PURE__ */ new Map();
-  const groupDf = /* @__PURE__ */ new Map();
-  const groupSize = /* @__PURE__ */ new Map();
+  const byGroup = /* @__PURE__ */ new Map();
   for (const [url, s] of allSh) {
     const g = groupOf(url);
-    groupSize.set(g, (groupSize.get(g) ?? 0) + 1);
-    const gm = groupDf.get(g) ?? /* @__PURE__ */ new Map();
-    groupDf.set(g, gm);
-    for (const x of s) {
-      siteDf.set(x, (siteDf.get(x) ?? 0) + 1);
-      gm.set(x, (gm.get(x) ?? 0) + 1);
-    }
+    (byGroup.get(g) ?? byGroup.set(g, []).get(g)).push(s);
   }
   const siteMin = Math.max(3, Math.ceil(allSh.size * 0.3));
+  const siteBoilerplate = allSh.size >= 5 ? frequentShingles([...allSh.values()], siteMin) : /* @__PURE__ */ new Set();
+  const groupBoilerplate = /* @__PURE__ */ new Map();
+  for (const [g, arrays] of byGroup) groupBoilerplate.set(g, arrays.length >= 5 ? frequentShingles(arrays, Math.max(3, Math.ceil(arrays.length * 0.3))) : /* @__PURE__ */ new Set());
+  byGroup.clear();
   const sh = /* @__PURE__ */ new Map();
   const sigs = /* @__PURE__ */ new Map();
   for (const [url, s] of allSh) {
-    const g = groupOf(url);
-    const gSize = groupSize.get(g) ?? 0;
-    const gMin = Math.max(3, Math.ceil(gSize * 0.3));
-    const gm = groupDf.get(g);
-    const isBoilerplate = (x) => allSh.size >= 5 && (siteDf.get(x) ?? 0) >= siteMin || gSize >= 5 && (gm.get(x) ?? 0) >= gMin;
-    const unique = new Set([...s].filter((x) => !isBoilerplate(x)));
-    if (unique.size < 20) continue;
+    const gb = groupBoilerplate.get(groupOf(url));
+    const isBoilerplate = (x) => siteBoilerplate.has(x) || gb.has(x);
+    const unique = s.filter((x) => !isBoilerplate(x));
+    if (unique.length < 20) continue;
     sh.set(url, unique);
     sigs.set(url, minhash(unique));
   }
@@ -36685,7 +36754,7 @@ function runContentChecks(ctx, sink) {
     const terms = titleTerms.get(p.url);
     const section = groupOf(p.url);
     const gSize = sectionPages.get(section) ?? 0;
-    const specific = terms.filter((t) => ((df.get(t) ?? 0) < N * 0.5 || N < 4) && !(gSize >= 4 && (sectionTermDf.get(section).get(t) ?? 0) >= gSize * 0.5));
+    const specific = terms.filter((t) => (dfOf(t) < N * 0.5 || N < 4) && !(gSize >= 4 && (sectionTermDf.get(section).get(t) ?? 0) >= gSize * 0.5));
     if (specific.length >= 2) specificTerms.set(p.url, new Set(specific));
   }
   const termUrls = [...specificTerms.keys()];
@@ -36731,6 +36800,7 @@ function runContentChecks(ctx, sink) {
     sink.emit("content.cannibalization", { url: c.pages[0], observed: `"${c.terms.join(" ")}" shared by ${c.pages.length} pages: ${c.pages.slice(0, 5).join(", ")}` });
     sink.markAffected("content.cannibalization", c.pages);
   }
+  const termsByUrl = new Map(pageTerms.map((x) => [x.url, x.terms]));
   const clusterMap = /* @__PURE__ */ new Map();
   for (const { p } of pages) {
     const seg = new URL(p.finalUrl).pathname.split("/").filter(Boolean)[0] ?? "(root)";
@@ -36740,7 +36810,7 @@ function runContentChecks(ctx, sink) {
   }
   const clusters = [...clusterMap.entries()].map(([key, urls]) => {
     const counts = /* @__PURE__ */ new Map();
-    for (const u of urls) for (const t of pageTerms.find((x) => x.url === u)?.terms ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+    for (const u of urls) for (const t of termsByUrl.get(u) ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
     return { key, pages: urls, terms: [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([t]) => t) };
   }).sort((a, b) => b.pages.length - a.pages.length);
   return { topTerms, pageTerms, clusters, cannibalization, nearDuplicates, exactDuplicates, linkOpportunities: linkOpportunities.slice(0, 200) };
@@ -37134,7 +37204,7 @@ function runTechnicalChecks(ctx, sink) {
     if (path24.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
     const declared = primaryTag(f.lang);
     if (declared && ["en", "tr", "de", "fr", "es", "it", "pt", "nl"].includes(declared) && !noindex) {
-      const detected = detectLanguage(f.mainText);
+      const detected = detectLanguage(mainTextOf(ctx, f));
       if (detected && detected.lang !== declared) sink.emit("lang.content-mismatch", { url: p.url, observed: `lang="${f.lang}" but main content reads as "${detected.lang}"` });
       const foreign = f.headings.filter((h) => !h.chrome && h.level <= 2).map((h) => ({ h, lang: detectShortLanguage(h.text) })).filter((x) => x.lang && x.lang !== declared && x.lang !== detected?.lang);
       if (foreign.length && (!detected || detected.lang === declared)) {

@@ -319,6 +319,8 @@ analysis unrealistically cheap); with `--expose-gc` it also reports the live hea
 | v1.0.0 RC, 50,000 | 8 | 83.1 s | 602 | 21.6 s | 1,111 MB |
 | **1.4.0 (2026-11-12)**, 10,000, 1,500 words/page, varied text | 8 | 9.2 s | 1,091 | 42 s | 468 MB |
 | 1.4.0, 50,000, varied text (1.3.0 crashed here, see below) | 8 | 56.1 s | 891 | 96 s | 1,066 MB |
+| 1.4.0 with texts on disk, 50,000, varied text | 8 | 54.1 s | 924 | 67 s | 1,282 MB |
+| 1.4.0 with texts on disk, 100,000, varied text, `--max-old-space-size=2048` | 8 | 178.2 s | 561 | 93 s | 1,289 MB |
 
 The v1.0.0 RC rows were measured on a loaded machine (load average 5–7); throughput varied 2–4× between
 runs. Under identical conditions v0.7.0 and the RC were equal (5,000 pages: 1,134 vs 1,096 pages/s, 1.03 vs
@@ -339,6 +341,19 @@ Memory grows ~25 KB/page (stored text capped at 20,000 chars/page).
   extraction): live heap after a 10,000-page crawl of 1,500-word pages went from 307 MB to 190 MB.
 - At 50,000 pages the analysis structures (term vectors, shingles) dominate: 380 MB live heap after the crawl,
   951 MB peak during analysis.
+
+1.4.0 disk-backed analysis (G7, second part):
+- Each page's main text is written to the run's `texts.txt`; the record keeps its byte range and the analysis
+  reads it back once per check that needs it (content statistics, content-language detection). Without a run
+  directory (library use) the text stays in memory.
+- The content step numbers its terms and keeps each page's term counts, shingles and boilerplate counts in typed
+  arrays (sorted and counted instead of per-shingle maps), and reads each text once. Content-step heap peak at
+  20,000 pages: 1,523 → 359 MB (with garbage), time 14.3 → 8.6 s. Topic clusters no longer search the page-term
+  list for every page (quadratic).
+- Live heap after the crawl is ~6.5 KB per page (318 MB at 50,000, 646 MB at 100,000); 100,000 pages complete
+  under a 2 GB heap limit. Peak RSS stays ~1.3 GB because V8 collects lazily below its limit.
+- Identical reports: a 5,000-page site with exact and near duplicates, cannibalisation, link opportunities and
+  content-language mismatches gives byte-identical `report.json` content against 1.4.0 before this change.
 
 ## Open quality issues
 

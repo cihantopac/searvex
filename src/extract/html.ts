@@ -135,6 +135,11 @@ export interface PageData {
   wordCount: number;
   /** Main content text: <main>/[role=main]/<article>, else body without header/nav/footer/aside. */
   mainText: string;
+  /**
+   * Where the main text is stored when a crawl has a run directory: the record then carries an empty `mainText`
+   * and analysis reads the text from the run's `texts.txt` (see `mainTextOf`).
+   */
+  mainTextRef?: { offset: number; length: number };
   mainWordCount: number;
   /** Words inside links within the main content (link density = mainLinkWordCount / mainWordCount). */
   mainLinkWordCount: number;
