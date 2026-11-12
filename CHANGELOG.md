@@ -19,6 +19,9 @@ All notable changes to this project are documented here. The format follows
   (2025-03-26 to 2025-11-25) and the stateless 2026-07-28 protocol. The network policy is fixed when the server
   starts (`--allow-private`, host and port limits, `--proxy`), `--max-pages` caps tool audits and audits run one
   at a time; nothing that writes to a repository is exposed. No new dependency.
+- GitHub Action (`uses: cihantopac/searvex@v1.5.0`, `action.yml` in this repository): audits a website or the
+  checked-out repository, uploads SARIF to code scanning, writes a job summary (score and top issues) and fails
+  the job at `fail-on`. Inputs reach the script only as environment variables.
 
 ## [1.4.0] - 2026-11-12
 
