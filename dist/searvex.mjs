@@ -16108,14 +16108,14 @@ var init_bing = __esm({
 });
 
 // src/net/policy-proxy.ts
-import crypto7 from "node:crypto";
+import crypto8 from "node:crypto";
 import http6 from "node:http";
 import net2 from "node:net";
 async function startPolicyProxy(policy, opts = {}) {
   const maxBytes = opts.maxBytesPerWindow ?? 64 * 1024 * 1024;
   const idle = opts.idleTimeoutMs ?? 3e4;
   const username = "searvex";
-  const password = crypto7.randomBytes(18).toString("base64url");
+  const password = crypto8.randomBytes(18).toString("base64url");
   const expectedAuth = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
   const stats = { requests: 0, tunnels: 0, blocked: 0, blockedTargets: [], bytes: 0, budgetExceeded: 0 };
   const sockets = /* @__PURE__ */ new Set();
@@ -16330,7 +16330,7 @@ async function createRenderer(policy, timeoutMs = 3e4) {
   };
   return {
     stats,
-    async render(url) {
+    async render(url, o = {}) {
       stats.pages++;
       proxy.resetBudget();
       const context = await browser.newContext({ userAgent: DEFAULT_USER_AGENT, serviceWorkers: "block", acceptDownloads: false, javaScriptEnabled: true, locale: "en-US", timezoneId: "America/Los_Angeles" });
@@ -16363,7 +16363,9 @@ async function createRenderer(policy, timeoutMs = 3e4) {
         await main2.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
         await main2.waitForLoadState("networkidle", { timeout: SETTLE_MS }).catch(() => {
         });
-        return { html: await main2.content() };
+        const html3 = await main2.content();
+        const screenshot = o.screenshot ? await main2.screenshot({ type: "png", fullPage: false, timeout: SETTLE_MS }).catch(() => void 0) : void 0;
+        return screenshot ? { html: html3, screenshot } : { html: html3 };
       })();
       let timer;
       const deadline = new Promise((resolve) => timer = setTimeout(() => resolve("deadline"), deadlineMs));
@@ -16418,6 +16420,9 @@ var init_render = __esm({
 import fs16 from "node:fs";
 import path22 from "node:path";
 import { parseArgs } from "node:util";
+
+// src/crawl/crawler.ts
+import crypto from "node:crypto";
 
 // src/core/url.ts
 var TRACKING_PARAMS = /^(utm_[a-z]+|gclid|fbclid|msclkid|mc_cid|mc_eid|_ga|yclid)$/i;
@@ -35192,6 +35197,17 @@ var DEFAULT_CRAWL = {
   checkpointEvery: 25,
   checkpointMs: 1e4
 };
+var ARTEFACT_PAGE_CAP = 2 * 1024 * 1024;
+var ARTEFACT_RUN_CAP = 200 * 1024 * 1024;
+function artefactName(url) {
+  let pathname = new URL(url).pathname;
+  try {
+    pathname = decodeURIComponent(pathname);
+  } catch {
+  }
+  const slug = (pathname.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "index").slice(0, 40);
+  return `${crypto.createHash("sha1").update(url).digest("hex").slice(0, 12)}-${slug}`;
+}
 function interruptionOf(signal) {
   if (!signal?.aborted) return void 0;
   return signal.reason === "max-duration" ? "max-duration" : "signal";
@@ -35303,6 +35319,17 @@ async function crawl(startUrl, partial = {}, store2) {
     for (const u of sitemapSet) enqueue({ url: u, depth: Math.max(1, pathDepth(u)), foundOn: "sitemap" });
   }
   store2?.writeJson("meta.json", { runId: store2.runId, kind: "crawl", startUrl: start, startedAt, options: { ...opts, policy: void 0, render: !!opts.render, onProgress: void 0, stop: void 0 } });
+  const artefacts = { html: 0, screenshots: 0, bytes: 0, skipped: 0 };
+  const saveArtefact = (kind, name, data2) => {
+    if (!store2) return void 0;
+    if (artefacts.bytes + data2.length > (opts.artefacts?.maxBytes ?? ARTEFACT_RUN_CAP)) {
+      artefacts.skipped++;
+      return void 0;
+    }
+    artefacts.bytes += data2.length;
+    artefacts[kind === "html" ? "html" : "screenshots"]++;
+    return store2.writeArtefact(kind, name, data2);
+  };
   let crawledThisRun = 0;
   let fetchedCount = existing.filter((p) => !p.blockedByRobots).length;
   let lastPersist = Date.now();
@@ -35371,10 +35398,17 @@ async function crawl(startUrl, partial = {}, store2) {
     const isHtml2 = /html/i.test(res.contentType) || !res.contentType && /^\s*</.test(res.body);
     if (!res.error && isHtml2 && res.body) {
       rec.data = mapPageData(extractPage(res.body, res.finalUrl), map2);
+      const name = artefactName(item.url);
+      if (opts.artefacts?.html) {
+        const html3 = saveArtefact("html", `${name}.html.txt`, Buffer.from(res.body, "utf8").subarray(0, ARTEFACT_PAGE_CAP));
+        if (html3) rec.artefacts = { html: html3 };
+      }
       if (opts.render) {
-        const r = await opts.render(res.finalUrl);
+        const r = await opts.render(res.finalUrl, { screenshot: !!opts.artefacts?.screenshots });
         if (r.error) rec.renderError = r.error;
         else rec.rendered = mapPageData(extractPage(r.html, res.finalUrl), map2);
+        const shot = r.screenshot && saveArtefact("screenshots", `${name}.png`, r.screenshot);
+        if (shot) rec.artefacts = { ...rec.artefacts, screenshot: shot };
       }
     }
     enqueueLinksOf(rec, item);
@@ -35435,7 +35469,8 @@ async function crawl(startUrl, partial = {}, store2) {
     truncated: queue.length > 0,
     ...map2 ? { siteUrl: map2.from } : {},
     ...interruptionOf(opts.stop) ? { interrupted: interruptionOf(opts.stop) } : {},
-    ...opts.policy.upstream ? { proxy: proxySummary(opts.policy.upstream) } : {}
+    ...opts.policy.upstream ? { proxy: proxySummary(opts.policy.upstream) } : {},
+    ...opts.artefacts?.html || opts.artefacts?.screenshots ? { artefacts } : {}
   };
   store2?.writeJson("crawl-summary.json", {
     ...result,
@@ -35448,7 +35483,7 @@ async function crawl(startUrl, partial = {}, store2) {
 // src/crawl/store.ts
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
+import crypto2 from "node:crypto";
 function ensureSelfIgnored(root2) {
   const f = path.join(root2, ".searvex", ".gitignore");
   if (!fs.existsSync(f)) {
@@ -35467,7 +35502,7 @@ var RunStore = class {
   dir;
   static newRunId(prefix = "run") {
     const ts = (/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").replace(/\..+/, "").replace("T", "-");
-    return `${prefix}-${ts}-${crypto.randomBytes(3).toString("hex")}`;
+    return `${prefix}-${ts}-${crypto2.randomBytes(3).toString("hex")}`;
   }
   static latest(root2, prefix) {
     const dir = path.join(root2, ".searvex", "runs");
@@ -35515,6 +35550,20 @@ var RunStore = class {
       }
     }
     return out;
+  }
+  /**
+   * Write an evidence artefact (`--save-html`, `--screenshots`) under `artefacts/<kind>/` with owner-only
+   * permissions (0700 directory, 0600 file): bodies are stored as served and may contain personal data.
+   * Returns the path relative to the run directory.
+   */
+  writeArtefact(kind, name, data2) {
+    if (!/^[\w.-]+$/.test(name) || name.includes("..")) throw new Error(`Invalid artefact name: ${name}`);
+    this.ensure();
+    const dir = path.join(this.dir, "artefacts", kind);
+    fs.mkdirSync(dir, { recursive: true, mode: 448 });
+    fs.chmodSync(path.join(this.dir, "artefacts"), 448);
+    fs.writeFileSync(path.join(dir, name), data2, { mode: 384 });
+    return `artefacts/${kind}/${name}`;
   }
   writeText(name, text4) {
     this.ensure();
@@ -35831,7 +35880,7 @@ function applyPreLaunch(findings, kb) {
 }
 
 // src/analyze/content.ts
-import crypto2 from "node:crypto";
+import crypto3 from "node:crypto";
 
 // src/analyze/structured-data.ts
 var BASE = "https://developers.google.com/search/docs/appearance/structured-data/";
@@ -36493,7 +36542,7 @@ function runContentChecks(ctx, sink) {
   const byHash = /* @__PURE__ */ new Map();
   for (const { p, f } of pages) {
     if (f.mainWordCount < 30) continue;
-    const h = crypto2.createHash("sha1").update(f.mainText.toLowerCase()).digest("hex");
+    const h = crypto3.createHash("sha1").update(f.mainText.toLowerCase()).digest("hex");
     const a = byHash.get(h);
     if (a) a.push(p.url);
     else byHash.set(h, [p.url]);
@@ -37214,13 +37263,55 @@ function prioritise(findings, affected, ctx, totalUnits) {
     if (f.autofixable) reasons.push("auto-fixable in repository mode");
     else if (layoutWide) reasons.push("on most pages \u2014 likely one shared layout/template fix");
     else if (concentrated) reasons.push(`concentrated in ${templates.length} template${templates.length > 1 ? "s" : ""} \u2014 fix once`);
-    const confidence = f.confidence === "verified" ? 1 : f.confidence === "heuristic" ? 0.6 : 0;
-    const effortFactor = effort === "low" ? 1 : effort === "medium" ? 1.25 : 1.6;
-    const score = Math.round(Math.min(1, SEVERITY[f.severity] * confidence * (0.35 + 0.65 * reach) / effortFactor) * 100);
-    const bucket = score >= 45 ? "P1" : score >= 15 ? "P2" : "P3";
-    f.priority = { score, bucket, reach: Math.round(reach * 1e3) / 1e3, effort, reasons };
+    f.priority = { ...scoreOf(f, reach, effort), reach: Math.round(reach * 1e3) / 1e3, effort, reasons };
   }
   linkRootCauses(findings);
+}
+function scoreOf(f, reach, effort) {
+  const confidence = f.confidence === "verified" ? 1 : f.confidence === "heuristic" ? 0.6 : 0;
+  const effortFactor = effort === "low" ? 1 : effort === "medium" ? 1.25 : 1.6;
+  const score = Math.round(Math.min(1, SEVERITY[f.severity] * confidence * (0.35 + 0.65 * reach) / effortFactor) * 100);
+  return { score, bucket: score >= 45 ? "P1" : score >= 15 ? "P2" : "P3" };
+}
+function applyTrafficPriorities(report, rows, source) {
+  const key = (u) => normalizeUrl(u) ?? u;
+  const byUrl = /* @__PURE__ */ new Map();
+  for (const r of rows) {
+    const k = key(r.page);
+    const e = byUrl.get(k);
+    byUrl.set(k, e ? { page: r.page, clicks: e.clicks + r.clicks, impressions: e.impressions + r.impressions } : r);
+  }
+  const pages = report.inventory.pages.filter((p) => p.indexable);
+  const joined = pages.map((p) => ({ url: p.url, t: byUrl.get(key(p.url)) })).filter((x) => x.t);
+  const clicks = joined.reduce((a, x) => a + x.t.clicks, 0);
+  const impressions = joined.reduce((a, x) => a + x.t.impressions, 0);
+  const metric = clicks >= 10 ? "clicks" : "impressions";
+  const total = metric === "clicks" ? clicks : impressions;
+  if (!pages.length || total <= 0) return null;
+  const structural = new Map(pages.map((p) => [p.url, 1 + Math.log2(1 + p.inlinks) + (p.type === "home" ? 3 : 0)]));
+  const sTotal = [...structural.values()].reduce((a, b) => a + b, 0);
+  const importance = new Map(pages.map((p) => {
+    const t = byUrl.get(key(p.url));
+    return [p.url, 0.5 * (structural.get(p.url) / sTotal) + 0.5 * ((t ? t[metric] : 0) / total)];
+  }));
+  for (const f of report.findings) {
+    const pr = f.priority;
+    if (!pr || pr.reasons[0]?.includes("site-wide") || pr.reasons.includes("site-wide")) continue;
+    const urls = f.affected?.urls ?? f.evidence.map((e) => e.url).filter((u) => !!u);
+    const hit = urls.filter((u) => importance.has(u));
+    if (!hit.length) continue;
+    const reach = Math.min(1, hit.reduce((a, u) => a + importance.get(u), 0));
+    const t = hit.map((u) => byUrl.get(key(u))).filter((x) => !!x);
+    const reasons = pr.reasons.filter((r) => !/(importance|traffic)-weighted reach/.test(r) && !r.includes("verified search data") && !r.startsWith("likely "));
+    reasons.unshift(`${Math.round(reach * 100)}% traffic-weighted reach (${f.count} affected)`);
+    reasons.splice(1, 0, `${t.reduce((a, x) => a + x.clicks, 0)} clicks \xB7 ${t.reduce((a, x) => a + x.impressions, 0)} impressions on affected pages (${source}; verified search data)`);
+    f.priority = { ...pr, ...scoreOf(f, reach, pr.effort), reach: Math.round(reach * 1e3) / 1e3, reasons };
+  }
+  for (const f of report.findings) if (f.priority) f.priority.reasons = f.priority.reasons.filter((r) => !r.startsWith("likely "));
+  linkRootCauses(report.findings);
+  const input = { source, metric, pages: joined.length, clicks, impressions };
+  report.traffic = input;
+  return input;
 }
 var CONSEQUENCES = [
   {
@@ -37969,6 +38060,14 @@ function toolInfo(kb, findings) {
   }
   return { name: "searvex", version: SEARVEX_VERSION, rulesVersion: kb.version, rules };
 }
+function linkArtefacts(findings, ctx) {
+  for (const f of findings) {
+    f.evidence = f.evidence.map((e) => {
+      const page = e.url ? ctx.byUrl.get(e.url) : void 0;
+      return page?.artefacts ? { ...e, artefact: page.artefacts } : e;
+    });
+  }
+}
 function notApplicableScores(reason) {
   return { ...computeScores([], 1), overall: null, notApplicable: reason };
 }
@@ -38021,6 +38120,7 @@ function crawlSummary(result, robotsAgent = DEFAULT_CRAWL.robotsAgent) {
     ...result.siteUrl ? { siteUrl: result.siteUrl } : {},
     ...result.interrupted ? { interrupted: result.interrupted } : {},
     ...result.proxy ? { proxy: result.proxy } : {},
+    ...result.artefacts ? { artefacts: result.artefacts } : {},
     truncated: result.truncated,
     startUrl: result.startUrl,
     robots: { url: result.robots.url, state: result.robots.state, status: result.robots.status, sitemaps: result.robots.sitemaps },
@@ -38113,6 +38213,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
   } else sink.emit("perf.cwv-unmeasured", { observed: "No CrUX API key configured (searvex crux auth, or SEARVEX_CRUX_API_KEY)" });
   const inventory = buildInventory(ctx);
   const findings = sink.findings();
+  if (result.artefacts) linkArtefacts(findings, ctx);
   prioritise(findings, (id) => sink.affected(id), ctx);
   if (opts.preLaunch) applyPreLaunch(findings, kb);
   const limitations = [
@@ -38125,6 +38226,10 @@ async function analyzeCrawl(result, kb, opts = {}) {
     );
   else if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
   if (launch2) limitations.push(`Pre-launch profile (--pre-launch): the site is audited as it will be once live. ${launch2.noindex.size ? `${launch2.noindex.size} noindex page(s) were evaluated as indexable; their noindex is in the launch checklist. ` : ""}Findings that depend on the test server (environment) or on a deliberate pre-launch state (launch checklist) are listed separately and excluded from the score and --fail-on.`);
+  if (result.artefacts)
+    limitations.push(
+      `Evidence artefacts: ${result.artefacts.html} HTML bod${result.artefacts.html === 1 ? "y" : "ies"} and ${result.artefacts.screenshots} screenshot(s) under artefacts/ in the run directory (owner-only permissions). Bodies are stored as served (up to 2 MB each, as .html.txt so they open as source) and can contain personal data or tokens from the pages.${result.artefacts.skipped ? ` ${result.artefacts.skipped} artefact(s) were skipped at the 200 MB per-run limit.` : ""}`
+    );
   if (result.proxy)
     limitations.push(
       `Crawled through the upstream proxy ${result.proxy.endpoint} (CONNECT only). Response times include the proxy hop. ${result.proxy.resolve === "local" ? "Targets were resolved and checked locally and the proxy was given their addresses." : `Targets were checked against local DNS before CONNECT, but the proxy resolved the names itself; if its DNS view differs (split-horizon DNS), Searvex cannot see the address it connected to.${result.proxy.unresolvedAllowed ? " Names local DNS could not resolve were sent to the proxy unchecked (--proxy-resolve proxy)." : ""}`}`
@@ -38191,6 +38296,8 @@ var CLIENT_LIB = String.raw`function el(t,a,c){var e=document.createElement(t);i
 var NS='http://www.w3.org/2000/svg';
 function svg(t,a,c){var e=document.createElementNS(NS,t);for(var k in(a||{}))e.setAttribute(k,a[k]);(c||[]).forEach(function(x){if(x)e.appendChild(x)});return e}
 function safeHref(u){return /^https?:\/\//i.test(u)?u:'#'}
+function artHref(p){return typeof p==='string'&&/^artefacts\/(html|screenshots)\/[\w.-]+$/.test(p)?p:'#'}
+function artLinks(a){if(!a)return null;var k=[];if(a.html)k.push(el('a',{href:artHref(a.html),rel:'noopener',target:'_blank',text:T('ev.html')}));if(a.screenshot)k.push(el('a',{href:artHref(a.screenshot),rel:'noopener',target:'_blank',text:T('ev.shot')}));return k.length?el('span',{class:'art'},[' · '].concat(k.length>1?[k[0],' · ',k[1]]:k)):null}
 function store(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){return null}}
 var LANG=(function(){var s=store('searvex.lang');if(s==='en'||s==='tr')return s;var l=(navigator.languages&&navigator.languages.length?navigator.languages:[navigator.language||'en']);return l.some(function(x){return /^tr\b/i.test(x)})?'tr':'en'})();
 function T(k,v){var d=D.i18n[LANG]||D.i18n.en;if(v&&String(v.n)==='1'&&d[k+'.one']!==undefined)k=k+'.one';var s=d[k];if(s===undefined)s=D.i18n.en[k];if(s===undefined)s=k;if(v)s=s.replace(/\{(\w+)\}/g,function(m,n){return v[n]===undefined?m:String(v[n])});return s}
@@ -38315,7 +38422,7 @@ r.verify?el('p',{class:'small'},[el('b',{text:T('iss.verify')+': '}),r.verify]):
 rv?el('p',{class:'review '+rv.status},[el('b',{text:T('iss.review.'+rv.status)}),rv.note?' — '+rv.note:'',el('span',{class:'muted small',text:' · '+(rv.at||'').slice(0,10)+' · '+T('iss.review.note')})]):null,
 el('h4',{text:T('iss.groups')+' ('+G.length+')'})]);
 G.forEach(function(g){var gc=el('input',{type:'checkbox','aria-label':T('iss.selectGroup')+': '+g.key});gc.checked=!!SEL[g.id];gc.onchange=function(){if(gc.checked)SEL[g.id]=1;else delete SEL[g.id];sync()};gcbs.push(gc);
-var ev=g.evidence.slice(0,30).map(function(i){var e=f.evidence[i],rr=reviewOf(f.ruleId,e.ref);return el('div',{class:'ev'},[el('span',{class:'ref',text:e.ref}),' ',e.url&&/^https?:/i.test(e.url)?el('a',{href:safeHref(e.url),rel:'noopener noreferrer',target:'_blank',text:e.url}):(e.file||e.url||'')+(e.line?':'+e.line:''),e.file&&e.url?' ('+e.url+')':'',e.observed?' — '+e.observed:'',e.expected?' → '+e.expected:'',rr?el('span',{class:'chip review-'+rr.status,text:T('iss.review.'+rr.status)}):null])});
+var ev=g.evidence.slice(0,30).map(function(i){var e=f.evidence[i],rr=reviewOf(f.ruleId,e.ref);return el('div',{class:'ev'},[el('span',{class:'ref',text:e.ref}),' ',e.url&&/^https?:/i.test(e.url)?el('a',{href:safeHref(e.url),rel:'noopener noreferrer',target:'_blank',text:e.url}):(e.file||e.url||'')+(e.line?':'+e.line:''),e.file&&e.url?' ('+e.url+')':'',e.observed?' — '+e.observed:'',e.expected?' → '+e.expected:'',artLinks(e.artefact),rr?el('span',{class:'chip review-'+rr.status,text:T('iss.review.'+rr.status)}):null])});
 var more=g.pages-Math.min(30,g.evidence.length);
 body.appendChild(el('div',{class:'group'},[el('div',{class:'grow'},[gc,el('details',{},[el('summary',{},[el('span',{class:'gkind',text:T('iss.group.'+g.kind)}),' ',g.kind==='layout'?null:el('code',{text:g.kind==='site'?(f.evidence[0]&&(f.evidence[0].url||f.evidence[0].file)||'—'):g.key}),' ',chip(T(R.mode==='website'&&g.kind!=='file'?'iss.pages':'iss.locations',{n:fmt(g.pages)})),g.kind==='template'&&g.pages>1?chip(T('iss.shared'),'accent'):g.kind==='layout'?chip(T('iss.layout'),'accent'):null,g.langs.length?chip(g.langs.join(', ')):null])].concat(ev).concat(more>0?[el('div',{class:'muted small',text:T('iss.more',{n:fmt(more)})})]:[]))])]))});
 body.appendChild(el('p',{class:'muted small'},[T('iss.rule')+' ',el('code',{text:f.ruleId}),' · '+T('iss.engines')+': '+f.engines.join(', ')+(f.priority?' · '+T('iss.priority')+' '+f.priority.bucket+' ('+f.priority.score+') · '+T('iss.effort')+' '+f.priority.effort:'')]));
@@ -38458,6 +38565,8 @@ var UI = {
     "ov.severity": "Issues by severity",
     "ov.remediation": "How issues get fixed",
     "ov.rootCauses": "Top root causes",
+    "ev.html": "saved HTML",
+    "ev.shot": "screenshot",
     "ov.rootCausesNote": "Shared templates or files where one change fixes many pages.",
     "ov.pillars": "Condition",
     "ov.limits": "Not covered in this run:",
@@ -38728,6 +38837,8 @@ var UI = {
     "ov.severity": "\xD6nem derecesine g\xF6re sorunlar",
     "ov.remediation": "Sorunlar nas\u0131l d\xFCzeltilir",
     "ov.rootCauses": "Ba\u015Fl\u0131ca k\xF6k nedenler",
+    "ev.html": "kaydedilen HTML",
+    "ev.shot": "ekran g\xF6r\xFCnt\xFCs\xFC",
     "ov.rootCausesNote": "Tek de\u011Fi\u015Fikli\u011Fin bir\xE7ok sayfay\u0131 d\xFCzeltti\u011Fi ortak \u015Fablonlar veya dosyalar.",
     "ov.pillars": "Durum",
     "ov.limits": "Bu analizde kapsanmayanlar:",
@@ -39343,6 +39454,7 @@ function renderMarkdown(r, opts = {}) {
   L.push(`| Indexable HTML pages | ${indexableSummary(r).replace(/ indexable/, "")} |`);
   L.push(`| Likely site type (heuristic) | ${md(r.inventory.businessModel.label)} |`);
   L.push(`| Findings | ${r.findings.filter((f) => f.severity !== "info").length} issues + ${r.findings.filter((f) => f.severity === "info").length} informational |`);
+  if (r.traffic) L.push(`| Priorities weighted by | ${r.traffic.clicks} clicks \xB7 ${r.traffic.impressions} impressions on ${r.traffic.pages} pages (${md(r.traffic.source)}; verified data, ${r.traffic.metric}) |`);
   L.push(`| Evidence quality | ${r.measurement.verified} verified \xB7 ${r.measurement.heuristic} heuristic \xB7 ${r.measurement.unmeasurable} unmeasurable |`);
   L.push("", `\xB9 ${r.scores.method}`, "");
   const ranked = r.findings.filter((f) => f.priority && f.priority.score > 0).sort((a, b) => b.priority.score - a.priority.score);
@@ -39493,14 +39605,14 @@ async function querySearchConsole(q) {
 }
 
 // src/integrations/google-oauth.ts
-import crypto4 from "node:crypto";
+import crypto5 from "node:crypto";
 import fs5 from "node:fs";
 import http4 from "node:http";
 import https4 from "node:https";
 
 // src/integrations/credentials.ts
 import { spawnSync } from "node:child_process";
-import crypto3 from "node:crypto";
+import crypto4 from "node:crypto";
 import fs4 from "node:fs";
 import os from "node:os";
 import path5 from "node:path";
@@ -39567,7 +39679,7 @@ function keychainKind(platform = process.platform) {
 function keychainService(dir) {
   const resolved = path5.resolve(dir);
   if (resolved === path5.resolve(defaultConfigDir())) return "searvex";
-  return `searvex-${crypto3.createHash("sha256").update(resolved).digest("hex").slice(0, 12)}`;
+  return `searvex-${crypto4.createHash("sha256").update(resolved).digest("hex").slice(0, 12)}`;
 }
 var PS_PROTECT = "$ErrorActionPreference='Stop';Add-Type -AssemblyName System.Security;$s=[Console]::In.ReadToEnd();[Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($s),$null,'CurrentUser'))";
 var PS_UNPROTECT = "$ErrorActionPreference='Stop';Add-Type -AssemblyName System.Security;$s=[Console]::In.ReadToEnd().Trim();[Console]::Out.Write([Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($s),$null,'CurrentUser')))";
@@ -39712,8 +39824,8 @@ async function revokeToken(token) {
 }
 var b64url = (b) => b.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 function pkcePair() {
-  const verifier = b64url(crypto4.randomBytes(48));
-  return { verifier, challenge: b64url(crypto4.createHash("sha256").update(verifier).digest()) };
+  const verifier = b64url(crypto5.randomBytes(48));
+  return { verifier, challenge: b64url(crypto5.createHash("sha256").update(verifier).digest()) };
 }
 function postForm(url, form) {
   const body = new URLSearchParams(form).toString();
@@ -39740,7 +39852,7 @@ function postForm(url, form) {
 }
 async function authorize(client, scope, onUrl, timeoutMs = 5 * 60 * 1e3) {
   const { verifier, challenge } = pkcePair();
-  const state = b64url(crypto4.randomBytes(16));
+  const state = b64url(crypto5.randomBytes(16));
   const server = http4.createServer();
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const redirectUri = `http://127.0.0.1:${server.address().port}`;
@@ -40375,6 +40487,8 @@ async function commandMonitor(flags) {
     const label = `The export ${exp.files.join(", ")}`;
     propertyOrUsage(() => (assertAuditInProperty(report, importProperty, label), void 0));
     for (const w of exp.warnings) log(v, `warning: ${w}`);
+    const pages = exp.tables.pages;
+    if (pages?.length && applyTrafficPriorities(report, pages.map((p) => ({ page: p.key, clicks: p.clicks, impressions: p.impressions })), `Search Console export ${exp.files.join(", ")}`)) writeReports(store2, report, kb, ["json", "md", "html"]);
     const table = exp.tables.queries ?? exp.tables.pages;
     const verified = exp.tables.pages?.length ? "property checked against the pages table" : "property as stated with --property (the export has no pages table to check it)";
     if (table?.length) gsc = { rows: table.map((r) => ({ keys: [r.key], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })), source: `imported ${exp.files.join(", ")}, ${importProperty.raw}; ${verified}` };
@@ -40592,7 +40706,7 @@ Sources: ${rule.sources.map((s) => s.url).join(" ")}` },
 }
 
 // src/rules/sources.ts
-import crypto5 from "node:crypto";
+import crypto6 from "node:crypto";
 import fs9 from "node:fs";
 import path10 from "node:path";
 init_fetcher();
@@ -40636,7 +40750,7 @@ async function fetchSourceSnapshot(url, opts = {}) {
     ...base,
     title: page.title,
     lastUpdated: extractLastUpdated(res.body),
-    contentHash: text4.length >= 200 ? crypto5.createHash("sha256").update(text4).digest("hex") : null,
+    contentHash: text4.length >= 200 ? crypto6.createHash("sha256").update(text4).digest("hex") : null,
     textLength: text4.length
   };
 }
@@ -41769,10 +41883,10 @@ function unifiedDiff(file2, before2, after2, context = 3) {
 }
 
 // src/optimize/transaction.ts
-import crypto6 from "node:crypto";
+import crypto7 from "node:crypto";
 import fs11 from "node:fs";
 import path15 from "node:path";
-var sha = (s) => crypto6.createHash("sha256").update(s).digest("hex");
+var sha = (s) => crypto7.createHash("sha256").update(s).digest("hex");
 function changesDir(root2) {
   return path15.join(root2, ".searvex", "changes");
 }
@@ -41796,7 +41910,7 @@ function interruptedChanges(root2) {
 var ConflictError = class extends Error {
 };
 function applyFixes(root2, fixes) {
-  const changeId = `chg-${(/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").replace(/\..+/, "").replace("T", "-")}-${crypto6.randomBytes(3).toString("hex")}`;
+  const changeId = `chg-${(/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").replace(/\..+/, "").replace("T", "-")}-${crypto7.randomBytes(3).toString("hex")}`;
   const dir = path15.join(changesDir(root2), changeId);
   const finalByPath = /* @__PURE__ */ new Map();
   for (const f of fixes) for (const c of f.changes) {
@@ -42175,12 +42289,13 @@ function analyzeSearchPerformance(input, opts) {
     const pageStats = new Map(topPages.map((p) => [normalizeUrl(p.page) ?? p.page, p]));
     for (const f of opts.audit.findings) {
       if (f.severity === "info") continue;
-      const hit = f.evidence.map((e) => e.url ? pageStats.get(normalizeUrl(e.url) ?? e.url) : void 0).filter((x) => !!x);
+      const urls = f.affected?.urls ?? f.evidence.map((e) => e.url).filter((u) => !!u);
+      const hit = urls.map((u) => pageStats.get(normalizeUrl(u) ?? u)).filter((x) => !!x);
       if (!hit.length) continue;
       findingsOnTrafficPages.push({ ruleId: f.ruleId, title: f.title, severity: f.severity, pages: hit.length, clicks: hit.reduce((a, p) => a + p.clicks, 0), impressions: hit.reduce((a, p) => a + p.impressions, 0) });
     }
     findingsOnTrafficPages.sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
-    notes.push("Findings-on-traffic uses the evidence URLs recorded in the audit (up to 50 per rule).");
+    if (opts.audit.findings.some((f) => f.severity !== "info" && !f.affected?.urls)) notes.push("Findings-on-traffic uses the evidence URLs recorded in the audit (up to 50 per rule) for findings without a complete affected-URL list.");
   } else if (!opts.audit) notMeasured.push("Findings on traffic pages and pages without impressions: no audit joined (use --audit latest).");
   if (opts.audit && joined) {
     for (const d of qp) {
@@ -42202,6 +42317,7 @@ function analyzeSearchPerformance(input, opts) {
     totals: { clicks: totalClicks, impressions: totalImpr, ctr: r4(totalClicks / Math.max(1, totalImpr)), queries: queryAgg.length, pages: pageAgg.length, basis },
     topQueries: topQueries.slice(0, 100),
     topPages: topPages.slice(0, 100),
+    ...pageAgg.length ? { pageTotals: pageAgg.map((p) => ({ page: p.page, clicks: p.clicks, impressions: p.impressions })) } : {},
     strikingDistance,
     lowCtr,
     multiPageQueries: multiPageQueries.slice(0, 100),
@@ -42344,7 +42460,11 @@ function saveReport(flags, workspace, kind, meta, report) {
   if (report.audit) {
     const as = new RunStore(workspace, report.audit.runId);
     const audit = as.readJson("report.json");
-    if (audit) auditHtml = writeReports(as, audit, loadKnowledge(), ["html"])[0];
+    if (audit) {
+      const traffic = report.pageTotals ? applyTrafficPriorities(audit, report.pageTotals, `${report.source}, ${report.period.days} days`) : null;
+      if (traffic) log(v, `Priorities of ${report.audit.runId} weighted by ${traffic.metric} on ${traffic.pages} crawled page(s).`);
+      auditHtml = writeReports(as, audit, loadKnowledge(), traffic ? ["json", "html"] : ["html"]).at(-1);
+    }
   }
   if (v["json"]) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
   else if (!v["quiet"]) console.log(renderSearchPerformanceMarkdown(report) + `
@@ -43310,6 +43430,8 @@ Common options
   --concurrency <n>     Parallel requests (default 4)     --delay <ms>       Per-host delay (default 250)
   --timeout <ms>        Per-request timeout (default 15000, 1000\u2013120000)
   --render              Execute JavaScript with Playwright (optional dependency) and compare DOMs
+  --save-html           Keep each fetched HTML body (as served, \u2264 2 MB) under artefacts/ in the run
+  --screenshots         With --render: one viewport screenshot per rendered page (\u2264 200 MB per run in all)
   --include <regex>     Only crawl matching URLs          --exclude <regex>  Skip matching URLs
   --check-external      Check outbound links (HEAD, robots.txt-aware, max 200)
   --no-sitemap          Do not seed from sitemaps         --resume <runId>   Resume an interrupted crawl
@@ -43400,6 +43522,8 @@ var CLI_OPTIONS = {
   resume: { type: "string" },
   "max-duration": { type: "string" },
   compact: { type: "boolean" },
+  "save-html": { type: "boolean" },
+  screenshots: { type: "boolean" },
   progress: { type: "string" },
   rules: { type: "string", multiple: true },
   format: { type: "string" },
@@ -43556,6 +43680,10 @@ function policyFrom(v, env = process.env) {
     throw e;
   }
 }
+function artefactsFrom(v) {
+  if (v["screenshots"] && !v["render"]) throw new UsageError("--screenshots needs --render (screenshots are taken of the rendered page)");
+  return v["save-html"] || v["screenshots"] ? { html: !!v["save-html"], screenshots: !!v["screenshots"] } : void 0;
+}
 function crawlOptionsFrom(v) {
   return {
     maxPages: num(v["max-pages"], 500, 1, 1e6),
@@ -43567,6 +43695,7 @@ function crawlOptionsFrom(v) {
     include: v["include"]?.map((r) => new RegExp(r)),
     exclude: v["exclude"]?.map((r) => new RegExp(r)),
     policy: policyFrom(v),
+    artefacts: artefactsFrom(v),
     // monitor also accepts a Search Console property (sc-domain:…) here; only URLs map origins.
     siteUrl: typeof v["site-url"] === "string" && /^https?:\/\//i.test(v["site-url"]) ? v["site-url"] : void 0
   };
@@ -44004,6 +44133,7 @@ export {
   PolicyError,
   SEVERITY_ORDER,
   UsageError,
+  artefactsFrom,
   assertSiteUrl,
   assertTargetAllowed,
   auditExit,

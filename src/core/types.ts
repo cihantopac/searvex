@@ -56,6 +56,11 @@ export interface Evidence {
    * prompts and `searvex review` use). Set on reports written since 1.3.0.
    */
   ref?: string;
+  /**
+   * Evidence artefacts of the page this occurrence is on, relative to the run directory: the HTML body as served
+   * (`--save-html`, saved as `.html.txt`) and a viewport screenshot (`--screenshots`). Since schema 1.1.
+   */
+  artefact?: { html?: string; screenshot?: string };
 }
 
 export interface Finding {
