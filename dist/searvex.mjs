@@ -632,8 +632,8 @@ function ipv4ToInt(ip) {
   return (p[0] << 24 >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3] >>> 0;
 }
 function inV4Block(ip, base, bits) {
-  const mask = bits === 0 ? 0 : ~0 << 32 - bits >>> 0;
-  return (ipv4ToInt(ip) & mask) === (ipv4ToInt(base) & mask);
+  const mask2 = bits === 0 ? 0 : ~0 << 32 - bits >>> 0;
+  return (ipv4ToInt(ip) & mask2) === (ipv4ToInt(base) & mask2);
 }
 function expandIPv6(ip) {
   let addr = ip.toLowerCase();
@@ -1196,35 +1196,35 @@ var require_Robots = __commonJS({
       }
       return formattedUserAgent.trim();
     }
-    function normaliseEncoding(path25) {
+    function normaliseEncoding(path26) {
       try {
-        return urlEncodeToUpper(encodeURI(path25).replace(/%25/g, "%"));
+        return urlEncodeToUpper(encodeURI(path26).replace(/%25/g, "%"));
       } catch (e) {
-        return path25;
+        return path26;
       }
     }
-    function urlEncodeToUpper(path25) {
-      return path25.replace(/%[0-9a-fA-F]{2}/g, function(match) {
+    function urlEncodeToUpper(path26) {
+      return path26.replace(/%[0-9a-fA-F]{2}/g, function(match) {
         return match.toUpperCase();
       });
     }
-    function matches(pattern, path25) {
-      var matchingLengths = new Array(path25.length + 1);
+    function matches(pattern, path26) {
+      var matchingLengths = new Array(path26.length + 1);
       var numMatchingLengths = 1;
       matchingLengths[0] = 0;
       for (var p = 0; p < pattern.length; p++) {
         if (pattern[p] === "$" && p + 1 === pattern.length) {
-          return matchingLengths[numMatchingLengths - 1] === path25.length;
+          return matchingLengths[numMatchingLengths - 1] === path26.length;
         }
         if (pattern[p] == "*") {
-          numMatchingLengths = path25.length - matchingLengths[0] + 1;
+          numMatchingLengths = path26.length - matchingLengths[0] + 1;
           for (var i = 1; i < numMatchingLengths; i++) {
             matchingLengths[i] = matchingLengths[i - 1] + 1;
           }
         } else {
           var numMatches = 0;
           for (var i = 0; i < numMatchingLengths; i++) {
-            if (matchingLengths[i] < path25.length && path25[matchingLengths[i]] === pattern[p]) {
+            if (matchingLengths[i] < path26.length && path26[matchingLengths[i]] === pattern[p]) {
               matchingLengths[numMatches++] = matchingLengths[i] + 1;
             }
           }
@@ -1278,11 +1278,11 @@ var require_Robots = __commonJS({
         isNoneUserAgentState = line[0].toLowerCase() !== "user-agent";
       }
     }
-    function findRule(path25, rules) {
+    function findRule(path26, rules) {
       var matchedRule = null;
       for (var i = 0; i < rules.length; i++) {
         var rule = rules[i];
-        if (!matches(rule.pattern, path25)) {
+        if (!matches(rule.pattern, path26)) {
           continue;
         }
         if (!matchedRule || rule.pattern.length > matchedRule.pattern.length) {
@@ -1349,8 +1349,8 @@ var require_Robots = __commonJS({
         return;
       }
       var rules = this._rules[userAgent] || this._rules["*"] || [];
-      var path25 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
-      var rule = findRule(path25, rules);
+      var path26 = urlEncodeToUpper(parsedUrl.pathname + parsedUrl.search);
+      var rule = findRule(path26, rules);
       return rule;
     };
     Robots.prototype.isAllowed = function(url, ua) {
@@ -4891,14 +4891,14 @@ var require_lib = __commonJS({
           this.resetEndLocation(decl.id);
         }
       }
-      parseAsyncArrowFromCallExpression(node, call) {
+      parseAsyncArrowFromCallExpression(node, call2) {
         if (this.match(14)) {
           const oldNoAnonFunctionType = this.state.noAnonFunctionType;
           this.state.noAnonFunctionType = true;
           node.returnType = this.flowParseTypeAnnotation();
           this.state.noAnonFunctionType = oldNoAnonFunctionType;
         }
-        return super.parseAsyncArrowFromCallExpression(node, call);
+        return super.parseAsyncArrowFromCallExpression(node, call2);
       }
       shouldParseAsyncArrow() {
         return this.match(14) || super.shouldParseAsyncArrow();
@@ -11164,11 +11164,11 @@ var require_lib = __commonJS({
           this.resetEndLocation(decl.id);
         }
       }
-      parseAsyncArrowFromCallExpression(node, call) {
+      parseAsyncArrowFromCallExpression(node, call2) {
         if (this.match(14)) {
           node.returnType = this.tsParseTypeAnnotation();
         }
-        return super.parseAsyncArrowFromCallExpression(node, call);
+        return super.parseAsyncArrowFromCallExpression(node, call2);
       }
       parseMaybeAssign(refExpressionErrors, afterLeftParse) {
         var _jsx, _jsx2, _typeCast, _jsx3, _typeCast2;
@@ -11350,9 +11350,9 @@ var require_lib = __commonJS({
         if (this.match(47) || this.match(51)) {
           const typeArguments = this.tsParseTypeArgumentsInExpression();
           if (this.match(10)) {
-            const call = super.parseMaybeDecoratorArguments(expr, startLoc);
-            call.typeParameters = typeArguments;
-            return call;
+            const call2 = super.parseMaybeDecoratorArguments(expr, startLoc);
+            call2.typeParameters = typeArguments;
+            return call2;
           }
           this.unexpected(null, 10);
         }
@@ -12671,16 +12671,16 @@ var require_lib = __commonJS({
       shouldParseAsyncArrow() {
         return this.match(19) && !this.canInsertSemicolon();
       }
-      parseAsyncArrowFromCallExpression(node, call) {
+      parseAsyncArrowFromCallExpression(node, call2) {
         var _call$extra;
-        this.resetPreviousNodeTrailingComments(call);
+        this.resetPreviousNodeTrailingComments(call2);
         this.expect(19);
-        this.parseArrowExpression(node, call.arguments, true, (_call$extra = call.extra) == null ? void 0 : _call$extra.trailingCommaLoc);
-        if (call.innerComments) {
-          setInnerComments(node, call.innerComments);
+        this.parseArrowExpression(node, call2.arguments, true, (_call$extra = call2.extra) == null ? void 0 : _call$extra.trailingCommaLoc);
+        if (call2.innerComments) {
+          setInnerComments(node, call2.innerComments);
         }
-        if (call.callee.trailingComments) {
-          setInnerComments(node, call.callee.trailingComments);
+        if (call2.callee.trailingComments) {
+          setInnerComments(node, call2.callee.trailingComments);
         }
         return node;
       }
@@ -16109,7 +16109,7 @@ var init_bing = __esm({
 
 // src/net/policy-proxy.ts
 import crypto8 from "node:crypto";
-import http8 from "node:http";
+import http9 from "node:http";
 import net2 from "node:net";
 async function startPolicyProxy(policy, opts = {}) {
   const maxBytes = opts.maxBytesPerWindow ?? 64 * 1024 * 1024;
@@ -16161,7 +16161,7 @@ Connection: close\r
       return null;
     }
   };
-  const server = http8.createServer((req, res) => {
+  const server = http9.createServer((req, res) => {
     stats.requests++;
     if (!authorized(req)) {
       res.writeHead(407, { "proxy-authenticate": 'Basic realm="searvex"', connection: "close" }).end();
@@ -16187,7 +16187,7 @@ Connection: close\r
       forward(via ? { agent: void 0, createConnection: () => via } : { lookup: guardedLookup(policy), agent: false });
     }).catch(fail);
     const forward = (connection) => {
-      const upstream = http8.request(
+      const upstream = http9.request(
         { host, port: port2, path: `${u.pathname}${u.search}`, method: req.method, headers, ...connection, timeout: idle },
         (up) => {
           const out = {};
@@ -16418,7 +16418,7 @@ var init_render = __esm({
 
 // src/cli.ts
 import fs16 from "node:fs";
-import path24 from "node:path";
+import path25 from "node:path";
 import { parseArgs } from "node:util";
 
 // src/crawl/crawler.ts
@@ -33083,16 +33083,16 @@ var MatcherView = class {
    * @returns {string|undefined}
    */
   getCurrentTag() {
-    const path25 = this._matcher.path;
-    return path25.length > 0 ? path25[path25.length - 1].tag : void 0;
+    const path26 = this._matcher.path;
+    return path26.length > 0 ? path26[path26.length - 1].tag : void 0;
   }
   /**
    * Get current namespace.
    * @returns {string|undefined}
    */
   getCurrentNamespace() {
-    const path25 = this._matcher.path;
-    return path25.length > 0 ? path25[path25.length - 1].namespace : void 0;
+    const path26 = this._matcher.path;
+    return path26.length > 0 ? path26[path26.length - 1].namespace : void 0;
   }
   /**
    * Get current node's attribute value.
@@ -33100,9 +33100,9 @@ var MatcherView = class {
    * @returns {*}
    */
   getAttrValue(attrName) {
-    const path25 = this._matcher.path;
-    if (path25.length === 0) return void 0;
-    return path25[path25.length - 1].values?.[attrName];
+    const path26 = this._matcher.path;
+    if (path26.length === 0) return void 0;
+    return path26[path26.length - 1].values?.[attrName];
   }
   /**
    * Check if current node has an attribute.
@@ -33110,9 +33110,9 @@ var MatcherView = class {
    * @returns {boolean}
    */
   hasAttr(attrName) {
-    const path25 = this._matcher.path;
-    if (path25.length === 0) return false;
-    const current2 = path25[path25.length - 1];
+    const path26 = this._matcher.path;
+    if (path26.length === 0) return false;
+    const current2 = path26[path26.length - 1];
     return current2.values !== void 0 && attrName in current2.values;
   }
   /**
@@ -33138,18 +33138,18 @@ var MatcherView = class {
    * @returns {number}
    */
   getPosition() {
-    const path25 = this._matcher.path;
-    if (path25.length === 0) return -1;
-    return path25[path25.length - 1].position ?? 0;
+    const path26 = this._matcher.path;
+    if (path26.length === 0) return -1;
+    return path26[path26.length - 1].position ?? 0;
   }
   /**
    * Get current node's repeat counter (occurrence count of this tag name).
    * @returns {number}
    */
   getCounter() {
-    const path25 = this._matcher.path;
-    if (path25.length === 0) return -1;
-    return path25[path25.length - 1].counter ?? 0;
+    const path26 = this._matcher.path;
+    if (path26.length === 0) return -1;
+    return path26[path26.length - 1].counter ?? 0;
   }
   /**
    * Get current node's sibling index (alias for getPosition).
@@ -36376,10 +36376,10 @@ function buildInventory(ctx) {
     if (!f || p.status !== 200 || p.redirects.length) continue;
     const types = /* @__PURE__ */ new Set();
     for (const b of f.jsonLd) for (const n of typedNodes(b.data)) for (const t of [].concat(n["@type"] ?? [])) if (typeof t === "string") types.add(t);
-    const path25 = new URL(p.finalUrl).pathname;
+    const path26 = new URL(p.finalUrl).pathname;
     let type = "other";
     let basis = "default";
-    if (p === ctx.homepage || path25 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path25)) {
+    if (p === ctx.homepage || path26 === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(path26)) {
       type = "home";
       basis = "url";
     } else {
@@ -36388,7 +36388,7 @@ function buildInventory(ctx) {
         type = s;
         basis = "schema";
       } else {
-        const r = URL_RULES.find(([re]) => re.test(path25));
+        const r = URL_RULES.find(([re]) => re.test(path26));
         if (r) {
           type = r[1];
           basis = "url";
@@ -36460,7 +36460,7 @@ function buildInventory(ctx) {
       pagesWithStructuredData: pagesWithSd,
       invalidJsonLdPages
     },
-    sections: [...sectionsMap.entries()].map(([path25, c]) => ({ path: path25, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
+    sections: [...sectionsMap.entries()].map(([path26, c]) => ({ path: path26, pages: c })).sort((a, b) => b.pages - a.pages).slice(0, 30)
   };
 }
 function classifyBusiness(ctx, byType, sd) {
@@ -37201,8 +37201,8 @@ function runTechnicalChecks(ctx, sink) {
     const ttfb = p.ttfbMs ?? p.timingMs;
     if (ttfb > 800 && !p.redirects.length) sink.emit("perf.slow-ttfb", { url: p.url, observed: `TTFB ${ttfb} ms (single sample from the crawler's location; full response ${p.timingMs} ms)` });
     if (p.bytes > 10 * 1024 && !p.headers["content-encoding"]) sink.emit("perf.no-compression", { url: p.url, observed: `${Math.round(p.bytes / 1024)} KB uncompressed` });
-    const path25 = new URL(p.finalUrl).pathname;
-    if (path25.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
+    const path26 = new URL(p.finalUrl).pathname;
+    if (path26.includes("_") && !p.foundOn?.startsWith("sitemap")) sink.emit("url.underscores", { url: p.url });
     const declared = primaryTag(f.lang);
     if (declared && ["en", "tr", "de", "fr", "es", "it", "pt", "nl"].includes(declared) && !noindex) {
       const detected = detectLanguage(mainTextOf(ctx, f));
@@ -37310,11 +37310,11 @@ function checkFacetsAndPagination(ctx, sink) {
     const key = u.origin + u.pathname;
     (variants.get(key) ?? variants.set(key, /* @__PURE__ */ new Set()).get(key)).add(u.search);
   }
-  for (const [path25, set] of variants) {
+  for (const [path26, set] of variants) {
     if (set.size < 10) continue;
     const paramCount = /* @__PURE__ */ new Map();
     for (const q of set) for (const k of new URLSearchParams(q).keys()) if (!PAGE_PARAM.test(k)) paramCount.set(k, (paramCount.get(k) ?? 0) + 1);
-    const crawled = ctx.pages.filter((p) => p.url.startsWith(path25 + "?"));
+    const crawled = ctx.pages.filter((p) => p.url.startsWith(path26 + "?"));
     const blocked = crawled.filter((p) => p.blockedByRobots).length;
     const canonicalised = crawled.filter((p) => {
       const f = factsOf(p);
@@ -37322,7 +37322,7 @@ function checkFacetsAndPagination(ctx, sink) {
     }).length;
     const params = [...paramCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => `${k} (${n})`).join(", ");
     sink.emit("crawl.facet-explosion", {
-      url: path25,
+      url: path26,
       observed: `${set.size} parameter variants linked internally; parameters: ${params}; of ${crawled.length} crawled variants, ${blocked} robots-blocked, ${canonicalised} canonicalised elsewhere`
     });
   }
@@ -37340,13 +37340,13 @@ function checkFacetsAndPagination(ctx, sink) {
 // src/analyze/priority.ts
 var SEVERITY = { critical: 1, high: 0.7, medium: 0.4, low: 0.15, info: 0 };
 function urlPattern(urlOrPath) {
-  let path25;
+  let path26;
   try {
-    path25 = new URL(urlOrPath).pathname;
+    path26 = new URL(urlOrPath).pathname;
   } catch {
-    path25 = urlOrPath.startsWith("/") ? urlOrPath : "/" + urlOrPath;
+    path26 = urlOrPath.startsWith("/") ? urlOrPath : "/" + urlOrPath;
   }
-  const segs = path25.split("/").filter(Boolean);
+  const segs = path26.split("/").filter(Boolean);
   if (!segs.length) return "/";
   const out = [];
   if (/^[a-z]{2}(-[a-z]{2})?$/i.test(segs[0])) out.push(segs.shift());
@@ -38368,10 +38368,10 @@ async function probeLocaleAdaptive(startUrl, opts, sink) {
 async function probeHostVariants(startUrl, opts, sink) {
   const u = new URL(startUrl);
   if (u.protocol === "https:") {
-    const http9 = new URL(startUrl);
-    http9.protocol = "http:";
-    const res2 = await safeFetch(http9.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
-    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http9.toString(), observed: "HTTP 200 without redirect to HTTPS" });
+    const http10 = new URL(startUrl);
+    http10.protocol = "http:";
+    const res2 = await safeFetch(http10.toString(), { ...opts, followRedirects: false, maxBytes: 64 * 1024 });
+    if (!res2.error && res2.status === 200) sink.emit("canonical.http-https", { url: http10.toString(), observed: "HTTP 200 without redirect to HTTPS" });
   }
   if (/^[\d.]+$/.test(u.hostname) || u.hostname === "localhost" || u.hostname.split(".").length < 2) return;
   const alt = new URL(startUrl);
@@ -43840,8 +43840,199 @@ GA4 property ${propertyId} \xB7 ${report.totals.sessions} organic sessions on ${
   return 0;
 }
 
-// src/commands/research.ts
+// src/commands/yandex.ts
 import path21 from "node:path";
+
+// src/integrations/yandex.ts
+import http8 from "node:http";
+import https8 from "node:https";
+var BASE5 = () => process.env["SEARVEX_YANDEX_API_BASE"] ?? "https://api.webmaster.yandex.net/v4";
+var YandexApiError = class extends Error {
+};
+function get4(url, token) {
+  return new Promise((resolve, reject) => {
+    const req = (url.startsWith("https:") ? https8 : http8).get(url, { timeout: 3e4, headers: { authorization: `OAuth ${token}`, accept: "application/json" } }, (r) => {
+      const chunks = [];
+      r.on("data", (c) => chunks.push(c));
+      r.on("end", () => {
+        const text4 = Buffer.concat(chunks).toString("utf8");
+        let json = {};
+        try {
+          json = JSON.parse(text4);
+        } catch {
+          json = { raw: text4.slice(0, 300) };
+        }
+        resolve({ status: r.statusCode ?? 0, json });
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error("Yandex Webmaster request timed out")));
+    req.on("error", reject);
+  });
+}
+function yandexErrorMessage(status, json) {
+  const code = String(json["error_code"] ?? "");
+  const msg = String(json["error_message"] ?? json["raw"] ?? "").slice(0, 200);
+  if (status === 401) return 'Yandex rejected the OAuth token (invalid or expired). Store a new one with "searvex yandex auth --force", or fix SEARVEX_YANDEX_TOKEN.';
+  if (status === 403) return `The token has no access to this site in Yandex Webmaster (${code || msg}). Check that the site is added and verified for the token's account.`;
+  if (status === 404 && /HOST_NOT/i.test(code)) return `The site is not in this Yandex Webmaster account (${code}). List sites with "searvex yandex sites".`;
+  if (status === 429) return "Yandex Webmaster API quota reached. Try again later.";
+  return `Yandex Webmaster API HTTP ${status}${code ? ` ${code}` : ""}: ${msg}`;
+}
+async function call(path26, token) {
+  const res = await get4(`${BASE5()}${path26}`, token);
+  if (res.status !== 200) throw new YandexApiError(yandexErrorMessage(res.status, res.json));
+  return res.json;
+}
+async function yandexUserId(token) {
+  const id = (await call("/user", token))["user_id"];
+  if (id === void 0) throw new YandexApiError("Yandex Webmaster returned no user_id for this token");
+  return String(id);
+}
+async function yandexHosts(token, userId) {
+  const hosts = (await call(`/user/${encodeURIComponent(userId)}/hosts`, token))["hosts"] ?? [];
+  return hosts.map((h) => ({ id: h.host_id, url: h.ascii_host_url, verified: !!h.verified, ...h.main_mirror?.ascii_host_url ? { mainMirror: h.main_mirror.ascii_host_url } : {} }));
+}
+async function yandexPopularQueries(token, userId, hostId, range, maxRows = 500) {
+  const rows = [];
+  let total = 0;
+  for (let offset = 0; offset < maxRows; offset += 500) {
+    const q = new URLSearchParams({ order_by: "TOTAL_SHOWS", date_from: range.startDate, date_to: range.endDate, offset: String(offset), limit: String(Math.min(500, maxRows - offset)) });
+    for (const i of ["TOTAL_SHOWS", "TOTAL_CLICKS", "AVG_SHOW_POSITION"]) q.append("query_indicator", i);
+    const json = await call(`/user/${encodeURIComponent(userId)}/hosts/${encodeURIComponent(hostId)}/search-queries/popular?${q}`, token);
+    const page = json["queries"] ?? [];
+    total = Number(json["count"] ?? 0) || total;
+    for (const x of page) {
+      const ind = x.indicators ?? {};
+      const pos = ind["AVG_SHOW_POSITION"];
+      rows.push({ query: x.query_text ?? "", shows: Number(ind["TOTAL_SHOWS"] ?? 0) || 0, clicks: Number(ind["TOTAL_CLICKS"] ?? 0) || 0, ...typeof pos === "number" ? { position: Math.round(pos * 10) / 10 } : {} });
+    }
+    if (page.length < 500) break;
+  }
+  return { rows, total: Math.max(total, rows.length) };
+}
+function hostIdFor(siteUrl) {
+  const u = new URL(siteUrl);
+  const port = u.port || (u.protocol === "https:" ? "443" : "80");
+  return `${u.protocol.replace(":", "")}:${u.hostname.toLowerCase()}:${port}`;
+}
+
+// src/commands/yandex.ts
+function yandexToken() {
+  const env = process.env["SEARVEX_YANDEX_TOKEN"];
+  if (env) return { token: env, source: "SEARVEX_YANDEX_TOKEN" };
+  const stored = getCredential("yandex");
+  return stored?.refreshToken ? { token: stored.refreshToken, source: defaultCredentialStore().describe() } : null;
+}
+var mask = (text4, token) => token ? text4.split(token).join("***") : text4;
+function buildYandexReport(rows, meta) {
+  const shows = rows.reduce((a, r) => a + r.shows, 0);
+  const clicks = rows.reduce((a, r) => a + r.clicks, 0);
+  const report = {
+    source: `Yandex Webmaster ${meta.site}`,
+    site: meta.site,
+    period: { days: meta.days, startDate: meta.startDate, endDate: meta.endDate },
+    queriesTotal: meta.total,
+    totals: { shows, clicks },
+    queries: rows.map((r) => ({ ...r, ctr: r.shows ? Math.round(r.clicks / r.shows * 1e3) / 1e3 : 0 })),
+    notes: ["Popular queries only: the Yandex Webmaster API gives no page \xD7 query breakdown here, so findings are not joined to pages.", "Totals are sums over the listed queries, not site totals."]
+  };
+  if (meta.total > rows.length) report.notes.push(`Only the top ${rows.length} of ${meta.total} queries by impressions are listed (--max-rows).`);
+  return report;
+}
+function renderYandexMarkdown(r) {
+  const L = [`# Yandex search queries \u2014 ${md(r.site)}`, "", `_Experimental: not yet verified against a live site. ${md(r.period.startDate)} \u2013 ${md(r.period.endDate)} (${r.period.days} days)._`, ""];
+  L.push(`Impressions **${r.totals.shows}**, clicks **${r.totals.clicks}** over ${r.queries.length} of ${r.queriesTotal} queries.`, "");
+  if (r.queries.length) {
+    L.push("| Query | Impressions | Clicks | CTR | Avg. position |", "|---|---|---|---|---|");
+    for (const q of r.queries.slice(0, 50)) L.push(`| ${md(q.query)} | ${q.shows} | ${q.clicks} | ${(q.ctr * 100).toFixed(1)}% | ${q.position ?? "\u2014"} |`);
+    L.push("");
+  }
+  L.push("## Notes", "", ...r.notes.map((n) => `- ${md(n)}`), "");
+  return L.join("\n");
+}
+async function commandYandex(flags) {
+  const v = flags.values;
+  const sub = flags.positionals[1];
+  const usage = "yandex subcommands: auth [--force] | status | sites | report <siteUrl> [--days 28] [--max-rows 500] | logout";
+  if (sub === "auth") {
+    if (getCredential("yandex") && !v["force"]) {
+      console.log(`A Yandex OAuth token is already stored in ${defaultCredentialStore().describe()}. Use --force to replace it, or "yandex logout".`);
+      return 0;
+    }
+    const token = await readSecret("Yandex OAuth token with Webmaster access (oauth.yandex.com; input hidden): ");
+    if (!/^[A-Za-z0-9_-]{20,200}$/.test(token)) throw new UsageError("That does not look like a Yandex OAuth token. Nothing was stored.");
+    let hosts2;
+    try {
+      hosts2 = await yandexHosts(token, await yandexUserId(token));
+    } catch (e) {
+      throw new UsageError(`Yandex rejected the token; nothing was stored. ${mask(e.message, token)}`);
+    }
+    saveCredential("yandex", { clientId: "yandex-oauth-token", refreshToken: token, scope: "webmaster:read", createdAt: (/* @__PURE__ */ new Date()).toISOString() });
+    console.log(`Stored the Yandex token in ${defaultCredentialStore().describe()}. Sites on this account: ${hosts2.length} (${hosts2.filter((h) => h.verified).length} verified). Yandex is experimental in Searvex.`);
+    return 0;
+  }
+  if (sub === "logout") {
+    const removed = deleteCredential("yandex");
+    console.log(`${removed ? "Removed the stored Yandex token." : "No stored Yandex token."} The token stays valid until you revoke it at oauth.yandex.com.`);
+    return 0;
+  }
+  const t = yandexToken();
+  if (sub === "status" || sub === "sites") {
+    if (!t) {
+      const hint = 'No Yandex token: run "searvex yandex auth", or set SEARVEX_YANDEX_TOKEN.';
+      if (v["json"]) process.stdout.write(JSON.stringify({ token: "none", valid: false, hint }, null, 2) + "\n");
+      else console.log(`token: none
+${hint}`);
+      return 1;
+    }
+    try {
+      const hosts2 = await yandexHosts(t.token, await yandexUserId(t.token));
+      if (sub === "sites") {
+        if (v["json"]) process.stdout.write(JSON.stringify(hosts2, null, 2) + "\n");
+        else for (const h of hosts2) console.log(`${h.url}	${h.verified ? "verified" : "not verified"}${h.mainMirror && h.mainMirror !== h.url ? `	main mirror ${h.mainMirror}` : ""}`);
+        return 0;
+      }
+      const status = { token: t.source, valid: true, sites: hosts2.length, experimental: true };
+      if (v["json"]) process.stdout.write(JSON.stringify(status, null, 2) + "\n");
+      else for (const [n, x] of Object.entries(status)) console.log(`${n}: ${String(x)}`);
+      return 0;
+    } catch (e) {
+      const status = { token: t.source, valid: false, error: mask(e.message, t.token) };
+      if (v["json"]) process.stdout.write(JSON.stringify(status, null, 2) + "\n");
+      else for (const [n, x] of Object.entries(status)) console.log(`${n}: ${String(x)}`);
+      return 1;
+    }
+  }
+  if (sub !== "report") throw new UsageError(usage);
+  const siteUrl = flags.positionals[2];
+  if (!siteUrl || !/^https?:\/\//.test(siteUrl)) throw new UsageError("yandex report requires the site URL as added in Yandex Webmaster, e.g. https://example.com/");
+  if (!t) throw new UsageError('No Yandex token: run "searvex yandex auth", or set SEARVEX_YANDEX_TOKEN.');
+  const days = num(v["days"], 28, 1, 365);
+  const maxRows = num(v["max-rows"], 500, 1, 5e3);
+  const userId = await yandexUserId(t.token);
+  const hosts = await yandexHosts(t.token, userId);
+  const wanted = hostIdFor(siteUrl);
+  const host = hosts.find((h) => h.id === wanted);
+  if (!host) throw new UsageError(`${siteUrl} (${wanted}) is not a site of this Yandex Webmaster account. Sites: ${hosts.map((h) => h.url).slice(0, 10).join(", ") || "none"}.`);
+  if (!host.verified) throw new UsageError(`${host.url} is not verified in Yandex Webmaster; Yandex returns no query data for unverified sites.`);
+  const range = dateRange(days);
+  log(v, `Reading popular Yandex queries for ${host.url} (${days} days)\u2026`);
+  const { rows, total } = await yandexPopularQueries(t.token, userId, host.id, range, maxRows);
+  const report = buildYandexReport(rows, { site: host.url, days, ...range, total });
+  const workspace = path21.resolve(String(v["out"] ?? process.cwd()));
+  const store2 = new RunStore(workspace, RunStore.newRunId("yandex"));
+  store2.writeJson("meta.json", { kind: "yandex", target: host.url, days, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
+  store2.writeJson("yandex-report.json", report);
+  const out = store2.writeText("yandex-report.md", renderYandexMarkdown(report));
+  if (v["json"]) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+  else if (!v["quiet"]) console.log(`
+Yandex ${host.url} \xB7 ${report.totals.shows} impressions, ${report.totals.clicks} clicks over ${report.queries.length} queries \xB7 experimental
+Report: ${out}`);
+  return 0;
+}
+
+// src/commands/research.ts
+import path22 from "node:path";
 function profile(r) {
   return {
     url: r.target,
@@ -43941,7 +44132,7 @@ async function commandResearch(flags) {
   if (competitors.length > 10) throw new UsageError("At most 10 --competitor URLs");
   for (const c of competitors) if (!/^https?:\/\//i.test(c)) throw new UsageError(`Invalid competitor URL: ${c}`);
   const kb = loadKnowledge();
-  const workspace = path21.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path22.resolve(String(v["out"] ?? process.cwd()));
   const store2 = new RunStore(workspace, RunStore.newRunId("research"));
   const perSite = num(v["max-pages"], 150, 1, 1e5);
   const base = { ...crawlOptionsFrom(v), siteUrl: void 0, maxPages: perSite };
@@ -43978,7 +44169,7 @@ async function commandResearch(flags) {
 
 // src/commands/run.ts
 import fs14 from "node:fs";
-import path22 from "node:path";
+import path23 from "node:path";
 var top = (r, n = 5) => r.findings.filter((f) => f.severity !== "info").slice(0, n);
 function renderRunSummary(s) {
   const L = ["# Searvex run summary", ""];
@@ -44046,7 +44237,7 @@ async function runWorkflow(flags, stop) {
   if (competitors.length && !url) throw new UsageError("--competitor requires a website URL");
   if (v["fail-on"] !== void 0) failOnIndex(v["fail-on"]);
   const kb = loadKnowledge();
-  const workspace = path22.resolve(String(v["out"] ?? (repo ?? process.cwd())));
+  const workspace = path23.resolve(String(v["out"] ?? (repo ?? process.cwd())));
   const opts = crawlOptionsFrom(v);
   const summary = { steps: [] };
   const step = (n, name, status, note) => {
@@ -44168,7 +44359,7 @@ Fix plan (dry run, nothing changed): ${summary.plan.fixes.length} automatic fix(
 
 // src/commands/ecosystem.ts
 import fs15 from "node:fs";
-import path23 from "node:path";
+import path24 from "node:path";
 var hostOf2 = (u) => new URL(u).hostname.replace(/^www\./, "");
 var norm3 = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 function snapshot(report, pages) {
@@ -44361,7 +44552,7 @@ async function commandEcosystem(flags) {
   if (urls.length > 20) throw new UsageError("At most 20 sites");
   for (const u of urls) if (!/^https?:\/\//i.test(u)) throw new UsageError(`Invalid URL: ${u}`);
   const kb = loadKnowledge();
-  const workspace = path23.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path24.resolve(String(v["out"] ?? process.cwd()));
   const opts = { ...crawlOptionsFrom(v), siteUrl: void 0, maxPages: num(v["max-pages"], 60, 1, 1e5) };
   const snaps = new Array(urls.length);
   let next2 = 0;
@@ -44434,6 +44625,9 @@ Commands
                         Google Analytics 4 (read-only OAuth, same Desktop client as gsc): "ga4 report <propertyId>
                         [--audit latest]" lists Organic Search landing pages and the audit's issues on pages with
                         traffic (experimental: not yet verified against a live property)
+  yandex <auth|status|sites|report|logout>
+                        Yandex Webmaster (OAuth token, read-only): "yandex report <siteUrl>" lists popular queries
+                        of a verified site (experimental: not yet verified against a live site)
   monitor <url>         Re-audit and diff against the previous run (regressions / improvements)
   rules <list|show|validate|check-sources> [id]
                         Inspect/validate the rule base; check-sources re-fetches official sources and
@@ -44512,6 +44706,7 @@ Environment (all optional, read-only integrations)
   SEARVEX_CRUX_API_KEY  Chrome UX Report API key (instead of "searvex crux auth")
   SEARVEX_PSI_API_KEY   PageSpeed Insights API key for --lab (instead of "searvex psi auth")
   SEARVEX_GA4_TOKEN     OAuth access token (analytics.readonly); alternative to "searvex ga4 auth"
+  SEARVEX_YANDEX_TOKEN  Yandex OAuth token with Webmaster access (instead of "searvex yandex auth")
   SEARVEX_GSC_TOKEN     OAuth access token (webmasters.readonly); alternative to "searvex gsc auth"
   SEARVEX_BING_API_KEY  Bing Webmaster Tools API key (instead of "searvex bing auth")
   SEARVEX_GSC_SITE      Search Console property (e.g. sc-domain:example.com)
@@ -44849,12 +45044,12 @@ function pagesLabel(report) {
 function withReportFiles(L, files) {
   const html3 = files.find((f) => f.endsWith(".html"));
   if (html3) {
-    const ws = path24.resolve(html3, "..", "..", "..", "..");
+    const ws = path25.resolve(html3, "..", "..", "..", "..");
     L.push(`
-Open the report: ${pathToFileURL(html3).href}`, `  (or run: searvex open ${path24.basename(path24.dirname(html3))}${ws === process.cwd() ? "" : ` --out "${ws}"`})`);
+Open the report: ${pathToFileURL(html3).href}`, `  (or run: searvex open ${path25.basename(path25.dirname(html3))}${ws === process.cwd() ? "" : ` --out "${ws}"`})`);
   }
   const others = files.filter((f) => f !== html3);
-  if (others.length) L.push(`Other files: ${others.map((f) => path24.basename(f)).join(", ")} in ${path24.dirname(others[0])}`);
+  if (others.length) L.push(`Other files: ${others.map((f) => path25.basename(f)).join(", ")} in ${path25.dirname(others[0])}`);
   return L.join("\n");
 }
 function labOptions(v) {
@@ -44878,7 +45073,7 @@ async function commandAudit(flags) {
   if (v["fail-on"] !== void 0) failOnIndex(v["fail-on"]);
   const lab = labOptions(v);
   const kb = loadKnowledge();
-  const workspace = path24.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path25.resolve(String(v["out"] ?? process.cwd()));
   const opts = crawlOptionsFrom(v);
   const stop = interrupter(v);
   let render3;
@@ -44929,7 +45124,7 @@ async function commandGeo(flags) {
   const opts = crawlOptionsFrom({ ...v, "max-pages": v["max-pages"] ?? "50" });
   suggestPreLaunch(v, target);
   const stop = interrupter(v);
-  const { report, store: store2 } = await auditWebsite(target, { workspace: path24.resolve(String(v["out"] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal, onProgress: crawlProgress(v) }, onPhase: phaseProgress, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
+  const { report, store: store2 } = await auditWebsite(target, { workspace: path25.resolve(String(v["out"] ?? process.cwd())), kb, crawl: { ...opts, stop: stop.signal, onProgress: crawlProgress(v) }, onPhase: phaseProgress, preLaunch: !!v["pre-launch"], compact: !!v["compact"] }).finally(stop.dispose);
   assertTargetAllowed(report);
   reportInterrupted(report, !!v["json"]);
   const files = writeReports(store2, report, kb, String(v["format"] ?? "md,html,json").split(","));
@@ -45031,9 +45226,9 @@ ${results.length} sources: ${attention.length} need review${v["update"] ? "; sna
 }
 async function commandReport(flags) {
   const v = flags.values;
-  const workspace = path24.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path25.resolve(String(v["out"] ?? process.cwd()));
   let id = flags.positionals[1] ?? "latest";
-  if (id === "latest") id = RunStore.list(workspace).filter((r) => fs16.existsSync(path24.join(workspace, ".searvex", "runs", r, "report.json"))).at(-1) ?? "";
+  if (id === "latest") id = RunStore.list(workspace).filter((r) => fs16.existsSync(path25.join(workspace, ".searvex", "runs", r, "report.json"))).at(-1) ?? "";
   if (!id) throw new UsageError("No stored runs found");
   const store2 = new RunStore(workspace, id);
   const report = store2.readJson("report.json");
@@ -45045,7 +45240,7 @@ async function commandReport(flags) {
 }
 function commandPrompt(flags) {
   const v = flags.values;
-  const workspace = path24.resolve(String(v["out"] ?? process.cwd()));
+  const workspace = path25.resolve(String(v["out"] ?? process.cwd()));
   const store2 = new RunStore(workspace, resolveRun(workspace, flags.positionals[1]));
   const report = store2.readJson("report.json");
   const lang = String(v["lang"] ?? "en");
@@ -45065,14 +45260,14 @@ function commandPrompt(flags) {
 function commandSchema(flags) {
   const name = flags.positionals[1] ?? "report";
   if (!["report", "events", "error"].includes(name)) throw new UsageError(`Unknown schema: ${name} (report, events or error)`);
-  const here = path24.dirname(fileURLToPath2(import.meta.url));
-  const file2 = [path24.resolve(here, "..", "schema", `${name}.schema.json`), path24.resolve(here, "..", "..", "schema", `${name}.schema.json`)].find((f) => fs16.existsSync(f));
+  const here = path25.dirname(fileURLToPath2(import.meta.url));
+  const file2 = [path25.resolve(here, "..", "schema", `${name}.schema.json`), path25.resolve(here, "..", "..", "schema", `${name}.schema.json`)].find((f) => fs16.existsSync(f));
   if (!file2) throw new Error(`schema/${name}.schema.json is missing from this installation`);
   process.stdout.write(fs16.readFileSync(file2, "utf8"));
   return EXIT.ok;
 }
 function commandRuns(flags) {
-  const workspace = path24.resolve(String(flags.values["out"] ?? process.cwd()));
+  const workspace = path25.resolve(String(flags.values["out"] ?? process.cwd()));
   for (const id of RunStore.list(workspace)) {
     const meta = new RunStore(workspace, id).readJson("meta.json");
     console.log(`${id}  ${meta?.kind ?? ""}  ${meta?.startUrl ?? meta?.target ?? ""}`);
@@ -45125,6 +45320,8 @@ async function runCommand(cmd, flags) {
         return await commandPsi(flags);
       case "ga4":
         return await commandGa4(flags);
+      case "yandex":
+        return await commandYandex(flags);
       case "connect":
         return await commandConnect(flags);
       case "audit":
@@ -45168,8 +45365,8 @@ async function runCommand(cmd, flags) {
     return EXIT.runtime;
   }
 }
-var invoked = process.argv[1] ? path24.resolve(process.argv[1]) : "";
-if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path24.sep}searvex`))) {
+var invoked = process.argv[1] ? path25.resolve(process.argv[1]) : "";
+if (invoked && (invoked.endsWith("cli.js") || invoked.endsWith("searvex.mjs") || invoked.endsWith(`${path25.sep}searvex`))) {
   main().then((code) => {
     process.exitCode = code;
   });
