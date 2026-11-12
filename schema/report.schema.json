@@ -129,6 +129,30 @@
             "unresolvedAllowed"
           ]
         },
+        "artefacts": {
+          "description": "Evidence artefacts written by this run (`--save-html`, `--screenshots`) under `artefacts/` in the run directory; `skipped` were over the 200 MB run limit. Since schema 1.1.",
+          "type": "object",
+          "properties": {
+            "html": {
+              "type": "number"
+            },
+            "screenshots": {
+              "type": "number"
+            },
+            "bytes": {
+              "type": "number"
+            },
+            "skipped": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "html",
+            "screenshots",
+            "bytes",
+            "skipped"
+          ]
+        },
         "truncated": {
           "type": "boolean"
         },
@@ -764,6 +788,18 @@
         "ref": {
           "description": "Stable reference of this occurrence, `<ruleId>#<hash of url|file|line>` (the one the HTML report, repair prompts and `searvex review` use). Set on reports written since 1.3.0.",
           "type": "string"
+        },
+        "artefact": {
+          "description": "Evidence artefacts of the page this occurrence is on, relative to the run directory: the HTML body as served (`--save-html`, saved as `.html.txt`) and a viewport screenshot (`--screenshots`). Since schema 1.1.",
+          "type": "object",
+          "properties": {
+            "html": {
+              "type": "string"
+            },
+            "screenshot": {
+              "type": "string"
+            }
+          }
         }
       }
     },

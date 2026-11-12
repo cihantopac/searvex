@@ -72,6 +72,8 @@ With `--json`, the next stderr line is a JSON object:
 | `--no-sitemap` | — | Do not seed from sitemaps |
 | `--check-external` | off | Check outbound links (HEAD, robots-aware, max 200) |
 | `--resume <runId>` | — | Continue an interrupted crawl from its checkpoint (written every 25 pages or 10 seconds, and at the start) |
+| `--save-html` | off | Keep each fetched HTML body, as served and up to 2 MB, under `artefacts/html/` in the run directory (`.html.txt`, owner-only permissions; 200 MB per run with screenshots). Finding evidence and the HTML report link the file |
+| `--screenshots` | off | With `--render` only: one viewport PNG per rendered page under `artefacts/screenshots/`, linked like `--save-html` |
 | `--compact` | off | `report.json`: write only the count of each finding's affected URLs (for very large crawls) |
 | `--max-duration <s>` | — | Stop crawling after `s` seconds (1–604800) and write a partial report (exit `5`) |
 | `--format <list>` | md,html,json | Any of `md,html,json,sarif` |
@@ -121,6 +123,7 @@ With `--json`, the next stderr line is a JSON object:
 | `repository-report.html` / `.md` / `.json` | `run` only: the repository audit of the same run |
 | `pages.jsonl` | One crawled page record per line |
 | `checkpoint.json` | Queue + seen set for `--resume` |
+| `artefacts/html/*.html.txt`, `artefacts/screenshots/*.png` | `--save-html` / `--screenshots` evidence, named `<hash>-<path slug>` |
 | `crawl-summary.json` | Robots, sitemaps, stats |
 | `meta.json` | Run metadata |
 | `research.json` / `.md` | Research output |
@@ -132,6 +135,8 @@ With `--json`, the next stderr line is a JSON object:
 | Field | Meaning |
 |---|---|
 | `crawl.status` | `complete`, `unreachable` or `robots-blocked` (see exit code `4`; a proxy that refuses `CONNECT` to the start URL is `unreachable` with the proxy named in `crawl.error`) |
+| `crawl.artefacts` | Evidence artefacts written (`html`, `screenshots`, `bytes`, `skipped` over the run budget) with `--save-html` / `--screenshots` (since schema 1.1) |
+| `findings[].evidence[].artefact` | `{ html?, screenshot? }`: the artefacts of the page, relative to the run directory (since schema 1.1) |
 | `traffic` | Search data that weighted the priorities (`source`, `metric`, `pages`, `clicks`, `impressions`), written into the joined audit by `gsc report --audit`, `gsc import --audit`, `bing report --audit` and `monitor --import` with a pages table (since schema 1.1) |
 | `crawl.proxy` | Upstream proxy used: `endpoint` (`host:port`, never credentials), `resolve` and `unresolvedAllowed` (since schema 1.1) |
 | `crawl.crawled` | URLs processed, including URLs blocked by robots.txt (never requested) |
