@@ -15,6 +15,14 @@
 - **Repository secrets** (`.env`, keys, credentials) are never read.
 - **Reports may contain page content** (titles, excerpts, URLs) of audited sites. Treat them like the
   sites themselves when sharing.
+- **Evidence artefacts** (`--save-html`, `--screenshots`) are opt-in. They keep each fetched HTML body as served
+  (up to 2 MB, saved as `.html.txt` so a browser shows the source and does not run the page's scripts) and one
+  viewport screenshot per rendered page, under `.searvex/runs/<runId>/artefacts/`, 200 MB per run at most. A body
+  can contain whatever the server sent, including personal data, session tokens in links or form values. The
+  `artefacts/` directory is created owner-only (0700, files 0600) on macOS/Linux; the rest of the run directory
+  uses your default permissions. Delete the run directory when you no longer need it.
+- **Upstream proxy credentials** (`--proxy http://user:pass@…`, `HTTPS_PROXY`) are sent only to the proxy and are
+  never written to reports, run files, progress events or error messages.
 - **Claude Code plugin:** when you use the plugin, the CLI's output (reports, file excerpts) is read by
   Claude as part of your session, under your Claude Code data settings. Searvex itself sends nothing to
   Anthropic.

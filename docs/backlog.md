@@ -30,11 +30,11 @@ Open items name the release and milestone of the maintainer's release plan that 
 | # | Item | Status |
 |---|---|---|
 | 6 | GSC OAuth (loopback, read-only scope, refresh-token storage with 0600 permissions) | ✅ verified live 2026-11-01 (OAuth, refresh, sites, report, pagination) |
-| 7 | GSC analysis: top queries/pages, CTR vs position outliers, striking distance (pos 8–20), query→page mapping, multi-page queries (data-verified cannibalisation), pages without impressions | ✅ `gsc report` with `--audit` join; traffic-weighted priorities still open; traffic-weighted priorities planned for 1.4.0 (F1) |
+| 7 | GSC analysis: top queries/pages, CTR vs position outliers, striking distance (pos 8–20), query→page mapping, multi-page queries (data-verified cannibalisation), pages without impressions | ✅ `gsc report` with `--audit` join; traffic-weighted priorities in 1.4.0 (F1) |
 | 8 | Bing Webmaster API (query/page stats) | ✅ `bing report`, mock-server tested; **live run pending an API key**; live verification planned for 1.4.0 (F2) |
 | 9 | GA4 Data API (landing-page sessions / conversions from organic search) | ⬜ planned for 1.4.0 (F4) |
 | 10 | Yandex Webmaster API | ⬜ planned for 1.4.0 (F5) |
-| 11 | Impact-based prioritisation (severity × affected share × page importance × traffic when available) | ✅ score/bucket/effort/reasons; "Fix first" table; traffic input pending GSC; traffic input planned for 1.4.0 (F1) |
+| 11 | Impact-based prioritisation (severity × affected share × page importance × traffic when available) | ✅ score/bucket/effort/reasons; "Fix first" table; verified clicks/impressions as an importance input in 1.4.0 (F1) |
 | 12 | Search-intent classification of pages and queries (rules + agent), separate verified vs inferred | ✅ |
 | 13 | Internal-linking opportunities (topic-related pages that do not link to each other; orphans by topic) | ✅ |
 | 14 | Deeper competitor research: per-competitor topic clusters, page-type comparison per intent | ✅ 1.4.0 (G3): cluster coverage per competitor, pages per intent with missing page types |
@@ -53,7 +53,7 @@ Open items name the release and milestone of the maintainer's release plan that 
 ### P2 — Product experience
 | # | Item | Status |
 |---|---|---|
-| 16 | Template-level issue grouping (URL-pattern clusters) in reports | ✅ URL-pattern templates per finding (DOM-structure clustering still open); DOM-structure clustering planned for 1.4.0 (G2) |
+| 16 | Template-level issue grouping (URL-pattern clusters) in reports | ✅ URL-pattern templates per finding; page-structure (DOM skeleton) templates in 1.4.0 (G2) |
 | 17 | HTML dashboard: charts, template view, monitor before/after, ecosystem view | ✅ |
 | 18 | Disk-backed analysis for >50k pages | ⬜ planned for 1.4.0 (G7) |
 | 19 | GitHub Action wrapper + SARIF upload example tested | ⬜ planned for 1.5.0 (H1) |
