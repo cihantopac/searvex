@@ -115,7 +115,7 @@ and the top issues.
 
 ## Evidence, not claims
 
-Status: **v1.4.0** ([release notes](docs/release-notes-1.4.0.md), [changelog](CHANGELOG.md)).
+Status: **v1.5.0** ([release notes](docs/release-notes-1.5.0.md), [changelog](CHANGELOG.md)).
 
 - **92 rules**, each tied to an official source: 72 verified, 18 heuristic, 2 reported as unmeasurable. `searvex rules show <id>`
 - **Tested** with unit, integration, browser and end-to-end runs; CI on Linux, macOS and Windows with Node 20, 22 and 24 ([quality report](docs/quality.md)).

@@ -1,6 +1,6 @@
 # Limitations & unsupported scenarios
 
-Searvex reports what it can observe and labels everything else. Known limits (v1.4.0):
+Searvex reports what it can observe and labels everything else. Known limits (v1.5.0):
 
 ## Data Searvex does not have
 
@@ -105,6 +105,16 @@ Searvex reports what it can observe and labels everything else. Known limits (v1
   strong hint, not proof, that one component causes the issue.
 - Turkish texts cover the interface and Searvex's own rule titles and fixes; per-finding messages, engine
   limitations and source titles stay in English.
+
+## Integrations for other tools
+
+- Rule packs (`--rules-pack`) check page fields declaratively (title, description, H1, lang, canonical, JSON-LD
+  types, `og:`/`twitter:` properties, response headers); checks that need code still go into the core rule base.
+  Pack rules run in website mode only.
+- The MCP server (`searvex mcp`) runs one audit at a time and sends no progress notifications during a crawl;
+  `--render`, `--lab` and the search-data integrations are not exposed as tools.
+- The GitHub Action installs `searvex-seo` from npm on each run; website findings are located by URL, which
+  GitHub code scanning shows without a file in the repository.
 
 ## Scale
 

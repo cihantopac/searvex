@@ -14,6 +14,7 @@
 | [limitations.md](limitations.md) | Known limits and unsupported scenarios |
 | [roadmap.md](roadmap.md) | Development plan |
 | [release-checklist.md](release-checklist.md) | v1.0.0 acceptance criteria with evidence, readiness report |
+| [release-notes-1.5.0.md](release-notes-1.5.0.md) | v1.5.0: community rule packs, read-only MCP server, GitHub Action with SARIF upload |
 | [release-notes-1.4.0.md](release-notes-1.4.0.md) | v1.4.0: root-cause view, more frameworks, 100,000-page scale, proxy, evidence artefacts, experimental lab/GA4/Yandex data |
 | [release-notes-1.3.0.md](release-notes-1.3.0.md) | v1.3.0: honest run status, interruption, versioned JSON contract, progress events, host/port limits |
 | [release-notes-1.2.0.md](release-notes-1.2.0.md) | v1.2.0: --site-url, pre-launch profile, exit codes, unreachable targets |

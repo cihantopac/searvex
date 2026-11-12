@@ -1,0 +1,33 @@
+name: Action self-test
+
+# Runs this repository's action.yml with the committed bundle (no npm install) on a fixture site with
+# planted issues. SARIF is not uploaded, so the repository's code-scanning alerts stay clean.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  action:
+    runs-on: ubuntu-latest
+    env:
+      SEARVEX_ACTION_BIN: ${{ github.workspace }}/dist/searvex.mjs
+    steps:
+      - uses: actions/checkout@v4
+      - id: searvex
+        uses: ./
+        with:
+          target: test/fixtures/action-site
+          fail-on: none
+          upload-sarif: "false"
+      - name: Check the outputs
+        env:
+          CODE: ${{ steps.searvex.outputs.exit-code }}
+          SARIF: ${{ steps.searvex.outputs.sarif }}
+          REPORT: ${{ steps.searvex.outputs.report }}
+        run: |
+          test "$CODE" = "0"
+          node -e 'const s=JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); if (s.version !== "2.1.0" || !s.runs[0].results.length) process.exit(1)' "$SARIF"
+          node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); if (!r.findings.some((f) => f.ruleId === "title.missing")) process.exit(1)' "$REPORT"

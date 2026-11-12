@@ -37,8 +37,8 @@ Ordered by value; none is promised for a date.
    owner's property; Yandex (`yandex report`) is in 1.4.0 (F5) as experimental until a live run on a verified
    owner site.
 7. **Ecosystem:** GitHub Action with SARIF upload, MCP server exposing the engine, plugin directory
-   submission (needs the final brand icon), community rule packs under the same sourcing rules. Planned for
-   1.5.0 (H1–H4); rule packs (`--rules-pack`, H4), the MCP server (`searvex mcp`, H2) and the GitHub Action
-   (`action.yml`, H1) are done; the Marketplace listing, icon and directory submission wait for the owner.
+   submission (needs the final brand icon), community rule packs under the same sourcing rules. Rule packs
+   (`--rules-pack`, H4), the MCP server (`searvex mcp`, H2) and the GitHub Action (`action.yml`, H1) are done in
+   1.5.0; the Marketplace listing, the icon and the directory submission (H3) wait for the owner.
 8. **Upstream proxy** (CONNECT-only, [design/proxy.md](design/proxy.md)) and evidence artefacts (`--save-html`,
    `--screenshots`). Done in 1.4.0 (E1, E2).
