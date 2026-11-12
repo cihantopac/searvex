@@ -29,5 +29,5 @@ jobs:
           REPORT: ${{ steps.searvex.outputs.report }}
         run: |
           test "$CODE" = "0"
-          node -e 'const s=require(process.argv[1]); if (s.version !== "2.1.0" || !s.runs[0].results.length) process.exit(1)' "$SARIF"
-          node -e 'const r=require(process.argv[1]); if (!r.findings.some((f) => f.ruleId === "title.missing")) process.exit(1)' "$REPORT"
+          node -e 'const s=JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); if (s.version !== "2.1.0" || !s.runs[0].results.length) process.exit(1)' "$SARIF"
+          node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); if (!r.findings.some((f) => f.ruleId === "title.missing")) process.exit(1)' "$REPORT"
