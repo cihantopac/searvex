@@ -7,7 +7,7 @@ import type { FetchResult, RedirectHop } from '../core/types.js';
 import { openTunnel, routeFor, tlsOverTunnel } from './proxy.js';
 import { assertUrlAllowed, BlockedUrlError, classifyAddress, DEFAULT_POLICY, hostPolicyViolation, isAddressAllowed, type NetPolicy } from './ssrf.js';
 
-export const SEARVEX_VERSION = '1.3.0';
+export const SEARVEX_VERSION = '1.4.0';
 /** Honest crawler identification. robots.txt rules for "SearvexBot" (or "Searvex") apply. */
 export const DEFAULT_USER_AGENT = `Mozilla/5.0 (compatible; SearvexBot/${SEARVEX_VERSION}; +https://github.com/cihantopac/searvex)`;
 

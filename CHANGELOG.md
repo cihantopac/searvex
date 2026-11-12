@@ -5,6 +5,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-12
+
+Root causes, more frameworks, large sites and optional lab and analytics data. Release notes:
+[docs/release-notes-1.4.0.md](docs/release-notes-1.4.0.md).
+
 ### Added
 - Upstream proxy support, as designed in `docs/design/proxy.md`: `--proxy <url|none>` and `HTTPS_PROXY` /
   `HTTP_PROXY` / `NO_PROXY`, `CONNECT` only with TLS end to end and Basic authentication. Private, loopback and
@@ -48,11 +53,12 @@ All notable changes to this project are documented here. The format follows
   theme.json + templates, no `header.php`) are detected; a post title block without `"level":1` in
   `templates/single.html` / `page.html` is reported as a missing `<h1>`. `optimize` writes sitemaps and robots.txt
   to `static/` (SvelteKit) and `public/` (Remix) and gives canonical hints for both.
-- Lighthouse lab data (`--lab`, `--lab-samples`; experimental until verified against the live API): one PageSpeed Insights run (mobile) per sampled URL template,
-  the homepage and the largest templates first, stored as `labData` in `report.json` (schema 1.1) and as a
-  "Lab data" table in `report.md`. A score below 50 is reported as `perf.lab-poor` (new rule); lab values are
-  never Core Web Vitals pass/fail. The key is stored with `searvex psi auth|status|logout` or read from
-  `SEARVEX_PSI_API_KEY`; local and private hosts are skipped (Google fetches the pages).
+- Lighthouse lab data, experimental until verified against the live API (`--lab`, `--lab-samples`): one
+  PageSpeed Insights run (mobile) per sampled URL template, the homepage and the largest templates first, stored as
+  `labData` in `report.json` (schema 1.1) and as a "Lab data" table in `report.md`. A score below 50 is reported as
+  `perf.lab-poor` (new rule); lab values are never Core Web Vitals pass/fail. The key is stored with
+  `searvex psi auth|status|logout` or read from `SEARVEX_PSI_API_KEY`; local and private hosts are skipped (Google
+  fetches the pages).
 - Google Analytics 4, experimental (`ga4 auth|status|properties|report|logout`): read-only OAuth with the same kind
   of Desktop client as Search Console; `ga4 report <propertyId>` lists Organic Search landing pages (sessions,
   engaged sessions, key events) and, with `--audit`, the audit's open issues on pages with organic traffic and
