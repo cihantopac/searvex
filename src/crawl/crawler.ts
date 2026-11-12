@@ -371,10 +371,11 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
       }
     }
     enqueueLinksOf(rec, item);
-    // Keep stored text bounded for large crawls.
+    // Keep stored text bounded for large crawls. The whole-page text only feeds wordCount (computed at
+    // extraction); analysis reads the main content, so the page record does not keep it.
     for (const d of [rec.data, rec.rendered]) {
       if (!d) continue;
-      d.textContent = d.textContent.slice(0, 20000);
+      d.textContent = '';
       d.mainText = d.mainText.slice(0, 20000);
     }
     pages.push(rec);

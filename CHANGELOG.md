@@ -50,6 +50,10 @@ All notable changes to this project are documented here. The format follows
   to `static/` (SvelteKit) and `public/` (Remix) and gives canonical hints for both.
 
 ### Changed
+- The stored page record (`pages.jsonl` and memory) no longer keeps the whole-page text (`textContent`), which only
+  fed the word count at extraction: about a third less memory after the crawl on text-heavy sites.
+- `scripts/benchmark.mjs` uses varied page text, takes a words-per-page argument and, with `--expose-gc`, reports
+  the live heap after the crawl.
 - Repository mode parses Vue SFCs, Astro pages and Blade views instead of matching regexes: `<script setup>` head
   calls (`useHead`, `useSeoMeta`, `definePageMeta`) and Astro frontmatter through the Babel AST, Astro templates
   through parse5, Blade through a tokenizer that drops comments, `@verbatim` and `@php`. A commented-out
@@ -62,6 +66,10 @@ All notable changes to this project are documented here. The format follows
   `duplicate.title`, `canonical.missing` or other metadata findings. A conditional call still counts as a page.
 - The `duplicate.title` line for inherited layout titles lists routes without file paths and ends with
   `(+N more)`, so it is no longer cut off in `report.md`; text that `report.md` shortens ends with `…`.
+- Large sites: link opportunities, near-duplicates and title cannibalisation no longer collect every checked page
+  pair in one site-wide set, which crashed the analysis of about 50,000 pages with varied text
+  (`RangeError: Set maximum size exceeded`). Results are unchanged except that ties among link opportunities are
+  broken by URL instead of discovery order.
 
 ## [1.3.0] - 2026-11-11
 

@@ -103,8 +103,8 @@ Searvex reports what it can observe and labels everything else. Known limits (v1
 
 ## Scale
 
-- Analysis is in memory (~22 KB per page). Measured to 50,000 pages (1.1 GB peak RSS, ~105 s on an Apple M4);
-  for larger sites use `--max-pages`, `--include` to audit sections, or `--resume` across sessions.
+- Analysis is in memory. Measured to 50,000 pages of varied text (1.1 GB peak RSS, ~2.5 min crawl and analysis on
+  an Apple M4); for larger sites use `--max-pages`, `--include` to audit sections, or `--resume` across sessions.
 
 ## Platforms
 

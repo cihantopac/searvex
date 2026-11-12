@@ -29,7 +29,8 @@ Ordered by value; none is promised for a date.
 4. **Astro, Vue SFC and Blade parsing** with real parsers instead of regexes. Done in 1.4.0 (G5) with the
    parsers Searvex already ships (@babel/parser, parse5) and a Blade tokenizer, without new dependencies.
    SvelteKit, Remix and WordPress block theme adapters (scanning and fixes) followed in 1.4.0 (G6).
-5. **Disk-backed analysis** for sites above 50,000 pages. Planned for 1.4.0 (G7).
+5. **Disk-backed analysis** for sites above 50,000 pages. Planned for 1.4.0 (G7); the 50,000-page crash and
+   whole-page text in memory are fixed in 1.4.0.
 6. **Optional integrations:** PageSpeed Insights / Lighthouse lab data, GA4 Data API, Yandex Webmaster —
    each only with live validation before it is advertised. Planned for 1.4.0 (F6, F4, F5).
 7. **Ecosystem:** GitHub Action with SARIF upload, MCP server exposing the engine, plugin directory
