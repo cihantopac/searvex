@@ -1,5 +1,5 @@
 // Performance benchmark: crawls and analyses a synthetic site served from localhost.
-// Usage: npm run build && node scripts/benchmark.mjs [pages=5000] [concurrency=8]
+// Usage: npm run build && node scripts/benchmark.mjs [pages=5000] [concurrency=8] [wordsPerPage=250]
 import http from 'node:http';
 import os from 'node:os';
 import fs from 'node:fs';
@@ -11,8 +11,13 @@ import { RunStore } from '../dist/crawl/store.js';
 
 const N = Number(process.argv[2] ?? 5000);
 const C = Number(process.argv[3] ?? 8);
-const words = 'kitchen equipment oven chef restaurant durable tested stainless steel commercial grade warranty service'.split(' ');
-const para = (i) => Array.from({ length: 250 }, (_, k) => words[(i * 7 + k * 13) % words.length]).join(' ');
+const W = Number(process.argv[4] ?? 250);
+// Pseudo-random text from a 3,000-word vocabulary (seeded per page): distinct pages, like real content.
+const vocab = Array.from({ length: 3000 }, (_, i) => 'w' + i.toString(36));
+const para = (i) => {
+  let x = (i + 1) * 2654435761;
+  return Array.from({ length: W }, () => vocab[((x = (Math.imul(x, 1103515245) + 12345) >>> 0) >>> 8) % vocab.length]).join(' ');
+};
 
 const server = http.createServer((req, res) => {
   const m = /^\/p\/(\d+)$/.exec(req.url ?? '');
@@ -30,10 +35,18 @@ const store = new RunStore(ws, 'bench');
 const policy = { allowPrivate: true, schemes: ['http:', 'https:'], ports: [] };
 
 let peak = 0;
-const sampler = setInterval(() => (peak = Math.max(peak, process.memoryUsage().rss)), 100);
+let heapPeak = 0;
+const sampler = setInterval(() => {
+  const m = process.memoryUsage();
+  peak = Math.max(peak, m.rss);
+  heapPeak = Math.max(heapPeak, m.heapUsed);
+}, 50);
 const t0 = performance.now();
 const result = await crawl(base + '/', { maxPages: N, maxDepth: 100, concurrency: C, delayMs: 0, useSitemaps: false, policy }, store);
 const t1 = performance.now();
+// With `node --expose-gc`: live heap held by the crawl result (what analysis starts from).
+globalThis.gc?.();
+const heapAfterCrawl = process.memoryUsage().heapUsed;
 const report = await analyzeCrawl(result, loadKnowledge(), { policy, probes: false });
 const t2 = performance.now();
 clearInterval(sampler);
@@ -46,10 +59,13 @@ const out = {
   platform: `${os.platform()} ${os.arch()} (${os.cpus()[0]?.model ?? 'cpu'})`,
   pages: result.pages.length,
   concurrency: C,
+  wordsPerPage: W,
   crawlSeconds: +((t1 - t0) / 1000).toFixed(2),
   pagesPerSecond: Math.round(result.pages.length / ((t1 - t0) / 1000)),
   analysisSeconds: +((t2 - t1) / 1000).toFixed(2),
   peakRssMB: Math.round(peak / 1024 / 1024),
+  peakHeapMB: Math.round(heapPeak / 1024 / 1024),
+  ...(globalThis.gc ? { heapAfterCrawlMB: Math.round(heapAfterCrawl / 1024 / 1024) } : {}),
   findings: report.findings.length,
 };
 console.log(JSON.stringify(out, null, 2));

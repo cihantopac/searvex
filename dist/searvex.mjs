@@ -35464,7 +35464,7 @@ async function crawl(startUrl, partial = {}, store2) {
     enqueueLinksOf(rec, item);
     for (const d of [rec.data, rec.rendered]) {
       if (!d) continue;
-      d.textContent = d.textContent.slice(0, 2e4);
+      d.textContent = "";
       d.mainText = d.mainText.slice(0, 2e4);
     }
     pages.push(rec);
@@ -36635,30 +36635,35 @@ function runContentChecks(ctx, sink) {
     sigs.set(url, minhash(unique));
   }
   const buckets = /* @__PURE__ */ new Map();
-  for (const [url, sig] of sigs) {
-    for (let b = 0; b < 16; b++) {
-      const key = `${b}:${sig.slice(b * 4, b * 4 + 4).join(",")}`;
+  const urlsByIndex = [...sigs.keys()];
+  const bucketKeys = urlsByIndex.map((url) => {
+    const sig = sigs.get(url);
+    return Array.from({ length: 16 }, (_, b) => `${b}:${sig.slice(b * 4, b * 4 + 4).join(",")}`);
+  });
+  bucketKeys.forEach((keys, i) => {
+    for (const key of keys) {
       const arr = buckets.get(key);
-      if (arr) arr.push(url);
-      else buckets.set(key, [url]);
+      if (arr) arr.push(i);
+      else buckets.set(key, [i]);
     }
-  }
+  });
   const exactSet = new Set(exactDuplicates.flat());
-  const seenPairs = /* @__PURE__ */ new Set();
   const nearDuplicates = [];
-  for (const urls of buckets.values()) {
-    if (urls.length < 2 || urls.length > 200) continue;
-    for (let i = 0; i < urls.length; i++)
-      for (let j = i + 1; j < urls.length; j++) {
-        const a = urls[i], b = urls[j];
-        const key = a < b ? `${a}|${b}` : `${b}|${a}`;
-        if (seenPairs.has(key)) continue;
-        seenPairs.add(key);
-        if (exactSet.has(a) && exactSet.has(b)) continue;
-        const sim = jaccard(sh.get(a), sh.get(b));
-        if (sim >= 0.9) nearDuplicates.push({ a, b, similarity: Math.round(sim * 100) / 100 });
-      }
-  }
+  bucketKeys.forEach((keys, i) => {
+    const candidates = /* @__PURE__ */ new Set();
+    for (const key of keys) {
+      const members = buckets.get(key);
+      if (members.length < 2 || members.length > 200) continue;
+      for (const j of members) if (j > i) candidates.add(j);
+    }
+    const a = urlsByIndex[i];
+    for (const j of [...candidates].sort((x, y) => x - y)) {
+      const b = urlsByIndex[j];
+      if (exactSet.has(a) && exactSet.has(b)) continue;
+      const sim = jaccard(sh.get(a), sh.get(b));
+      if (sim >= 0.9) nearDuplicates.push({ a, b, similarity: Math.round(sim * 100) / 100 });
+    }
+  });
   if (nearDuplicates.length) sink.emit("content.near-duplicate", nearDuplicates.slice(0, 50).map((d) => ({ url: d.a, observed: `${Math.round(d.similarity * 100)}% similar to ${d.b}` })));
   const groups = /* @__PURE__ */ new Map();
   const titleTerms = /* @__PURE__ */ new Map();
@@ -36683,8 +36688,11 @@ function runContentChecks(ctx, sink) {
     const specific = terms.filter((t) => ((df.get(t) ?? 0) < N * 0.5 || N < 4) && !(gSize >= 4 && (sectionTermDf.get(section).get(t) ?? 0) >= gSize * 0.5));
     if (specific.length >= 2) specificTerms.set(p.url, new Set(specific));
   }
+  const termUrls = [...specificTerms.keys()];
   const index2 = /* @__PURE__ */ new Map();
-  for (const [url, set] of specificTerms) for (const t of set) (index2.get(t) ?? index2.set(t, []).get(t)).push(url);
+  termUrls.forEach((url, i) => {
+    for (const t of specificTerms.get(url)) (index2.get(t) ?? index2.set(t, []).get(t)).push(i);
+  });
   const parent2 = /* @__PURE__ */ new Map();
   const find5 = (x) => {
     const px = parent2.get(x) ?? x;
@@ -36693,22 +36701,23 @@ function runContentChecks(ctx, sink) {
     parent2.set(x, r);
     return r;
   };
-  const checked = /* @__PURE__ */ new Set();
-  for (const urls of index2.values()) {
-    if (urls.length > 100) continue;
-    for (let i = 0; i < urls.length; i++)
-      for (let j = i + 1; j < urls.length; j++) {
-        const a = urls[i], b = urls[j];
-        const key = a < b ? a + "|" + b : b + "|" + a;
-        if (checked.has(key)) continue;
-        checked.add(key);
-        if (langOf.get(a) !== langOf.get(b)) continue;
-        const sa = specificTerms.get(a), sb = specificTerms.get(b);
-        let shared = 0;
-        for (const t of sa) if (sb.has(t)) shared++;
-        if (shared >= 2 && shared / (sa.size + sb.size - shared) >= 0.6) parent2.set(find5(a), find5(b));
-      }
-  }
+  termUrls.forEach((a, i) => {
+    const sa = specificTerms.get(a);
+    const candidates = /* @__PURE__ */ new Set();
+    for (const t of sa) {
+      const posting = index2.get(t);
+      if (posting.length > 100) continue;
+      for (const j of posting) if (j > i) candidates.add(j);
+    }
+    for (const j of candidates) {
+      const b = termUrls[j];
+      if (langOf.get(a) !== langOf.get(b)) continue;
+      const sb = specificTerms.get(b);
+      let shared = 0;
+      for (const t of sa) if (sb.has(t)) shared++;
+      if (shared >= 2 && shared / (sa.size + sb.size - shared) >= 0.6) parent2.set(find5(a), find5(b));
+    }
+  });
   for (const url of specificTerms.keys()) {
     const root2 = find5(url);
     (groups.get(root2) ?? groups.set(root2, []).get(root2)).push(url);
@@ -36743,40 +36752,44 @@ function findLinkOpportunities(ctx, vectors, langOf) {
   };
   const norm4 = /* @__PURE__ */ new Map();
   for (const [u, v] of vectors) norm4.set(u, Math.sqrt([...v.values()].reduce((a, x) => a + x * x, 0)) || 1);
+  const urls = [...vectors.keys()];
   const index2 = /* @__PURE__ */ new Map();
-  for (const [u, v] of vectors) for (const t of v.keys()) (index2.get(t) ?? index2.set(t, []).get(t)).push(u);
+  urls.forEach((u, i) => {
+    for (const t of vectors.get(u).keys()) (index2.get(t) ?? index2.set(t, []).get(t)).push(i);
+  });
   const outlinks = /* @__PURE__ */ new Map();
   for (const [target, sources] of ctx.inlinks) for (const s of sources) (outlinks.get(s) ?? outlinks.set(s, /* @__PURE__ */ new Set()).get(s)).add(target);
   const links = (a, b) => outlinks.get(a)?.has(b) || outlinks.get(b)?.has(a);
   const inl = (u) => ctx.reachIn.get(u)?.size ?? 0;
-  const seen = /* @__PURE__ */ new Set();
   const out = [];
-  for (const urls of index2.values()) {
-    if (urls.length > 200) continue;
-    for (let i = 0; i < urls.length; i++)
-      for (let j = i + 1; j < urls.length; j++) {
-        const a = urls[i], b = urls[j];
-        const key = a < b ? a + "|" + b : b + "|" + a;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        if (otherLanguage(a, b)) continue;
-        const va = vectors.get(a), vb = vectors.get(b);
-        let dot = 0;
-        const shared = [];
-        for (const [t, w] of va) {
-          const w2 = vb.get(t);
-          if (w2 !== void 0) {
-            dot += w * w2;
-            shared.push(t);
-          }
+  urls.forEach((a, i) => {
+    const va = vectors.get(a);
+    const candidates = /* @__PURE__ */ new Set();
+    for (const t of va.keys()) {
+      const posting = index2.get(t);
+      if (posting.length > 200) continue;
+      for (const j of posting) if (j > i) candidates.add(j);
+    }
+    for (const j of candidates) {
+      const b = urls[j];
+      if (otherLanguage(a, b)) continue;
+      const vb = vectors.get(b);
+      let dot = 0;
+      const shared = [];
+      for (const [t, w] of va) {
+        const w2 = vb.get(t);
+        if (w2 !== void 0) {
+          dot += w * w2;
+          shared.push(t);
         }
-        const sim = dot / (norm4.get(a) * norm4.get(b));
-        if (shared.length < 2 || sim < 0.3 || sim > 0.9 || links(a, b)) continue;
-        const [from, to] = inl(a) >= inl(b) ? [a, b] : [b, a];
-        out.push({ from, to, similarity: Math.round(sim * 100) / 100, sharedTerms: shared.slice(0, 6), toInlinks: inl(to) });
       }
-  }
-  out.sort((x, y) => x.toInlinks - y.toInlinks || y.similarity - x.similarity);
+      const sim = dot / (norm4.get(a) * norm4.get(b));
+      if (shared.length < 2 || sim < 0.3 || sim > 0.9 || links(a, b)) continue;
+      const [from, to] = inl(a) >= inl(b) ? [a, b] : [b, a];
+      out.push({ from, to, similarity: Math.round(sim * 100) / 100, sharedTerms: shared.slice(0, 6), toInlinks: inl(to) });
+    }
+  });
+  out.sort((x, y) => x.toInlinks - y.toInlinks || y.similarity - x.similarity || (x.to < y.to ? -1 : x.to > y.to ? 1 : x.from < y.from ? -1 : x.from > y.from ? 1 : 0));
   const perTarget = /* @__PURE__ */ new Map();
   return out.filter((o) => {
     const n = perTarget.get(o.to) ?? 0;

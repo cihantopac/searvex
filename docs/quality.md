@@ -302,8 +302,10 @@ planner above.
 
 ## Benchmarks
 
-`npm run build && node scripts/benchmark.mjs <pages> <concurrency>` — synthetic site on localhost
-(250-word pages, 20 internal links each), no delay.
+`npm run build && node --expose-gc scripts/benchmark.mjs <pages> <concurrency> [words]` — synthetic site on
+localhost (250-word pages by default, 20 internal links each), no delay. Since 1.4.0 the page text is drawn from a
+3,000-word vocabulary (before: a 13-word cycle, which made every page's shingles and terms nearly identical and
+analysis unrealistically cheap); with `--expose-gc` it also reports the live heap after the crawl.
 
 | Pages | Concurrency | Crawl | Pages/s | Analysis | Peak RSS |
 |---|---|---|---|---|---|
@@ -315,6 +317,8 @@ planner above.
 | v1.0.0 RC, 5,000 (best of 3) | 8 | 4.6 s | 1,096 | 1.0 s | 259 MB |
 | v1.0.0 RC, 20,000 | 8 | 32.1 s | 623 | 7.1 s | 614 MB |
 | v1.0.0 RC, 50,000 | 8 | 83.1 s | 602 | 21.6 s | 1,111 MB |
+| **1.4.0 (2026-11-12)**, 10,000, 1,500 words/page, varied text | 8 | 9.2 s | 1,091 | 42 s | 468 MB |
+| 1.4.0, 50,000, varied text (1.3.0 crashed here, see below) | 8 | 56.1 s | 891 | 96 s | 1,066 MB |
 
 The v1.0.0 RC rows were measured on a loaded machine (load average 5–7); throughput varied 2–4× between
 runs. Under identical conditions v0.7.0 and the RC were equal (5,000 pages: 1,134 vs 1,096 pages/s, 1.03 vs
@@ -324,6 +328,17 @@ Supported scale for v1.0.0: 50,000 pages per run in memory; larger sites with `-
 
 Real sites are bounded by politeness (per-host delay, Crawl-delay), not by Searvex throughput.
 Memory grows ~25 KB/page (stored text capped at 20,000 chars/page).
+
+1.4.0 scale fixes (G7, first part), found with the varied-text benchmark:
+- Up to 1.3.0, link opportunities, near-duplicates and title cannibalisation collected every checked page pair in
+  one site-wide `Set`; on 50,000 varied pages that passed the 2^24-entry limit of a JavaScript `Set` and the run
+  crashed (`RangeError: Set maximum size exceeded`). Pairs are now collected per page. On a 5,000-page site with
+  duplicates, cannibalisation and link opportunities the report is identical to 1.3.0's once ties in the link
+  opportunities are broken the same way (now by URL instead of discovery order).
+- The page record no longer keeps the whole-page text (`textContent`, only used for `wordCount` at
+  extraction): live heap after a 10,000-page crawl of 1,500-word pages went from 307 MB to 190 MB.
+- At 50,000 pages the analysis structures (term vectors, shingles) dominate: 380 MB live heap after the crawl,
+  951 MB peak during analysis.
 
 ## Open quality issues
 
