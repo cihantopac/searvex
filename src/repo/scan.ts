@@ -8,7 +8,7 @@ import type { FindingSink } from '../rules/engine.js';
 import { detect, type Detection, type Framework } from './detect.js';
 import { lineOf, readText, walk, type WalkedFile } from './fs-safe.js';
 import { astroPageMeta, bladeMarkup, vuePageMeta } from './sfc.js';
-import { attrString, isJsSource, jsxAnchorsWithoutHref, jsxImagesWithoutAlt, jsxTags, nextMetadata, parseSource, prop, type NextMetadata, type Node } from './ast.js';
+import { attrString, isJsSource, jsxAnchorsWithoutHref, jsxImagesWithoutAlt, jsxTags, nextMetadata, pageNeverRenders, parseSource, prop, type NextMetadata, type Node } from './ast.js';
 import { laravelAuthRanges, laravelRoutePrivate, nextPrivacy } from './private-routes.js';
 
 export interface RouteInfo {
@@ -156,6 +156,11 @@ function markPrivate(scan: AppScan, why: (route: string, file: string) => string
   }
 }
 
+/** `a, b, c (+N more)`: a list that stays readable in one report line. */
+function listed(items: string[], max: number): string {
+  return items.slice(0, max).join(', ') + (items.length > max ? ` (+${items.length - max} more)` : '');
+}
+
 function scanNextApp(appRoot: string, files: WalkedFile[], read: (f: string) => string, sink: FindingSink, scan: AppScan): void {
   const appBase = files.some((f) => f.rel.startsWith(rel(appRoot, 'src/app/'))) ? rel(appRoot, 'src/app/') : rel(appRoot, 'app/');
   const baseRe = new RegExp('^' + appBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
@@ -176,6 +181,13 @@ function scanNextApp(appRoot: string, files: WalkedFile[], read: (f: string) => 
       if (dir + '/' === appBase) break;
       dir = path.posix.dirname(dir);
     }
+    const route = nextRoute(p.rel, baseRe);
+    // A page that only calls notFound() / redirect() never serves a 200 page: not indexable, nothing to report.
+    const program = parseSource(src, p.rel);
+    if (program && pageNeverRenders(program)) {
+      scan.routes.push({ route, file: p.rel, framework: 'nextjs-app', dynamic: /\[.+\]/.test(route), hasTitle: null, hasDescription: null, noindex: true });
+      continue;
+    }
     const meta = metadataOf(src, p.rel);
     const pageTitle = meta.exported ? meta.title : false;
     const pageDesc = meta.exported ? meta.description : false;
@@ -183,17 +195,16 @@ function scanNextApp(appRoot: string, files: WalkedFile[], read: (f: string) => 
     const hasDesc = anyOf(pageDesc, ...chain.map((l) => (l.exported ? l.description : false)));
     const canonical = anyOf(meta.canonical, ...chain.map((l) => l.canonical));
     const noindex = inheritedNoindex([meta, ...chain]) === true;
-    const route = nextRoute(p.rel, baseRe);
     scan.routes.push({ route, file: p.rel, framework: 'nextjs-app', dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: hasDesc, noindex });
     // `null` = computed at runtime (spread, variable, call): not reported either way.
     if (hasTitle === false) sink.emit('title.missing', { file: p.rel, observed: `route ${route}: no metadata.title in page or ancestor layouts` });
-    else if (pageTitle === false && hasTitle === true && !noindex) (titleOwners['inherited'] ??= []).push(`${route} (${p.rel})`);
+    else if (pageTitle === false && hasTitle === true && !noindex) (titleOwners['inherited'] ??= []).push(route);
     if (hasDesc === false && !noindex) sink.emit('description.missing', { file: p.rel, line: meta.line, observed: `route ${route}: no metadata.description` });
     if (canonical === false && !noindex) sink.emit('canonical.missing', { file: p.rel, line: meta.line, observed: `route ${route}: no metadata.alternates.canonical` });
     if (noindex) sink.emit('index.noindex', { file: p.rel, observed: `route ${route}: robots index:false${meta.robots ? '' : ' (inherited from a layout)'}` });
   }
   const inherited = titleOwners['inherited'] ?? [];
-  if (inherited.length > 1) sink.emit('duplicate.title', { file: rootLayoutPath ?? undefined, observed: `${inherited.length} routes inherit the same layout title (unless title.template is combined with page titles): ${inherited.slice(0, 5).join(', ')}` });
+  if (inherited.length > 1) sink.emit('duplicate.title', { file: rootLayoutPath ?? undefined, observed: `${inherited.length} routes inherit the same layout title (unless title.template is combined with page titles): ${listed(inherited, 8)}` });
   if (rootLayoutPath) {
     htmlLangCheck(read(rootLayoutPath), rootLayoutPath, 'html', sink);
   }

@@ -56,6 +56,13 @@ All notable changes to this project are documented here. The format follows
   `useHead`, a help string mentioning it, or an `<a title>` no longer counts as a page title; a computed head object
   or a spread into a layout is reported as unknown instead of present or missing. No new dependency.
 
+### Fixed
+- Repository mode: a Next.js page whose default export only calls `notFound()` or `redirect()` (for example a
+  `[...rest]` catch-all) never serves a 200 page; it is treated as not indexable and no longer counted in
+  `duplicate.title`, `canonical.missing` or other metadata findings. A conditional call still counts as a page.
+- The `duplicate.title` line for inherited layout titles lists routes without file paths and ends with
+  `(+N more)`, so it is no longer cut off in `report.md`; text that `report.md` shortens ends with `…`.
+
 ## [1.3.0] - 2026-11-11
 
 A run says honestly what it did, and its output is a contract. Release notes:
