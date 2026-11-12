@@ -11,6 +11,10 @@ All notable changes to this project are documented here. The format follows
   reserved targets never go through the proxy. Host names are resolved and checked locally before `CONNECT`;
   `--proxy-resolve local` connects to the checked address instead. Used by crawling, `--render`, `--check-external`
   and `rules check-sources`.
+- Evidence artefacts: `--save-html` keeps each fetched HTML body as served (≤ 2 MB, as `.html.txt`), and
+  `--screenshots` (with `--render`) one viewport PNG per rendered page, under `artefacts/` in the run directory
+  with owner-only permissions and a 200 MB per-run budget. Evidence items (`evidence[].artefact`) and the HTML
+  report link them; `crawl.artefacts` counts them.
 - `crawl.proxy` in `report.json` (endpoint and resolution mode, never credentials), plus a limitation line; report
   schema 1.1.
 - Exit codes for the proxy: an unusable proxy setting or failed proxy authentication is `2`, an unreachable proxy

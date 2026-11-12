@@ -16108,14 +16108,14 @@ var init_bing = __esm({
 });
 
 // src/net/policy-proxy.ts
-import crypto7 from "node:crypto";
+import crypto8 from "node:crypto";
 import http6 from "node:http";
 import net2 from "node:net";
 async function startPolicyProxy(policy, opts = {}) {
   const maxBytes = opts.maxBytesPerWindow ?? 64 * 1024 * 1024;
   const idle = opts.idleTimeoutMs ?? 3e4;
   const username = "searvex";
-  const password = crypto7.randomBytes(18).toString("base64url");
+  const password = crypto8.randomBytes(18).toString("base64url");
   const expectedAuth = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
   const stats = { requests: 0, tunnels: 0, blocked: 0, blockedTargets: [], bytes: 0, budgetExceeded: 0 };
   const sockets = /* @__PURE__ */ new Set();
@@ -16330,7 +16330,7 @@ async function createRenderer(policy, timeoutMs = 3e4) {
   };
   return {
     stats,
-    async render(url) {
+    async render(url, o = {}) {
       stats.pages++;
       proxy.resetBudget();
       const context = await browser.newContext({ userAgent: DEFAULT_USER_AGENT, serviceWorkers: "block", acceptDownloads: false, javaScriptEnabled: true, locale: "en-US", timezoneId: "America/Los_Angeles" });
@@ -16363,7 +16363,9 @@ async function createRenderer(policy, timeoutMs = 3e4) {
         await main2.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
         await main2.waitForLoadState("networkidle", { timeout: SETTLE_MS }).catch(() => {
         });
-        return { html: await main2.content() };
+        const html3 = await main2.content();
+        const screenshot = o.screenshot ? await main2.screenshot({ type: "png", fullPage: false, timeout: SETTLE_MS }).catch(() => void 0) : void 0;
+        return screenshot ? { html: html3, screenshot } : { html: html3 };
       })();
       let timer;
       const deadline = new Promise((resolve) => timer = setTimeout(() => resolve("deadline"), deadlineMs));
@@ -16418,6 +16420,9 @@ var init_render = __esm({
 import fs16 from "node:fs";
 import path22 from "node:path";
 import { parseArgs } from "node:util";
+
+// src/crawl/crawler.ts
+import crypto from "node:crypto";
 
 // src/core/url.ts
 var TRACKING_PARAMS = /^(utm_[a-z]+|gclid|fbclid|msclkid|mc_cid|mc_eid|_ga|yclid)$/i;
@@ -35192,6 +35197,17 @@ var DEFAULT_CRAWL = {
   checkpointEvery: 25,
   checkpointMs: 1e4
 };
+var ARTEFACT_PAGE_CAP = 2 * 1024 * 1024;
+var ARTEFACT_RUN_CAP = 200 * 1024 * 1024;
+function artefactName(url) {
+  let pathname = new URL(url).pathname;
+  try {
+    pathname = decodeURIComponent(pathname);
+  } catch {
+  }
+  const slug = (pathname.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "index").slice(0, 40);
+  return `${crypto.createHash("sha1").update(url).digest("hex").slice(0, 12)}-${slug}`;
+}
 function interruptionOf(signal) {
   if (!signal?.aborted) return void 0;
   return signal.reason === "max-duration" ? "max-duration" : "signal";
@@ -35303,6 +35319,17 @@ async function crawl(startUrl, partial = {}, store2) {
     for (const u of sitemapSet) enqueue({ url: u, depth: Math.max(1, pathDepth(u)), foundOn: "sitemap" });
   }
   store2?.writeJson("meta.json", { runId: store2.runId, kind: "crawl", startUrl: start, startedAt, options: { ...opts, policy: void 0, render: !!opts.render, onProgress: void 0, stop: void 0 } });
+  const artefacts = { html: 0, screenshots: 0, bytes: 0, skipped: 0 };
+  const saveArtefact = (kind, name, data2) => {
+    if (!store2) return void 0;
+    if (artefacts.bytes + data2.length > (opts.artefacts?.maxBytes ?? ARTEFACT_RUN_CAP)) {
+      artefacts.skipped++;
+      return void 0;
+    }
+    artefacts.bytes += data2.length;
+    artefacts[kind === "html" ? "html" : "screenshots"]++;
+    return store2.writeArtefact(kind, name, data2);
+  };
   let crawledThisRun = 0;
   let fetchedCount = existing.filter((p) => !p.blockedByRobots).length;
   let lastPersist = Date.now();
@@ -35371,10 +35398,17 @@ async function crawl(startUrl, partial = {}, store2) {
     const isHtml2 = /html/i.test(res.contentType) || !res.contentType && /^\s*</.test(res.body);
     if (!res.error && isHtml2 && res.body) {
       rec.data = mapPageData(extractPage(res.body, res.finalUrl), map2);
+      const name = artefactName(item.url);
+      if (opts.artefacts?.html) {
+        const html3 = saveArtefact("html", `${name}.html.txt`, Buffer.from(res.body, "utf8").subarray(0, ARTEFACT_PAGE_CAP));
+        if (html3) rec.artefacts = { html: html3 };
+      }
       if (opts.render) {
-        const r = await opts.render(res.finalUrl);
+        const r = await opts.render(res.finalUrl, { screenshot: !!opts.artefacts?.screenshots });
         if (r.error) rec.renderError = r.error;
         else rec.rendered = mapPageData(extractPage(r.html, res.finalUrl), map2);
+        const shot = r.screenshot && saveArtefact("screenshots", `${name}.png`, r.screenshot);
+        if (shot) rec.artefacts = { ...rec.artefacts, screenshot: shot };
       }
     }
     enqueueLinksOf(rec, item);
@@ -35435,7 +35469,8 @@ async function crawl(startUrl, partial = {}, store2) {
     truncated: queue.length > 0,
     ...map2 ? { siteUrl: map2.from } : {},
     ...interruptionOf(opts.stop) ? { interrupted: interruptionOf(opts.stop) } : {},
-    ...opts.policy.upstream ? { proxy: proxySummary(opts.policy.upstream) } : {}
+    ...opts.policy.upstream ? { proxy: proxySummary(opts.policy.upstream) } : {},
+    ...opts.artefacts?.html || opts.artefacts?.screenshots ? { artefacts } : {}
   };
   store2?.writeJson("crawl-summary.json", {
     ...result,
@@ -35448,7 +35483,7 @@ async function crawl(startUrl, partial = {}, store2) {
 // src/crawl/store.ts
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
+import crypto2 from "node:crypto";
 function ensureSelfIgnored(root2) {
   const f = path.join(root2, ".searvex", ".gitignore");
   if (!fs.existsSync(f)) {
@@ -35467,7 +35502,7 @@ var RunStore = class {
   dir;
   static newRunId(prefix = "run") {
     const ts = (/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").replace(/\..+/, "").replace("T", "-");
-    return `${prefix}-${ts}-${crypto.randomBytes(3).toString("hex")}`;
+    return `${prefix}-${ts}-${crypto2.randomBytes(3).toString("hex")}`;
   }
   static latest(root2, prefix) {
     const dir = path.join(root2, ".searvex", "runs");
@@ -35515,6 +35550,20 @@ var RunStore = class {
       }
     }
     return out;
+  }
+  /**
+   * Write an evidence artefact (`--save-html`, `--screenshots`) under `artefacts/<kind>/` with owner-only
+   * permissions (0700 directory, 0600 file): bodies are stored as served and may contain personal data.
+   * Returns the path relative to the run directory.
+   */
+  writeArtefact(kind, name, data2) {
+    if (!/^[\w.-]+$/.test(name) || name.includes("..")) throw new Error(`Invalid artefact name: ${name}`);
+    this.ensure();
+    const dir = path.join(this.dir, "artefacts", kind);
+    fs.mkdirSync(dir, { recursive: true, mode: 448 });
+    fs.chmodSync(path.join(this.dir, "artefacts"), 448);
+    fs.writeFileSync(path.join(dir, name), data2, { mode: 384 });
+    return `artefacts/${kind}/${name}`;
   }
   writeText(name, text4) {
     this.ensure();
@@ -35831,7 +35880,7 @@ function applyPreLaunch(findings, kb) {
 }
 
 // src/analyze/content.ts
-import crypto2 from "node:crypto";
+import crypto3 from "node:crypto";
 
 // src/analyze/structured-data.ts
 var BASE = "https://developers.google.com/search/docs/appearance/structured-data/";
@@ -36493,7 +36542,7 @@ function runContentChecks(ctx, sink) {
   const byHash = /* @__PURE__ */ new Map();
   for (const { p, f } of pages) {
     if (f.mainWordCount < 30) continue;
-    const h = crypto2.createHash("sha1").update(f.mainText.toLowerCase()).digest("hex");
+    const h = crypto3.createHash("sha1").update(f.mainText.toLowerCase()).digest("hex");
     const a = byHash.get(h);
     if (a) a.push(p.url);
     else byHash.set(h, [p.url]);
@@ -37961,6 +38010,14 @@ function toolInfo(kb, findings) {
   }
   return { name: "searvex", version: SEARVEX_VERSION, rulesVersion: kb.version, rules };
 }
+function linkArtefacts(findings, ctx) {
+  for (const f of findings) {
+    f.evidence = f.evidence.map((e) => {
+      const page = e.url ? ctx.byUrl.get(e.url) : void 0;
+      return page?.artefacts ? { ...e, artefact: page.artefacts } : e;
+    });
+  }
+}
 function notApplicableScores(reason) {
   return { ...computeScores([], 1), overall: null, notApplicable: reason };
 }
@@ -38013,6 +38070,7 @@ function crawlSummary(result, robotsAgent = DEFAULT_CRAWL.robotsAgent) {
     ...result.siteUrl ? { siteUrl: result.siteUrl } : {},
     ...result.interrupted ? { interrupted: result.interrupted } : {},
     ...result.proxy ? { proxy: result.proxy } : {},
+    ...result.artefacts ? { artefacts: result.artefacts } : {},
     truncated: result.truncated,
     startUrl: result.startUrl,
     robots: { url: result.robots.url, state: result.robots.state, status: result.robots.status, sitemaps: result.robots.sitemaps },
@@ -38105,6 +38163,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
   } else sink.emit("perf.cwv-unmeasured", { observed: "No CrUX API key configured (searvex crux auth, or SEARVEX_CRUX_API_KEY)" });
   const inventory = buildInventory(ctx);
   const findings = sink.findings();
+  if (result.artefacts) linkArtefacts(findings, ctx);
   prioritise(findings, (id) => sink.affected(id), ctx);
   if (opts.preLaunch) applyPreLaunch(findings, kb);
   const limitations = [
@@ -38117,6 +38176,10 @@ async function analyzeCrawl(result, kb, opts = {}) {
     );
   else if (result.truncated) limitations.unshift(`Crawl stopped at the page limit with ${result.stats.queuedRemaining} URLs still queued; site-level findings (duplicates, hreflang return links) are based on the crawled subset, and orphan pages are not reported (pages that were not crawled may link to them). Raise --max-pages for a complete picture.`);
   if (launch2) limitations.push(`Pre-launch profile (--pre-launch): the site is audited as it will be once live. ${launch2.noindex.size ? `${launch2.noindex.size} noindex page(s) were evaluated as indexable; their noindex is in the launch checklist. ` : ""}Findings that depend on the test server (environment) or on a deliberate pre-launch state (launch checklist) are listed separately and excluded from the score and --fail-on.`);
+  if (result.artefacts)
+    limitations.push(
+      `Evidence artefacts: ${result.artefacts.html} HTML bod${result.artefacts.html === 1 ? "y" : "ies"} and ${result.artefacts.screenshots} screenshot(s) under artefacts/ in the run directory (owner-only permissions). Bodies are stored as served (up to 2 MB each, as .html.txt so they open as source) and can contain personal data or tokens from the pages.${result.artefacts.skipped ? ` ${result.artefacts.skipped} artefact(s) were skipped at the 200 MB per-run limit.` : ""}`
+    );
   if (result.proxy)
     limitations.push(
       `Crawled through the upstream proxy ${result.proxy.endpoint} (CONNECT only). Response times include the proxy hop. ${result.proxy.resolve === "local" ? "Targets were resolved and checked locally and the proxy was given their addresses." : `Targets were checked against local DNS before CONNECT, but the proxy resolved the names itself; if its DNS view differs (split-horizon DNS), Searvex cannot see the address it connected to.${result.proxy.unresolvedAllowed ? " Names local DNS could not resolve were sent to the proxy unchecked (--proxy-resolve proxy)." : ""}`}`
@@ -38183,6 +38246,8 @@ var CLIENT_LIB = String.raw`function el(t,a,c){var e=document.createElement(t);i
 var NS='http://www.w3.org/2000/svg';
 function svg(t,a,c){var e=document.createElementNS(NS,t);for(var k in(a||{}))e.setAttribute(k,a[k]);(c||[]).forEach(function(x){if(x)e.appendChild(x)});return e}
 function safeHref(u){return /^https?:\/\//i.test(u)?u:'#'}
+function artHref(p){return typeof p==='string'&&/^artefacts\/(html|screenshots)\/[\w.-]+$/.test(p)?p:'#'}
+function artLinks(a){if(!a)return null;var k=[];if(a.html)k.push(el('a',{href:artHref(a.html),rel:'noopener',target:'_blank',text:T('ev.html')}));if(a.screenshot)k.push(el('a',{href:artHref(a.screenshot),rel:'noopener',target:'_blank',text:T('ev.shot')}));return k.length?el('span',{class:'art'},[' · '].concat(k.length>1?[k[0],' · ',k[1]]:k)):null}
 function store(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){return null}}
 var LANG=(function(){var s=store('searvex.lang');if(s==='en'||s==='tr')return s;var l=(navigator.languages&&navigator.languages.length?navigator.languages:[navigator.language||'en']);return l.some(function(x){return /^tr\b/i.test(x)})?'tr':'en'})();
 function T(k,v){var d=D.i18n[LANG]||D.i18n.en;if(v&&String(v.n)==='1'&&d[k+'.one']!==undefined)k=k+'.one';var s=d[k];if(s===undefined)s=D.i18n.en[k];if(s===undefined)s=k;if(v)s=s.replace(/\{(\w+)\}/g,function(m,n){return v[n]===undefined?m:String(v[n])});return s}
@@ -38296,7 +38361,7 @@ r.verify?el('p',{class:'small'},[el('b',{text:T('iss.verify')+': '}),r.verify]):
 rv?el('p',{class:'review '+rv.status},[el('b',{text:T('iss.review.'+rv.status)}),rv.note?' — '+rv.note:'',el('span',{class:'muted small',text:' · '+(rv.at||'').slice(0,10)+' · '+T('iss.review.note')})]):null,
 el('h4',{text:T('iss.groups')+' ('+G.length+')'})]);
 G.forEach(function(g){var gc=el('input',{type:'checkbox','aria-label':T('iss.selectGroup')+': '+g.key});gc.checked=!!SEL[g.id];gc.onchange=function(){if(gc.checked)SEL[g.id]=1;else delete SEL[g.id];sync()};gcbs.push(gc);
-var ev=g.evidence.slice(0,30).map(function(i){var e=f.evidence[i],rr=reviewOf(f.ruleId,e.ref);return el('div',{class:'ev'},[el('span',{class:'ref',text:e.ref}),' ',e.url&&/^https?:/i.test(e.url)?el('a',{href:safeHref(e.url),rel:'noopener noreferrer',target:'_blank',text:e.url}):(e.file||e.url||'')+(e.line?':'+e.line:''),e.file&&e.url?' ('+e.url+')':'',e.observed?' — '+e.observed:'',e.expected?' → '+e.expected:'',rr?el('span',{class:'chip review-'+rr.status,text:T('iss.review.'+rr.status)}):null])});
+var ev=g.evidence.slice(0,30).map(function(i){var e=f.evidence[i],rr=reviewOf(f.ruleId,e.ref);return el('div',{class:'ev'},[el('span',{class:'ref',text:e.ref}),' ',e.url&&/^https?:/i.test(e.url)?el('a',{href:safeHref(e.url),rel:'noopener noreferrer',target:'_blank',text:e.url}):(e.file||e.url||'')+(e.line?':'+e.line:''),e.file&&e.url?' ('+e.url+')':'',e.observed?' — '+e.observed:'',e.expected?' → '+e.expected:'',artLinks(e.artefact),rr?el('span',{class:'chip review-'+rr.status,text:T('iss.review.'+rr.status)}):null])});
 var more=g.pages-Math.min(30,g.evidence.length);
 body.appendChild(el('div',{class:'group'},[el('div',{class:'grow'},[gc,el('details',{},[el('summary',{},[el('span',{class:'gkind',text:T('iss.group.'+g.kind)}),' ',g.kind==='layout'?null:el('code',{text:g.kind==='site'?(f.evidence[0]&&(f.evidence[0].url||f.evidence[0].file)||'—'):g.key}),' ',chip(T(R.mode==='website'&&g.kind!=='file'?'iss.pages':'iss.locations',{n:fmt(g.pages)})),g.kind==='template'&&g.pages>1?chip(T('iss.shared'),'accent'):g.kind==='layout'?chip(T('iss.layout'),'accent'):null,g.langs.length?chip(g.langs.join(', ')):null])].concat(ev).concat(more>0?[el('div',{class:'muted small',text:T('iss.more',{n:fmt(more)})})]:[]))])]))});
 body.appendChild(el('p',{class:'muted small'},[T('iss.rule')+' ',el('code',{text:f.ruleId}),' · '+T('iss.engines')+': '+f.engines.join(', ')+(f.priority?' · '+T('iss.priority')+' '+f.priority.bucket+' ('+f.priority.score+') · '+T('iss.effort')+' '+f.priority.effort:'')]));
@@ -38447,6 +38512,8 @@ var UI = {
     "lim.render": "JavaScript rendering",
     "lim.truncated": "Partial crawl",
     "lim.interrupted": "Interrupted run",
+    "ev.html": "saved HTML",
+    "ev.shot": "screenshot",
     "warn.interrupted": "The run was interrupted with {n} URLs still queued: this is a partial report. Continue with --resume {run}.",
     "lim.geo.citations-unmeasured": "AI citations",
     "lim.perf.cwv-unmeasured": "Core Web Vitals",
@@ -38704,6 +38771,8 @@ var UI = {
     "lim.render": "JavaScript i\u015Fleme",
     "lim.truncated": "K\u0131smi tarama",
     "lim.interrupted": "Yar\u0131da kesilen \xE7al\u0131\u015Fma",
+    "ev.html": "kaydedilen HTML",
+    "ev.shot": "ekran g\xF6r\xFCnt\xFCs\xFC",
     "warn.interrupted": "\xC7al\u0131\u015Fma, {n} URL h\xE2l\xE2 kuyruktayken yar\u0131da kesildi: bu k\u0131smi bir rapor. --resume {run} ile devam edin.",
     "lim.geo.citations-unmeasured": "Yapay zek\xE2 al\u0131nt\u0131lar\u0131",
     "lim.perf.cwv-unmeasured": "Core Web Vitals",
@@ -39448,14 +39517,14 @@ async function querySearchConsole(q) {
 }
 
 // src/integrations/google-oauth.ts
-import crypto4 from "node:crypto";
+import crypto5 from "node:crypto";
 import fs5 from "node:fs";
 import http4 from "node:http";
 import https4 from "node:https";
 
 // src/integrations/credentials.ts
 import { spawnSync } from "node:child_process";
-import crypto3 from "node:crypto";
+import crypto4 from "node:crypto";
 import fs4 from "node:fs";
 import os from "node:os";
 import path5 from "node:path";
@@ -39522,7 +39591,7 @@ function keychainKind(platform = process.platform) {
 function keychainService(dir) {
   const resolved = path5.resolve(dir);
   if (resolved === path5.resolve(defaultConfigDir())) return "searvex";
-  return `searvex-${crypto3.createHash("sha256").update(resolved).digest("hex").slice(0, 12)}`;
+  return `searvex-${crypto4.createHash("sha256").update(resolved).digest("hex").slice(0, 12)}`;
 }
 var PS_PROTECT = "$ErrorActionPreference='Stop';Add-Type -AssemblyName System.Security;$s=[Console]::In.ReadToEnd();[Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($s),$null,'CurrentUser'))";
 var PS_UNPROTECT = "$ErrorActionPreference='Stop';Add-Type -AssemblyName System.Security;$s=[Console]::In.ReadToEnd().Trim();[Console]::Out.Write([Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($s),$null,'CurrentUser')))";
@@ -39667,8 +39736,8 @@ async function revokeToken(token) {
 }
 var b64url = (b) => b.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 function pkcePair() {
-  const verifier = b64url(crypto4.randomBytes(48));
-  return { verifier, challenge: b64url(crypto4.createHash("sha256").update(verifier).digest()) };
+  const verifier = b64url(crypto5.randomBytes(48));
+  return { verifier, challenge: b64url(crypto5.createHash("sha256").update(verifier).digest()) };
 }
 function postForm(url, form) {
   const body = new URLSearchParams(form).toString();
@@ -39695,7 +39764,7 @@ function postForm(url, form) {
 }
 async function authorize(client, scope, onUrl, timeoutMs = 5 * 60 * 1e3) {
   const { verifier, challenge } = pkcePair();
-  const state = b64url(crypto4.randomBytes(16));
+  const state = b64url(crypto5.randomBytes(16));
   const server = http4.createServer();
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const redirectUri = `http://127.0.0.1:${server.address().port}`;
@@ -40547,7 +40616,7 @@ Sources: ${rule.sources.map((s) => s.url).join(" ")}` },
 }
 
 // src/rules/sources.ts
-import crypto5 from "node:crypto";
+import crypto6 from "node:crypto";
 import fs9 from "node:fs";
 import path10 from "node:path";
 init_fetcher();
@@ -40591,7 +40660,7 @@ async function fetchSourceSnapshot(url, opts = {}) {
     ...base,
     title: page.title,
     lastUpdated: extractLastUpdated(res.body),
-    contentHash: text4.length >= 200 ? crypto5.createHash("sha256").update(text4).digest("hex") : null,
+    contentHash: text4.length >= 200 ? crypto6.createHash("sha256").update(text4).digest("hex") : null,
     textLength: text4.length
   };
 }
@@ -41724,10 +41793,10 @@ function unifiedDiff(file2, before2, after2, context = 3) {
 }
 
 // src/optimize/transaction.ts
-import crypto6 from "node:crypto";
+import crypto7 from "node:crypto";
 import fs11 from "node:fs";
 import path15 from "node:path";
-var sha = (s) => crypto6.createHash("sha256").update(s).digest("hex");
+var sha = (s) => crypto7.createHash("sha256").update(s).digest("hex");
 function changesDir(root2) {
   return path15.join(root2, ".searvex", "changes");
 }
@@ -41751,7 +41820,7 @@ function interruptedChanges(root2) {
 var ConflictError = class extends Error {
 };
 function applyFixes(root2, fixes) {
-  const changeId = `chg-${(/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").replace(/\..+/, "").replace("T", "-")}-${crypto6.randomBytes(3).toString("hex")}`;
+  const changeId = `chg-${(/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").replace(/\..+/, "").replace("T", "-")}-${crypto7.randomBytes(3).toString("hex")}`;
   const dir = path15.join(changesDir(root2), changeId);
   const finalByPath = /* @__PURE__ */ new Map();
   for (const f of fixes) for (const c of f.changes) {
@@ -43265,6 +43334,8 @@ Common options
   --concurrency <n>     Parallel requests (default 4)     --delay <ms>       Per-host delay (default 250)
   --timeout <ms>        Per-request timeout (default 15000, 1000\u2013120000)
   --render              Execute JavaScript with Playwright (optional dependency) and compare DOMs
+  --save-html           Keep each fetched HTML body (as served, \u2264 2 MB) under artefacts/ in the run
+  --screenshots         With --render: one viewport screenshot per rendered page (\u2264 200 MB per run in all)
   --include <regex>     Only crawl matching URLs          --exclude <regex>  Skip matching URLs
   --check-external      Check outbound links (HEAD, robots.txt-aware, max 200)
   --no-sitemap          Do not seed from sitemaps         --resume <runId>   Resume an interrupted crawl
@@ -43355,6 +43426,8 @@ var CLI_OPTIONS = {
   resume: { type: "string" },
   "max-duration": { type: "string" },
   compact: { type: "boolean" },
+  "save-html": { type: "boolean" },
+  screenshots: { type: "boolean" },
   progress: { type: "string" },
   rules: { type: "string", multiple: true },
   format: { type: "string" },
@@ -43511,6 +43584,10 @@ function policyFrom(v, env = process.env) {
     throw e;
   }
 }
+function artefactsFrom(v) {
+  if (v["screenshots"] && !v["render"]) throw new UsageError("--screenshots needs --render (screenshots are taken of the rendered page)");
+  return v["save-html"] || v["screenshots"] ? { html: !!v["save-html"], screenshots: !!v["screenshots"] } : void 0;
+}
 function crawlOptionsFrom(v) {
   return {
     maxPages: num(v["max-pages"], 500, 1, 1e6),
@@ -43522,6 +43599,7 @@ function crawlOptionsFrom(v) {
     include: v["include"]?.map((r) => new RegExp(r)),
     exclude: v["exclude"]?.map((r) => new RegExp(r)),
     policy: policyFrom(v),
+    artefacts: artefactsFrom(v),
     // monitor also accepts a Search Console property (sc-domain:…) here; only URLs map origins.
     siteUrl: typeof v["site-url"] === "string" && /^https?:\/\//i.test(v["site-url"]) ? v["site-url"] : void 0
   };
@@ -43959,6 +44037,7 @@ export {
   PolicyError,
   SEVERITY_ORDER,
   UsageError,
+  artefactsFrom,
   assertSiteUrl,
   assertTargetAllowed,
   auditExit,
