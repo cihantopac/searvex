@@ -38073,8 +38073,8 @@ function rootCauseGroups(r) {
     if (!f.evidence.length) add2("site", "site", null);
     const totals = new Map((f.templates ?? []).map((t) => [t.pattern, t.pages]));
     for (const g of by.values()) g.pages = g.kind === "template" ? Math.max(totals.get(g.key) ?? 0, g.evidence.length) : Math.max(1, g.evidence.length);
-    const listed = [...by.values()].reduce((n, g) => n + (g.kind === "template" ? g.pages : 0), 0);
-    for (const [pattern, pages] of totals) if (!by.has(pattern) && listed < f.count) by.set(pattern, { id: `${f.ruleId}@${pattern}`, ruleId: f.ruleId, key: pattern, kind: "template", pages, evidence: [], langs: [] });
+    const listed2 = [...by.values()].reduce((n, g) => n + (g.kind === "template" ? g.pages : 0), 0);
+    for (const [pattern, pages] of totals) if (!by.has(pattern) && listed2 < f.count) by.set(pattern, { id: `${f.ruleId}@${pattern}`, ruleId: f.ruleId, key: pattern, kind: "template", pages, evidence: [], langs: [] });
     let groups = [...by.values()].sort((a, b) => b.pages - a.pages);
     const templ = groups.filter((g) => g.kind === "template");
     if (templ.length >= 3 && f.count >= Math.max(5, 0.6 * pageCount)) {
@@ -39514,7 +39514,7 @@ import path7 from "node:path";
 // src/report/markdown.ts
 var ICON = { critical: "\u{1F534}", high: "\u{1F7E0}", medium: "\u{1F7E1}", low: "\u{1F535}", info: "\u26AA" };
 function md(s) {
-  return String(s ?? "").replace(/[\r\n]+/g, " ").replace(/[|\\`*_[\]<>]/g, (c) => `\\${c}`).slice(0, 300);
+  return String(s ?? "").replace(/[\r\n]+/g, " ").replace(/[|\\`*_[\]<>]/g, (c) => `\\${c}`).replace(/^([\s\S]{299})[\s\S]+$/, "$1\u2026");
 }
 function renderMarkdown(r, opts = {}) {
   const max = opts.maxEvidence ?? 5;
@@ -41225,6 +41225,35 @@ function throwsInstead(n) {
   const callee = u["callee"];
   return callee.type === "Identifier" && NEVER_RETURNS.has(callee["name"]);
 }
+function pageNeverRenders(program) {
+  const fns = /* @__PURE__ */ new Map();
+  for (const st of program["body"]) {
+    const decl = st.type === "ExportNamedDeclaration" ? st["declaration"] : st;
+    if (decl?.type === "FunctionDeclaration" && decl["id"]) fns.set(decl["id"]["name"], decl);
+    if (decl?.type === "VariableDeclaration")
+      for (const d of decl["declarations"]) {
+        const init = unwrap2(d["init"]);
+        if (init && /FunctionExpression|ArrowFunctionExpression/.test(init.type) && d["id"].type === "Identifier") fns.set(d["id"]["name"], init);
+      }
+  }
+  const exported = program["body"].find((st) => st.type === "ExportDefaultDeclaration");
+  let fn = unwrap2(exported?.["declaration"]);
+  if (fn?.type === "Identifier") fn = fns.get(fn["name"]) ?? null;
+  if (!fn || !/FunctionDeclaration|FunctionExpression|ArrowFunctionExpression/.test(fn.type)) return false;
+  const body = fn["body"];
+  if (body.type !== "BlockStatement") return throwsInstead(unwrap2(body["type"] === "AwaitExpression" ? body["argument"] : body));
+  for (const st of body["body"]) {
+    const e = st.type === "ExpressionStatement" ? st["expression"] : st.type === "ReturnStatement" ? st["argument"] : null;
+    if (throwsInstead(e?.type === "AwaitExpression" ? e["argument"] : e)) return true;
+    let returns = false;
+    walkAst(st, (n) => {
+      if (/Function/.test(n.type)) return false;
+      if (n.type === "ReturnStatement") returns = true;
+    });
+    if (returns) return false;
+  }
+  return false;
+}
 function returnedObjects(fn, locals) {
   const body = fn["body"];
   if (body.type !== "BlockStatement") return [resolveObject(body, locals)];
@@ -41544,6 +41573,9 @@ function markPrivate(scan, why) {
     if (reason) r.private = reason;
   }
 }
+function listed(items, max) {
+  return items.slice(0, max).join(", ") + (items.length > max ? ` (+${items.length - max} more)` : "");
+}
 function scanNextApp(appRoot, files, read, sink, scan) {
   const appBase = files.some((f) => f.rel.startsWith(rel(appRoot, "src/app/"))) ? rel(appRoot, "src/app/") : rel(appRoot, "app/");
   const baseRe = new RegExp("^" + appBase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
@@ -41564,6 +41596,12 @@ function scanNextApp(appRoot, files, read, sink, scan) {
       if (dir + "/" === appBase) break;
       dir = path13.posix.dirname(dir);
     }
+    const route = nextRoute(p.rel, baseRe);
+    const program = parseSource(src, p.rel);
+    if (program && pageNeverRenders(program)) {
+      scan.routes.push({ route, file: p.rel, framework: "nextjs-app", dynamic: /\[.+\]/.test(route), hasTitle: null, hasDescription: null, noindex: true });
+      continue;
+    }
     const meta = metadataOf(src, p.rel);
     const pageTitle = meta.exported ? meta.title : false;
     const pageDesc = meta.exported ? meta.description : false;
@@ -41571,16 +41609,15 @@ function scanNextApp(appRoot, files, read, sink, scan) {
     const hasDesc = anyOf(pageDesc, ...chain.map((l) => l.exported ? l.description : false));
     const canonical = anyOf(meta.canonical, ...chain.map((l) => l.canonical));
     const noindex = inheritedNoindex([meta, ...chain]) === true;
-    const route = nextRoute(p.rel, baseRe);
     scan.routes.push({ route, file: p.rel, framework: "nextjs-app", dynamic: /\[.+\]/.test(route), hasTitle, hasDescription: hasDesc, noindex });
     if (hasTitle === false) sink.emit("title.missing", { file: p.rel, observed: `route ${route}: no metadata.title in page or ancestor layouts` });
-    else if (pageTitle === false && hasTitle === true && !noindex) (titleOwners["inherited"] ??= []).push(`${route} (${p.rel})`);
+    else if (pageTitle === false && hasTitle === true && !noindex) (titleOwners["inherited"] ??= []).push(route);
     if (hasDesc === false && !noindex) sink.emit("description.missing", { file: p.rel, line: meta.line, observed: `route ${route}: no metadata.description` });
     if (canonical === false && !noindex) sink.emit("canonical.missing", { file: p.rel, line: meta.line, observed: `route ${route}: no metadata.alternates.canonical` });
     if (noindex) sink.emit("index.noindex", { file: p.rel, observed: `route ${route}: robots index:false${meta.robots ? "" : " (inherited from a layout)"}` });
   }
   const inherited = titleOwners["inherited"] ?? [];
-  if (inherited.length > 1) sink.emit("duplicate.title", { file: rootLayoutPath ?? void 0, observed: `${inherited.length} routes inherit the same layout title (unless title.template is combined with page titles): ${inherited.slice(0, 5).join(", ")}` });
+  if (inherited.length > 1) sink.emit("duplicate.title", { file: rootLayoutPath ?? void 0, observed: `${inherited.length} routes inherit the same layout title (unless title.template is combined with page titles): ${listed(inherited, 8)}` });
   if (rootLayoutPath) {
     htmlLangCheck(read(rootLayoutPath), rootLayoutPath, "html", sink);
   }

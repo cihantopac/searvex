@@ -135,6 +135,41 @@ function throwsInstead(n: Node | null | undefined): boolean {
   return callee.type === 'Identifier' && NEVER_RETURNS.has(callee['name'] as string);
 }
 
+/**
+ * Whether a page's default export never renders: its body calls `notFound()`, `redirect()` (…) unconditionally,
+ * i.e. as a top-level statement, not inside a branch. Such a route answers 404 or a redirect, never a 200 page.
+ */
+export function pageNeverRenders(program: Node): boolean {
+  const fns = new Map<string, Node>();
+  for (const st of program['body'] as Node[]) {
+    const decl = st.type === 'ExportNamedDeclaration' ? (st['declaration'] as Node | null) : st;
+    if (decl?.type === 'FunctionDeclaration' && decl['id']) fns.set((decl['id'] as Node)['name'] as string, decl);
+    if (decl?.type === 'VariableDeclaration')
+      for (const d of decl['declarations'] as Node[]) {
+        const init = unwrap(d['init'] as Node | null);
+        if (init && /FunctionExpression|ArrowFunctionExpression/.test(init.type) && (d['id'] as Node).type === 'Identifier') fns.set((d['id'] as Node)['name'] as string, init);
+      }
+  }
+  const exported = (program['body'] as Node[]).find((st) => st.type === 'ExportDefaultDeclaration');
+  let fn = unwrap(exported?.['declaration'] as Node | null);
+  if (fn?.type === 'Identifier') fn = fns.get(fn['name'] as string) ?? null;
+  if (!fn || !/FunctionDeclaration|FunctionExpression|ArrowFunctionExpression/.test(fn.type)) return false;
+  const body = fn['body'] as Node;
+  if (body.type !== 'BlockStatement') return throwsInstead(unwrap(body['type'] === 'AwaitExpression' ? (body['argument'] as Node) : body));
+  for (const st of body['body'] as Node[]) {
+    const e = st.type === 'ExpressionStatement' ? (st['expression'] as Node) : st.type === 'ReturnStatement' ? (st['argument'] as Node | null) : null;
+    if (throwsInstead(e?.type === 'AwaitExpression' ? (e['argument'] as Node) : e)) return true;
+    // A return before the call (directly or inside a branch) may render the page.
+    let returns = false;
+    walkAst(st, (n) => {
+      if (/Function/.test(n.type)) return false;
+      if (n.type === 'ReturnStatement') returns = true;
+    });
+    if (returns) return false;
+  }
+  return false;
+}
+
 /** Object literals a metadata function returns (its own return statements, not nested functions'). */
 function returnedObjects(fn: Node, locals: Map<string, Node>): Array<Node | null> {
   const body = fn['body'] as Node;
