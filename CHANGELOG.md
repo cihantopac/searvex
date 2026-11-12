@@ -13,6 +13,11 @@ All notable changes to this project are documented here. The format follows
 - Deeper competitor research (`research --competitor`, `run --competitor`): each site's topic clusters with a
   covered / not covered mark against the target, and a pages-per-search-intent table with the page types most
   competitors use for an intent the target lacks. Both are labelled as hypotheses about coverage, not demand.
+- Login-protected routes in repository mode: Laravel routes behind `auth` / `auth:*` / `verified` middleware (groups,
+  nested groups, the legacy array form and route chains) and Next.js routes covered by an auth middleware matcher
+  (`config.matcher`, Clerk `createRouteMatcher`) or by a layout that redirects anonymous users to a login page.
+  Their metadata and indexability findings are not reported (pages behind a login are not indexed); the routes are
+  listed in `privateRoutes`, the summary and the limitations. Catch-all or regex matchers never make routes private.
 
 ### Added
 - Upstream proxy support, as designed in `docs/design/proxy.md`: `--proxy <url|none>` and `HTTPS_PROXY` /
