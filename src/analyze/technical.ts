@@ -1,6 +1,6 @@
 import { mapOrigin, normalizeUrl, originMap, sameSite } from '../core/url.js';
 import type { FindingSink } from '../rules/engine.js';
-import { factsOf, isNoindex, isSelfCanonical, resolveRecord, robotsDirectives, type SiteContext } from './context.js';
+import { factsOf, isNoindex, mainTextOf, isSelfCanonical, resolveRecord, robotsDirectives, type SiteContext } from './context.js';
 import { checkStructuredData, personalSiteSignal } from './structured-data.js';
 import { detectLanguage, detectShortLanguage, primaryTag } from './language.js';
 
@@ -218,7 +218,7 @@ export function runTechnicalChecks(ctx: SiteContext, sink: FindingSink): void {
     // Content language vs declared language (only for languages the detector knows).
     const declared = primaryTag(f.lang);
     if (declared && ['en', 'tr', 'de', 'fr', 'es', 'it', 'pt', 'nl'].includes(declared) && !noindex) {
-      const detected = detectLanguage(f.mainText);
+      const detected = detectLanguage(mainTextOf(ctx, f));
       if (detected && detected.lang !== declared) sink.emit('lang.content-mismatch', { url: p.url, observed: `lang="${f.lang}" but main content reads as "${detected.lang}"` });
       const foreign = f.headings.filter((h) => !h.chrome && h.level <= 2).map((h) => ({ h, lang: detectShortLanguage(h.text) })).filter((x) => x.lang && x.lang !== declared && x.lang !== detected?.lang);
       if (foreign.length && (!detected || detected.lang === declared)) {

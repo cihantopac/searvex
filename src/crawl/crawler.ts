@@ -7,7 +7,7 @@ import { DEFAULT_POLICY, type NetPolicy } from '../net/ssrf.js';
 import { proxySummary } from '../net/proxy.js';
 import { collectSitemaps, type SitemapResult } from './sitemap.js';
 import { fetchRobots, type RobotsInfo } from './robots.js';
-import { RunStore } from './store.js';
+import { RunStore, type TextRef } from './store.js';
 
 export interface CrawlOptions {
   maxPages: number;
@@ -138,6 +138,8 @@ export interface CrawlResult {
   artefacts?: { html: number; screenshots: number; bytes: number; skipped: number };
   /** Upstream proxy used for this crawl (endpoint and mode, never credentials). */
   proxy?: ReturnType<typeof proxySummary>;
+  /** Reads a page text stored in the run directory (`PageData.mainTextRef`); absent without a run directory. */
+  readText?: (ref: TextRef) => string;
 }
 
 /** Why a crawl was stopped early: a signal (SIGINT/SIGTERM) or the --max-duration deadline. */
@@ -373,10 +375,15 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
     enqueueLinksOf(rec, item);
     // Keep stored text bounded for large crawls. The whole-page text only feeds wordCount (computed at
     // extraction); analysis reads the main content, so the page record does not keep it.
+    // With a run directory the main text goes to disk (texts.txt) and the record keeps its byte range.
     for (const d of [rec.data, rec.rendered]) {
       if (!d) continue;
       d.textContent = '';
-      d.mainText = d.mainText.slice(0, 20000);
+      const main = d.mainText.slice(0, 20000);
+      if (store) {
+        d.mainTextRef = store.appendText(main);
+        d.mainText = '';
+      } else d.mainText = main;
     }
     pages.push(rec);
     store?.append('pages.jsonl', rec);
@@ -437,6 +444,7 @@ export async function crawl(startUrl: string, partial: Partial<CrawlOptions> = {
     ...(interruptionOf(opts.stop) ? { interrupted: interruptionOf(opts.stop) } : {}),
     ...(opts.policy.upstream ? { proxy: proxySummary(opts.policy.upstream) } : {}),
     ...(opts.artefacts?.html || opts.artefacts?.screenshots ? { artefacts } : {}),
+    ...(store ? { readText: (ref: TextRef) => store.readText(ref) } : {}),
   };
   store?.writeJson('crawl-summary.json', {
     ...result,

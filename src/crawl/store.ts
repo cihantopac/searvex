@@ -2,6 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+/** Byte range of a page text in the run's `texts.txt`. */
+export interface TextRef {
+  offset: number;
+  length: number;
+}
+
 /** Keep Searvex artifacts out of the user's git status without touching their .gitignore. */
 export function ensureSelfIgnored(root: string): void {
   const f = path.join(root, '.searvex', '.gitignore');
@@ -18,6 +24,7 @@ export function ensureSelfIgnored(root: string): void {
  */
 export class RunStore {
   readonly dir: string;
+  private textBytes: number | undefined;
 
   constructor(
     readonly root: string,
@@ -104,6 +111,33 @@ export class RunStore {
     fs.chmodSync(path.join(this.dir, 'artefacts'), 0o700);
     fs.writeFileSync(path.join(dir, name), data, { mode: 0o600 });
     return `artefacts/${kind}/${name}`;
+  }
+
+  /**
+   * Append a page's main text to `texts.txt` and return its byte range. Page records keep only this reference,
+   * so large crawls do not hold every page's text in memory; analysis reads it back with `readText`.
+   */
+  appendText(text: string): TextRef {
+    this.ensure();
+    const f = this.file('texts.txt');
+    this.textBytes ??= fs.existsSync(f) ? fs.statSync(f).size : 0;
+    const buf = Buffer.from(text, 'utf8');
+    fs.appendFileSync(f, buf);
+    const ref = { offset: this.textBytes, length: buf.length };
+    this.textBytes += buf.length;
+    return ref;
+  }
+
+  /** Read a text written by `appendText`. The file is opened per read: no descriptor stays open. */
+  readText(ref: TextRef): string {
+    const fd = fs.openSync(this.file('texts.txt'), 'r');
+    try {
+      const buf = Buffer.alloc(ref.length);
+      fs.readSync(fd, buf, 0, ref.length, ref.offset);
+      return buf.toString('utf8');
+    } finally {
+      fs.closeSync(fd);
+    }
   }
 
   writeText(name: string, text: string): string {

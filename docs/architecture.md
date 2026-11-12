@@ -68,7 +68,8 @@ skills/, agents/            Claude Code plugin components
 1. `fetchRobots` (RFC 9309 semantics) → crawl-delay → limiter.
 2. Sitemaps (rate-limited) seed the queue; start URL seeded at depth 0.
 3. Workers fetch with `safeFetch`, parse with `extractPage`, enqueue internal links + canonical/hreflang targets.
-4. Records are appended to `pages.jsonl`; `checkpoint.json` every N pages enables `--resume`.
+4. Records are appended to `pages.jsonl` and each page's main text to `texts.txt` (the record keeps its byte
+   range, so memory does not grow with page text); `checkpoint.json` every N pages enables `--resume`.
 5. `analyzeCrawl` builds a `SiteContext`, runs probes and analyzers, computes scores, records limitations.
 6. Reports are rendered from the JSON report (re-renderable later with `searvex report`).
 

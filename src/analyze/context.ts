@@ -30,6 +30,11 @@ export function factsOf(p: PageRecord): PageData | undefined {
   return p.rendered ?? p.data;
 }
 
+/** Main content text of a page's facts: in memory, or read from the run directory (`PageData.mainTextRef`). */
+export function mainTextOf(ctx: SiteContext, f: PageData): string {
+  return f.mainTextRef && ctx.crawl.readText ? ctx.crawl.readText(f.mainTextRef) : f.mainText;
+}
+
 export function robotsDirectives(p: PageRecord, bots: string[] = ['googlebot']): string[] {
   const d = [...(p.data?.metaRobots ?? []), ...p.xRobots];
   for (const b of bots) d.push(...(p.data?.botRobots[b] ?? []), ...(p.xRobotsByBot[b] ?? []));

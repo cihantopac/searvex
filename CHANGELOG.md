@@ -50,6 +50,11 @@ All notable changes to this project are documented here. The format follows
   to `static/` (SvelteKit) and `public/` (Remix) and gives canonical hints for both.
 
 ### Changed
+- Disk-backed page texts: a crawl with a run directory writes each page's main text to `texts.txt` and keeps
+  only its byte range in the page record (`pages.jsonl` no longer carries the text); analysis reads it back when
+  needed. The content analysis keeps term counts, shingles and boilerplate counts in compact typed arrays and
+  reads each text once. 100,000 pages now run under a 2 GB heap (~6.5 KB per page after the crawl) and the
+  analysis of 50,000 pages takes about a third less time. Reports are unchanged.
 - The stored page record (`pages.jsonl` and memory) no longer keeps the whole-page text (`textContent`), which only
   fed the word count at extraction: about a third less memory after the crawl on text-heavy sites.
 - `scripts/benchmark.mjs` uses varied page text, takes a words-per-page argument and, with `--expose-gc`, reports
