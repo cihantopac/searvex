@@ -31,14 +31,14 @@ Open items name the release and milestone of the maintainer's release plan that 
 |---|---|---|
 | 6 | GSC OAuth (loopback, read-only scope, refresh-token storage with 0600 permissions) | ✅ verified live 2026-11-01 (OAuth, refresh, sites, report, pagination) |
 | 7 | GSC analysis: top queries/pages, CTR vs position outliers, striking distance (pos 8–20), query→page mapping, multi-page queries (data-verified cannibalisation), pages without impressions | ✅ `gsc report` with `--audit` join; traffic-weighted priorities in 1.4.0 (F1) |
-| 8 | Bing Webmaster API (query/page stats) | ✅ `bing report`, mock-server tested; **live run pending an API key**; live verification planned for 1.4.0 (F2) |
+| 8 | Bing Webmaster API (query/page stats) | ✅ `bing report`, mock-server tested; **live run pending an API key**; live verification waits for Bing impressions on the owner's sites (F2) |
 | 9 | GA4 Data API (landing-page sessions / conversions from organic search) | 🧪 1.4.0 (F4): `ga4 report`, experimental until a live run on the owner's property |
 | 10 | Yandex Webmaster API | 🧪 1.4.0 (F5): `yandex report` (popular queries), experimental until a live run on a verified owner site |
 | 11 | Impact-based prioritisation (severity × affected share × page importance × traffic when available) | ✅ score/bucket/effort/reasons; "Fix first" table; verified clicks/impressions as an importance input in 1.4.0 (F1) |
 | 12 | Search-intent classification of pages and queries (rules + agent), separate verified vs inferred | ✅ |
 | 13 | Internal-linking opportunities (topic-related pages that do not link to each other; orphans by topic) | ✅ |
 | 14 | Deeper competitor research: per-competitor topic clusters, page-type comparison per intent | ✅ 1.4.0 (G3): cluster coverage per competitor, pages per intent with missing page types |
-| 15 | Bing AI Performance import (CSV) when exported by the user | ⬜ planned for 1.4.0 (F3) |
+| 15 | Bing AI Performance import (CSV) when exported by the user | ⛔ waits for a real export (F3): Bing does not document the export columns |
 | 26 | Property-aware audit joins (GSC/Bing), multi-site regression tests | ✅ v0.7.0 |
 | 27 | Search Console CSV/ZIP import (localised headers, decimal commas, filters/period metadata, limits) | ✅ v0.7.0 — verified with real TR and EN exports (2026-11-01) |
 | 28 | Onboarding: `connect` with Google / CSV / skip, per-site preference, "Not measured" in summaries | ✅ v0.7.0 |

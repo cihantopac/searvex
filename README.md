@@ -88,13 +88,13 @@ Then run `/searvex <url> [path]`. Requires Node.js ≥ 20.10. Full reference: [d
 - **Local and staging builds** — audit a build as its public site (`--site-url`) with a pre-launch profile (`--pre-launch`): test-server findings and deliberate pre-launch states go to a launch checklist instead of the score.
 - **GEO / AI search** — AI crawler access by purpose, snippet controls, entity consistency, content clarity.
 - **Repositories** — findings with `file:line` in framework source, plus 12 rule types fixed automatically (dry run → approval → apply → verify → rollback).
-- **Search data, optional and read-only** — Search Console (API or CSV export) and Chrome UX Report. Without them, clicks and Core Web Vitals are shown as *not measured*, never estimated.
+- **Search data, optional and read-only** — Search Console (API or CSV export) and Chrome UX Report; experimental: Bing Webmaster, Lighthouse lab data (`--lab`), Google Analytics 4 and Yandex Webmaster. Without them, clicks and Core Web Vitals are shown as *not measured*, never estimated.
 - **Competitors** — topic and page-type coverage gaps, labelled as hypotheses.
 - **For pipelines and agents** — a versioned `report.json` with a published JSON Schema (`searvex schema`), every affected URL per finding, distinct exit codes (unreachable or robots-blocked `4`, interrupted `5`), `--progress ndjson`, `--max-duration`, host and port limits, and `searvex prompt` for repair prompts outside the browser.
 
 ## Evidence, not claims
 
-Status: **v1.3.0** ([release notes](docs/release-notes-1.3.0.md), [changelog](CHANGELOG.md)).
+Status: **v1.4.0** ([release notes](docs/release-notes-1.4.0.md), [changelog](CHANGELOG.md)).
 
 - **92 rules**, each tied to an official source: 72 verified, 18 heuristic, 2 reported as unmeasurable. `searvex rules show <id>`
 - **Tested** with unit, integration, browser and end-to-end runs; CI on Linux, macOS and Windows with Node 20, 22 and 24 ([quality report](docs/quality.md)).

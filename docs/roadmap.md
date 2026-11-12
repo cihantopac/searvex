@@ -21,7 +21,7 @@ Retest → Benchmark → Improve. Results are recorded in [quality.md](quality.m
 Ordered by value; none is promised for a date.
 
 1. **Bing live data check** once the owner's sites have Bing impressions (moves Bing from experimental to
-   supported). Planned for 1.4.0 (F2).
+   supported). Waits for Bing impressions on the owner's sites (F2); not in 1.4.0.
 2. **Locale-adaptive root-cause view** in the HTML report: group consequences under their cause, not only in
    "Fix first". Done in 1.4.0 (G1): the **By cause** view.
 3. **Login-protected routes in repository mode** (auth middleware in Laravel / Next.js) so metadata findings
@@ -39,5 +39,5 @@ Ordered by value; none is promised for a date.
 7. **Ecosystem:** GitHub Action with SARIF upload, MCP server exposing the engine, plugin directory
    submission (needs the final brand icon), community rule packs under the same sourcing rules. Planned for
    1.5.0 (H1–H4).
-8. **Upstream proxy** (CONNECT-only), after the design in [design/proxy.md](design/proxy.md) is approved;
-   evidence artefacts (`--save-html`, `--screenshots`). Planned for 1.4.0 (E1, E2).
+8. **Upstream proxy** (CONNECT-only, [design/proxy.md](design/proxy.md)) and evidence artefacts (`--save-html`,
+   `--screenshots`). Done in 1.4.0 (E1, E2).

@@ -223,6 +223,25 @@ title; Drupal pages on tubitak.gov.tr carry two `<title>` elements.
 | Valid 3-letter language codes reported as high-severity mistakes with "correct the code" | `ast`, `ach`, `ceb` have no ISO 639-1 code; Google supports only ISO 639-1 and ignores those alternates (documentation re-read 2026-11-01) — the site has nothing to correct | low severity with that explanation; 3-letter codes that have a 2-letter equivalent (`tur` → `tr`) stay high with the correction | mozilla.org 82 → 86, wordpress.org 86 → 93 |
 | A finding's severity depended on the order of its occurrences | first emission decided | the most severe occurrence wins | — |
 
+## 1.4.0 release regression (2026-11-12)
+
+The six sites of round 8, audited with the published 1.3.0 bundle and with 1.4.0 in turn (≤ 20 pages, 1.5 s
+per-host delay, 1 connection, robots.txt honoured):
+
+| Site | Score 1.3.0 → 1.4.0 | Pages fetched | Findings | Difference |
+|---|---|---|---|---|
+| www.mozilla.org/en-US/ | 98 → 98 | 20 → 20 | 16 → 16 | — |
+| www.gov.uk | 97 → 97 | 20 → 20 | 20 → 20 | — |
+| nextjs.org | 100 → 100 | 20 → 20 | 8 → 8 | — |
+| wordpress.org/news/ | 93 → 93 | 19 → 19 | 20 → 21 | `robots.sitemap-unreachable` in the 1.4.0 run: `/patterns/sitemap.xml` did not answer then; it answers 200 again (live variance) |
+| docs.python.org/3/ | 91 → 91 | 8 → 8 | 9 → 9 | — |
+| tubitak.gov.tr | 98 → 98 | 20 → 20 | 12 → 11 | `perf.slow-ttfb` only in the 1.3.0 run: single samples of 803–975 ms near the threshold (live variance) |
+
+Sitemap fetching and TTFB checks did not change in 1.4.0. The Frameva contract cases (robots 503 / disallow-all →
+exit 4 `robots-blocked`, unreachable → 4, policy block → 2, runtime error → 3 without a stack, SIGTERM → 5 with a
+partial report, a 60-page template issue counted on every affected page) pass, and every report validates
+against `schema/report.schema.json`.
+
 ## Live CrUX validation (2026-11-01)
 
 Owner's Google Cloud API key restricted to the Chrome UX Report API, stored with `searvex crux auth` in the

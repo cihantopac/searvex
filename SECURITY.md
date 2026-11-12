@@ -4,7 +4,7 @@
 
 | Version | Security fixes |
 |---|---|
-| 1.x, latest minor (currently 1.3) | Yes |
+| 1.x, latest minor (currently 1.4) | Yes |
 | Earlier 1.x minors | No: upgrade to the latest 1.x (minor releases keep the CLI and the report schema compatible, see [docs/schema.md](docs/schema.md)) |
 | 0.x | No |
 

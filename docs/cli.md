@@ -160,6 +160,8 @@ With `--json`, the next stderr line is a JSON object:
 | `findings[].affected` | `{ count, urls, truncated? }`: every affected URL (website) or file (repository), sorted; complete up to 10,000, `truncated` counts the rest. Evidence stays a sample of at most 50. robots.txt and llms.txt are not listed. With `--compact`, only `count` (since 1.3.0) |
 | `findings[].priority.causedBy` / `.effects` | Observed root cause a finding is likely a consequence of (`{ruleId, why}`), and on the cause the rule ids of its likely consequences; the HTML report shows them in **By cause** (since schema 1.1) |
 | `findings[].structures` | Page-structure templates of the affected pages (`id` = layout skeleton hash, `pages`, `example` URL): one template behind unrelated URLs such as flat slugs. When at most two layouts cover the pages that URL patterns split, the finding counts as "fix once" (since schema 1.1) |
+| `privateRoutes` | Repository mode: routes that need a login (`route`, `file`, `reason`: auth middleware, a login-redirecting layout); their metadata and indexability findings are not reported (since schema 1.1) |
+| `labData` | With `--lab`: Lighthouse lab data per sampled template (`samples[]` with `template`, `pages`, `url`, `score`, `lcpMs`, `fcpMs`, `tbtMs`, `cls`, `speedIndexMs`, `ttfbMs`; `errors[]`; `skipped` when nothing was measured). Lab values, not Core Web Vitals (since schema 1.1) |
 | `rootCauseGroups` | Per rule id: occurrences grouped by URL template, source file, shared layout or site, with page counts (since 1.3.0) |
 | `inventory.unfetched` | Every other crawled URL with `status` and `reason` (`robots-blocked`, `error`, `redirect`, `non-200`, `not-html`), capped at 10,000; `inventory.unfetchedTotal` is the full count (since 1.3.0) |
 
