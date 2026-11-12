@@ -15,6 +15,11 @@ All notable changes to this project are documented here. The format follows
   `--screenshots` (with `--render`) one viewport PNG per rendered page, under `artefacts/` in the run directory
   with owner-only permissions and a 200 MB per-run budget. Evidence items (`evidence[].artefact`) and the HTML
   report link them; `crawl.artefacts` counts them.
+- Traffic-weighted priorities: when Search Console or Bing data is joined to an audit (`gsc report --audit`,
+  `gsc import --audit`, `bing report --audit`, `monitor --import` with a pages table), a page's importance becomes
+  half structure and half its share of verified clicks (impressions when clicks are too few). Reach and scores are
+  recomputed over each finding's complete affected URLs, the "why" reasons state the clicks and impressions, and
+  `report.json` records the input under `traffic`.
 - `crawl.proxy` in `report.json` (endpoint and resolution mode, never credentials), plus a limitation line; report
   schema 1.1.
 - Exit codes for the proxy: an unusable proxy setting or failed proxy authentication is `2`, an unreachable proxy
