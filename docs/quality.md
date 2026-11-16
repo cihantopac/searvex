@@ -233,6 +233,33 @@ codes and statuses with schema 1.2, and every report validates. New surfaces are
 bundled CLI over real stdio) and the GitHub Action (`action/run.mjs` with the bundled CLI, and the
 `Action self-test` workflow that runs `action.yml` itself on GitHub).
 
+## 1.6.0 release regression (2026-11-16)
+
+The same six sites, audited with the published 1.5.0 bundle and with 1.6.0 in turn (≤ 20 pages, 1.5 s per-host
+delay, 1 connection, robots.txt honoured). 1.6.0 changes the HTML report and fast-xml-parser (sitemaps).
+
+| Site | Score 1.5.0 → 1.6.0 | Pages fetched | Findings | Difference |
+|---|---|---|---|---|
+| www.mozilla.org/en-US/ | 98 → 98 | 20 → 20 | 16 → 16 | — |
+| www.gov.uk | 97 → 97 | 20 → 20 | 15 → 15 | — |
+| nextjs.org | 100 → 100 | 20 → 20 | 8 → 8 | — |
+| wordpress.org/news/ | 93 → 93 | 19 → 19 | 20 → 20 | — |
+| docs.python.org/3/ | 91 → 91 | 8 → 8 | 9 → 9 | — |
+| tubitak.gov.tr | 98 → 98 | 20 → 20 | 11 → 11 | — |
+
+The rule ids are identical on every site. The Frameva contract cases pass:
+
+| Case | Exit |
+|---|---|
+| robots.txt 503 or disallow-all | 4 `robots-blocked` |
+| Unreachable target | 4 |
+| Policy block | 2 |
+| Unreachable proxy | 3, one line, no stack |
+| SIGTERM | 5, with a partial report |
+| 60-page template issue | counted on every affected page, 50 evidence items kept |
+
+All 7 reports validate against `schema/report.schema.json`.
+
 ## 1.4.0 release regression (2026-11-12)
 
 The six sites of round 8, audited with the published 1.3.0 bundle and with 1.4.0 in turn (≤ 20 pages, 1.5 s

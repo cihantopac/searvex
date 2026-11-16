@@ -5,7 +5,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-16
+
+A redesigned HTML report: calm, visual and quick to read, with the same data. Release notes:
+[docs/release-notes-1.6.0.md](docs/release-notes-1.6.0.md).
+
+### Security
+- fast-xml-parser 5.11.2 → 5.12.0, which fixes the low-severity advisory GHSA-474x-hrwr-fgx4 (quadratic CPU on
+  unterminated tags in untrusted sitemaps). Its transitive is-unsafe goes from 2.0.2 to 2.0.3. Third-party notices
+  are regenerated.
+
 ### Changed
+- Official sources re-verified on 2026-11-16 after the weekly source check flagged four pages: Google's redirects page,
+  Google's Search updates page, the Bing webmaster post on Bing Chat controls and Perplexity's crawler page. Each
+  cited fact still holds and no rule text changed; source snapshots and check dates were updated.
 - Redesigned HTML report, with presentation changes only and the same data:
   - **Look:** a calm layout with three colours: neutral surfaces, the brand teal for structure and data, and coral
     only for actions and critical/high severity.
@@ -21,7 +34,8 @@ All notable changes to this project are documented here. The format follows
   - **Selection and prompt:** a floating selection bar and a simpler prompt dialog.
   - **Copy:** shorter English and Turkish labels, with longer help behind info toggles.
   - Unchanged: `report.json`, `report.md`, SARIF and the repair prompt.
-- README: rewritten, with new screenshots.
+- README: rewritten, with new screenshots and a new social preview image.
+- Shorter npm and plugin descriptions.
 
 ## [1.5.0] - 2026-11-12
 

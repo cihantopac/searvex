@@ -1,7 +1,7 @@
 {
   "name": "searvex-seo",
-  "version": "1.5.0",
-  "description": "Understand search, fix what matters: open-source SEO + GEO auditor for websites and repositories with a bilingual (EN/TR) action-center report, root-cause grouping, repair prompts for coding agents and safe code fixes with rollback.",
+  "version": "1.6.0",
+  "description": "Open-source SEO and AI-search (GEO) auditor for websites and repositories: root-cause grouping, a bilingual (EN/TR) report, repair prompts for coding agents and safe code fixes with rollback.",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
@@ -67,7 +67,7 @@
   "dependencies": {
     "@babel/parser": "7.29.9",
     "cheerio": "1.2.0",
-    "fast-xml-parser": "5.11.2",
+    "fast-xml-parser": "5.12.0",
     "parse5": "7.3.0",
     "parse5-htmlparser2-tree-adapter": "7.1.0",
     "robots-parser": "3.0.1"

@@ -1,7 +1,7 @@
 {
   "name": "searvex",
-  "version": "1.5.0",
-  "description": "Understand search, fix what matters: deterministic technical SEO + GEO audits with a sourced rule base, a bilingual (EN/TR) action-center report with root-cause groups and repair prompts, competitor research, and safe, verified code fixes with rollback.",
+  "version": "1.6.0",
+  "description": "Open-source SEO and AI-search (GEO) auditor for websites and repositories: root-cause grouping, a bilingual (EN/TR) report, repair prompts for coding agents and safe code fixes with rollback.",
   "author": { "name": "Cihan Topaç", "url": "https://github.com/cihantopac" },
   "license": "Apache-2.0",
   "homepage": "https://github.com/cihantopac/searvex#readme",
