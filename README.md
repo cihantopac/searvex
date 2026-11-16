@@ -60,7 +60,7 @@ jobs:
       security-events: write # SARIF upload to code scanning
     steps:
       - uses: actions/checkout@v4
-      - uses: cihantopac/searvex@v1.5.0
+      - uses: cihantopac/searvex@v1.6.0
         with:
           target: . # or https://example.com
           fail-on: high
@@ -163,7 +163,7 @@ Full reference: [docs/cli.md](docs/cli.md).
 Searvex never promises rankings, traffic or AI citations. The health score is Searvex's own summary, not a
 search-engine metric. See [limitations](docs/limitations.md).
 
-Status: **v1.5.0** ([release notes](docs/release-notes-1.5.0.md), [changelog](CHANGELOG.md)).
+Status: **v1.6.0** ([release notes](docs/release-notes-1.6.0.md), [changelog](CHANGELOG.md)).
 
 ## Documentation
 
