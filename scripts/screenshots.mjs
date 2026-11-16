@@ -1,6 +1,7 @@
 // Captures README screenshots from a real Searvex HTML report (dev only; needs the Playwright devDependency).
 //   node scripts/screenshots.mjs <report.html> [outDir=docs/assets]
-// Every image is an unedited capture of the report file passed in.
+// Every image is an unedited capture of the report file passed in. Convert to WebP afterwards:
+//   for f in docs/assets/*.png; do cwebp -q 90 "$f" -o "${f%.png}.webp" && rm "$f"; done
 import { chromium } from 'playwright';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -32,9 +33,9 @@ async function shot(name, { lang = 'en', theme = 'light', width = 1280, height =
 
 const issues = async (page) => {
   await page.click('#tab-issues');
-  await page.locator('.finding > input').first().check();
-  await page.locator('.finding > input').nth(2).check();
-  await page.locator('.finding details').first().evaluate((d) => (d.open = true));
+  await page.locator('#p-issues .row > input').first().check();
+  await page.locator('#p-issues .row > input').nth(2).check();
+  await page.locator('#p-issues .rowbtn').first().click();
 };
 const prompt = async (page) => {
   await issues(page);

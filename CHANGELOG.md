@@ -5,6 +5,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Redesigned HTML report, with presentation changes only and the same data:
+  - **Look:** a calm layout with three colours: neutral surfaces, the brand teal for structure and data, and coral
+    only for actions and critical/high severity.
+  - **Tabs:** Overview, Issues, GEO, Search, Changes and Details.
+    - Priorities is folded into Overview and Issues.
+    - By cause and Evidence move under Details.
+  - **Overview:** a score ring with a one-line verdict, key numbers, "Fix first", an area strip and the change since
+    the last run.
+  - **Issues:**
+    - Each row shows a severity dot, the title, the location and the page count.
+    - Opening a row shows the problem, the fix, the verification and tags.
+    - Evidence and sources sit behind a disclosure.
+  - **Selection and prompt:** a floating selection bar and a simpler prompt dialog.
+  - **Copy:** shorter English and Turkish labels, with longer help behind info toggles.
+  - Unchanged: `report.json`, `report.md`, SARIF and the repair prompt.
+- README: rewritten, with new screenshots.
+
 ## [1.5.0] - 2026-11-12
 
 Searvex in other tools: community rule packs, an MCP server for AI clients and a GitHub Action. Release notes:
