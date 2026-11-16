@@ -16,6 +16,9 @@ A redesigned HTML report: calm, visual and quick to read, with the same data. Re
   are regenerated.
 
 ### Changed
+- Official sources re-verified on 2026-11-16 after the weekly source check flagged four pages: Google's redirects page,
+  Google's Search updates page, the Bing webmaster post on Bing Chat controls and Perplexity's crawler page. Each
+  cited fact still holds and no rule text changed; source snapshots and check dates were updated.
 - Redesigned HTML report, with presentation changes only and the same data:
   - **Look:** a calm layout with three colours: neutral surfaces, the brand teal for structure and data, and coral
     only for actions and critical/high severity.
