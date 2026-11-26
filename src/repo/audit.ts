@@ -7,6 +7,7 @@ import { buildContext } from '../analyze/context.js';
 import { runContentChecks, type ContentReport } from '../analyze/content.js';
 import { runGeoChecks, type GeoReport } from '../analyze/geo.js';
 import { buildInventory, type SiteInventory } from '../analyze/inventory.js';
+import { buildReadiness, notMeasuredReadiness, structuredDataProbe, type Readiness } from '../analyze/readiness.js';
 import { runTechnicalChecks } from '../analyze/technical.js';
 import { SEARVEX_VERSION } from '../net/fetcher.js';
 import { affectedSummary, FindingSink, loadKnowledge, type KnowledgeBase } from '../rules/engine.js';
@@ -37,6 +38,7 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
     structuredData: { types: [], pagesWithStructuredData: 0, invalidJsonLdPages: 0 },
   };
 
+  let readiness: Readiness = notMeasuredReadiness();
   let first = true;
   for (const app of scan.apps) {
     if (!app.staticSite) continue;
@@ -54,6 +56,8 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
       geo = appGeo;
       content = appContent;
       inventory = buildInventory(ctx);
+      // Without a robots.txt in the repository, crawler access is unknown (the live site may serve one).
+      readiness = buildReadiness({ inventory, geo, hasStructuredData: structuredDataProbe(ctx), robotsMeasured: ctx.crawl.robots.state === 'ok' });
       first = false;
     }
     const origin = app.staticSite.origin;
@@ -119,6 +123,7 @@ export function auditRepository(root: string, opts: { siteUrl?: string; kb?: Kno
     findings,
     geo,
     content,
+    ...(nothingToAudit ? {} : { readiness }),
     scores: nothingToAudit ? notApplicableScores(NOTHING_TO_AUDIT) : computeScores(findings, Math.max(1, scan.routes.length)),
     measurement: {
       verified: findings.filter((f) => f.confidence === 'verified').length,

@@ -5,6 +5,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Search readiness** on the report overview, separate from the health score. A score of 100 means no defects were
+  found, not that the site is ready for search. Three signals now sit under the key numbers:
+  - **Structured data:** the share of content pages with structured data. It is low below 50 %.
+  - **Content pages:** indexable pages that are not legal documents. It is low below 10.
+  - **AI search:** whether search and AI search crawlers can reach the homepage.
+  - Tapping a signal shows what was measured, the threshold and a link to the related rows.
+  - Blocked AI *training* crawlers and a missing llms.txt are shown but never count as low.
+  - A signal Searvex could not measure shows "Not measured", for example crawler access in a repository without a
+    robots.txt.
+- When the score is good but a signal is low, the verdict says so: "No issues found. Not search-ready yet." or "Good
+  shape. Not search-ready yet."
+- `report.json` gains an optional `readiness` field (schema 1.3, additive), and the Markdown summary gains one
+  "Search readiness" row.
+- Prompted by field feedback: a launch audit scored 100/100 on a site with six content pages, two of them with
+  structured data.
+
+### Changed
+- README screenshots re-captured with the readiness strip.
+
 ## [1.6.0] - 2026-11-16
 
 A redesigned HTML report: calm, visual and quick to read, with the same data. Release notes:

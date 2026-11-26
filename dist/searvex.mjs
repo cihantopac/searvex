@@ -38489,7 +38489,61 @@ function rootCauseGroups(r) {
 }
 
 // src/contract.ts
-var SCHEMA_VERSION = "1.2";
+var SCHEMA_VERSION = "1.3";
+
+// src/analyze/readiness.ts
+var STRUCTURED_DATA_MIN_PERCENT = 50;
+var CONTENT_PAGES_MIN = 10;
+var SEARCH_BOTS = ["Googlebot", "Bingbot"];
+var AI_SEARCH_BOTS = ["OAI-SearchBot", "Claude-SearchBot", "PerplexityBot"];
+var thresholds = () => ({ structuredDataPercent: STRUCTURED_DATA_MIN_PERCENT, contentPages: CONTENT_PAGES_MIN });
+function notMeasuredReadiness() {
+  return { ready: null, structuredData: { status: "not-measured" }, contentPages: { status: "not-measured" }, aiSearch: { status: "not-measured" }, thresholds: thresholds() };
+}
+function structuredDataProbe(ctx) {
+  return (url) => {
+    const p = ctx.byUrl.get(url);
+    const f = p && factsOf(p);
+    return !!f && pageSchemaTypes(f).size > 0;
+  };
+}
+function buildReadiness(input) {
+  const { inventory, geo, hasStructuredData } = input;
+  const partial = input.partial ? { partial: true } : {};
+  const out = notMeasuredReadiness();
+  if (hasStructuredData) {
+    const indexable = inventory.pages.filter((p) => p.indexable);
+    const content = indexable.filter((p) => p.type !== "legal");
+    const byType = {};
+    for (const p of content) byType[p.type] = (byType[p.type] ?? 0) + 1;
+    const top2 = Object.fromEntries(Object.entries(byType).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5));
+    out.contentPages = {
+      status: content.length < CONTENT_PAGES_MIN ? "low" : "ok",
+      ...partial,
+      pages: content.length,
+      indexable: indexable.length,
+      legal: indexable.length - content.length,
+      byType: top2
+    };
+    if (content.length) {
+      const withSd = content.filter((p) => hasStructuredData(p.url)).length;
+      const percent = Math.floor(withSd / content.length * 100);
+      out.structuredData = { status: percent < STRUCTURED_DATA_MIN_PERCENT ? "low" : "ok", ...partial, pages: withSd, of: content.length, percent };
+    }
+  }
+  if (geo.bots.length && input.robotsMeasured !== false) {
+    const blocked = geo.bots.filter((b) => !b.allowed && (SEARCH_BOTS.includes(b.token) || b.purpose === "ai-search" && AI_SEARCH_BOTS.includes(b.token))).map((b) => b.token);
+    out.aiSearch = {
+      status: blocked.length ? "low" : "ok",
+      blocked,
+      llmsTxt: geo.llmsTxt ? geo.llmsTxt.present ? "present" : "absent" : "not-checked",
+      trainingBlocked: geo.bots.filter((b) => b.purpose === "ai-training" && !b.allowed).length
+    };
+  }
+  const measured = [out.structuredData, out.contentPages, out.aiSearch].filter((s) => s.status !== "not-measured");
+  out.ready = measured.length ? measured.every((s) => s.status === "ok") : null;
+  return out;
+}
 
 // src/analyze/audit.ts
 function notAnalysed(r) {
@@ -38741,6 +38795,7 @@ async function analyzeCrawl(result, kb, opts = {}) {
     findings,
     geo,
     content,
+    readiness: buildReadiness({ inventory, geo, hasStructuredData: structuredDataProbe(ctx), partial: result.truncated || !!interrupted }),
     scores: { ...computeScores(findings, Math.max(1, ctx.indexable.length)), ...opts.preLaunch ? { profile: "pre-launch" } : {} },
     measurement: {
       verified: findings.filter((f) => f.confidence === "verified").length,
@@ -38860,7 +38915,8 @@ function overview(P,issues){
 var warn=R.crawl.interrupted?T('warn.interrupted',{n:fmt(R.crawl.queuedRemaining),run:R.runId}):R.crawl.truncated?T('warn.truncated',{n:fmt(R.crawl.queuedRemaining)}):null;
 if(warn)P.appendChild(el('p',{class:'notice',role:'note',text:warn}));
 var na=!!R.scores.notApplicable,score=na?null:R.scores.overall,top=issues.slice().sort(byPriority).slice(0,3);
-var verdict=na?T('ov.verdict.na'):!issues.length?T('ov.verdict.none'):score>=90?T('ov.verdict.good'):score>=70?T('ov.verdict.fair'):T('ov.verdict.poor');
+var RD=R.readiness,notReady=!!RD&&RD.ready===false;
+var verdict=na?T('ov.verdict.na'):!issues.length?T(notReady?'ov.verdict.noneNotReady':'ov.verdict.none'):score>=90?T(notReady?'ov.verdict.goodNotReady':'ov.verdict.good'):score>=70?T('ov.verdict.fair'):T('ov.verdict.poor');
 if(top.length)verdict+=' '+T('ov.fixFirst',{n:top.length});
 var shared=issues.filter(function(f){return groupsOf(f).some(function(g){return g.kind==='layout'||(g.kind==='template'&&g.pages>1)})}).length;
 var sub=issues.length&&shared*2>=issues.length?T('ov.shared'):T('kpi.scoreNote');
@@ -38869,6 +38925,7 @@ var auto=issues.filter(function(f){return D.rem[f.ruleId]==='auto'}).length,optO
 var lim=lims();
 P.appendChild(el('div',{class:'surface hero'},[el('div',{title:T('kpi.score')+' — '+T('kpi.scoreNote')},[ring(score)]),el('div',{class:'herotext'},[el('h2',{text:verdict}),el('p',{class:'muted',text:sub}),
 stats([stat(T('kpi.typesLabel'),fmt(issues.length)),stat(T(R.mode==='website'?'kpi.affectedShort':'kpi.affectedFilesShort'),fmt(R.affectedUrls!==undefined?R.affectedUrls:0)),stat(T('kpi.critical'),fmt(hot),hot?'hot':''),auto||optOnly?stat(T(auto?'kpi.auto':'kpi.autoRepoShort'),fmt(auto||optOnly),'',T('rem.auto.help')):null]),
+na?null:readiness(RD),
 lim.length?el('details',{class:'gaps'},[el('summary',{text:T('ov.notMeasured',{n:lim.length})}),el('ul',{},lim.map(function(l){return el('li',{text:l[1]})}))]):null])]));
 var LC=R.findings.filter(function(f){return f.context==='launch-checklist'}),EV=R.findings.filter(function(f){return f.context==='environment'});
 function ctxRow(f){var r=rt(f.ruleId);return el('div',{class:'row static'},[el('span'),dot(f.severity),el('div',{class:'rmain'},[el('div',{class:'rt',text:r.title}),r.fix?el('div',{class:'rs',text:r.fix}):null]),el('span',{class:'rc',text:fmt(f.count)})])}
@@ -38884,6 +38941,25 @@ b.onclick=function(){FILT.cat=cats.length===1?cats[0]:'';FILT.q='';FILT.sev='';F
 P.appendChild(h2(T('ov.pillars'),T('ov.healthNote')));P.appendChild(areas);
 if(D.diff){var X=D.diff,dd=X.scoreBefore===null||X.scoreAfter===null?null:X.scoreAfter-X.scoreBefore,go=el('button',{type:'button',class:'link',text:T('nav.changes')+' ›'});go.onclick=function(){showTab('changes');window.scrollTo(0,0)};
 P.appendChild(h2(T('kpi.change'),null,go));P.appendChild(statrow([stat(T('ch.score'),dd===null?'—':(dd>=0?'+':'')+dd),stat(T('ch.new'),fmt(X.newFindings.length),X.newFindings.length?'hot':''),stat(T('ch.resolved'),fmt(X.resolved.length))]))}}
+function readiness(RD){if(!RD||RD.ready===null||RD.ready===undefined)return null;
+var hasGeo=R.mode==='website'&&R.geo&&R.geo.bots&&R.geo.bots.length,th=RD.thresholds,box=el('div',{class:'ready'}),items=el('div',{class:'rditems'}),det=el('div',{class:'rdetail',id:'rd-detail',role:'region',hidden:true}),cur=null;
+function go(label,fn){var b=el('button',{type:'button',class:'link',text:label+' ›'});b.onclick=fn;return el('p',{},[b])}
+function detail(k,s){var out=[];if(s.status==='not-measured')return[el('p',{text:T('rd.na.'+k)})];
+if(k==='sd'){out.push(el('p',{text:T('rd.sd.detail',{p:fmt(s.pages),n:fmt(s.of),t:th.structuredDataPercent})}));if(s.partial)out.push(el('p',{text:T('rd.partial')}));
+out.push(go(T('rd.showRows'),function(){SHOWINFO=true;FILT={sev:'',cat:'structured-data',rem:'',conf:'',q:'',pillar:null};showTab('issues');issuesPanel(document.getElementById('p-issues'));window.scrollTo(0,0)}))}
+if(k==='content'){out.push(el('p',{text:T('rd.content.detail',{n:fmt(s.pages),i:fmt(s.indexable),l:fmt(s.legal),t:th.contentPages})}));
+var ty=Object.keys(s.byType||{});if(ty.length)out.push(el('p',{text:ty.map(function(t){return TT('ptype.'+t,t)+' '+fmt(s.byType[t])}).join(' · ')}));if(s.partial)out.push(el('p',{text:T('rd.partial')}))}
+if(k==='ai'){out.push(el('p',{text:s.blocked.length?T('rd.ai.blocked',{b:s.blocked.join(', ')}):T('rd.ai.open')}));
+out.push(el('p',{text:'llms.txt: '+T(s.llmsTxt==='present'?'geo.present':s.llmsTxt==='absent'?'geo.absent':'geo.notChecked')+' · '+T('rd.training',{n:fmt(s.trainingBlocked)})}));
+if(hasGeo)out.push(go(T('rd.aiAccess'),function(){showTab('geo');window.scrollTo(0,0)}))}
+return out}
+[['sd',RD.structuredData],['content',RD.contentPages],['ai',RD.aiSearch]].forEach(function(x){var k=x[0],s=x[1],na=s.status==='not-measured';
+var v=na?T('rd.notMeasured'):k==='sd'?T('rd.pct',{n:s.percent}):k==='content'?fmt(s.pages):T(s.blocked.length?'rd.blocked':'rd.open');
+var st=na?T('rd.notMeasured'):T('rd.'+s.status);
+var b=el('button',{type:'button',class:'rd'+(na?' na':''),'aria-expanded':'false','aria-controls':'rd-detail','aria-label':T('rd.'+k)+': '+v+(na?'':', '+st),'data-rd':k},[el('i',{class:'rd-dot '+(na?'na':s.status),'aria-hidden':'true'}),el('span',{text:T('rd.'+k)}),el('b',{text:v})]);
+b.onclick=function(){var open=cur!==b;if(cur)cur.setAttribute('aria-expanded','false');det.textContent='';det.hidden=!open;cur=open?b:null;if(open){b.setAttribute('aria-expanded','true');detail(k,s).forEach(function(n){det.appendChild(n)})}};
+items.appendChild(b)});
+var hn=hint(T('rd.note'));box.appendChild(el('div',{class:'rdhead'},[el('span',{text:T('rd.title')}),hn[0]]));box.appendChild(hn[1]);box.appendChild(items);box.appendChild(det);return box}
 function openIssue(f){OPEN[f.ruleId]=1;FILT={sev:'',cat:'',rem:'',conf:'',q:'',pillar:null};showTab('issues');issuesPanel(document.getElementById('p-issues'));var r=document.getElementById('row-'+f.ruleId);if(r&&r.scrollIntoView)r.scrollIntoView({block:'center'})}
 function issueRow(f,compact){var r=rt(f.ruleId),G=groupsOf(f),rem=D.rem[f.ruleId],rv=reviewOf(f.ruleId);
 var cb=el('input',{type:'checkbox','aria-label':T('iss.selectFinding')+': '+r.title});var n=selCount(f);cb.checked=G.length>0&&n===G.length;cb.indeterminate=n>0&&n<G.length;
@@ -39273,6 +39349,48 @@ var UI = {
     "ov.verdict.good": "Good shape.",
     "ov.verdict.fair": "Needs attention.",
     "ov.verdict.poor": "Needs work.",
+    "ov.verdict.noneNotReady": "No issues found. Not search-ready yet.",
+    "ov.verdict.goodNotReady": "Good shape. Not search-ready yet.",
+    "rd.title": "Search readiness",
+    "rd.note": "Separate from the score: what search and AI engines can use. A low signal does not lower the score.",
+    "rd.sd": "Structured data",
+    "rd.content": "Content pages",
+    "rd.ai": "AI search",
+    "rd.open": "Open",
+    "rd.blocked": "Blocked",
+    "rd.low": "low",
+    "rd.ok": "ok",
+    "rd.notMeasured": "Not measured",
+    "rd.pct": "{n}%",
+    "rd.sd.detail": "{p} of {n} content pages have structured data. Low below {t}%.",
+    "rd.content.detail": "{n} of {i} indexable pages are content pages; {l} legal pages are not counted. Low below {t}. Page types are inferred (heuristic).",
+    "rd.ai.open": "Search and AI search crawlers can reach the homepage.",
+    "rd.ai.blocked": "Blocked for the homepage: {b}.",
+    "rd.training": "{n} AI training crawlers blocked (a choice, not a gap)",
+    "rd.training.one": "1 AI training crawler blocked (a choice, not a gap)",
+    "rd.partial": "Based on the crawled pages only (partial crawl).",
+    "rd.showRows": "Show rows",
+    "rd.aiAccess": "AI access",
+    "rd.na.sd": "Not measured: no content pages or no page data in this run.",
+    "rd.na.content": "Not measured: page types need page data (a site build or a website audit).",
+    "rd.na.ai": "Not measured: robots.txt was not read (unreachable, or not in the repository).",
+    "ptype.home": "Home",
+    "ptype.product": "Product",
+    "ptype.category": "Category",
+    "ptype.blog-post": "Blog post",
+    "ptype.blog-index": "Blog index",
+    "ptype.docs": "Docs",
+    "ptype.pricing": "Pricing",
+    "ptype.about": "About",
+    "ptype.contact": "Contact",
+    "ptype.legal": "Legal",
+    "ptype.careers": "Careers",
+    "ptype.landing": "Landing",
+    "ptype.tag-archive": "Tag archive",
+    "ptype.author": "Author",
+    "ptype.search": "Search",
+    "ptype.service": "Service",
+    "ptype.other": "Other",
     "ov.fixFirst": "{n} fixes first.",
     "ov.fixFirst.one": "1 fix first.",
     "ov.shared": "Most issues sit in shared templates: one change fixes many pages.",
@@ -39551,6 +39669,48 @@ var UI = {
     "ov.verdict.good": "\u0130yi durumda.",
     "ov.verdict.fair": "\u0130lgi gerekiyor.",
     "ov.verdict.poor": "Ciddi i\u015F var.",
+    "ov.verdict.noneNotReady": "Sorun bulunmad\u0131. Aramaya hen\xFCz haz\u0131r de\u011Fil.",
+    "ov.verdict.goodNotReady": "\u0130yi durumda. Aramaya hen\xFCz haz\u0131r de\u011Fil.",
+    "rd.title": "Arama haz\u0131rl\u0131\u011F\u0131",
+    "rd.note": "Skordan ayr\u0131: arama ve yapay zek\xE2 motorlar\u0131n\u0131n kullanabildikleri. D\xFC\u015F\xFCk bir sinyal skoru d\xFC\u015F\xFCrmez.",
+    "rd.sd": "Yap\u0131sal veri",
+    "rd.content": "\u0130\xE7erik sayfalar\u0131",
+    "rd.ai": "Yapay zek\xE2 aramas\u0131",
+    "rd.open": "A\xE7\u0131k",
+    "rd.blocked": "Engelli",
+    "rd.low": "d\xFC\u015F\xFCk",
+    "rd.ok": "iyi",
+    "rd.notMeasured": "\xD6l\xE7\xFClmedi",
+    "rd.pct": "%{n}",
+    "rd.sd.detail": "{n} i\xE7erik sayfas\u0131n\u0131n {p} tanesinde yap\u0131sal veri var. %{t} alt\u0131 d\xFC\u015F\xFCk say\u0131l\u0131r.",
+    "rd.content.detail": "{i} indekslenebilir sayfan\u0131n {n} tanesi i\xE7erik sayfas\u0131; {l} yasal sayfa say\u0131lmad\u0131. {t} alt\u0131 d\xFC\u015F\xFCk say\u0131l\u0131r. Sayfa t\xFCrleri tahminidir (sezgisel).",
+    "rd.ai.open": "Arama ve yapay zek\xE2 arama botlar\u0131 ana sayfaya eri\u015Febiliyor.",
+    "rd.ai.blocked": "Ana sayfa i\xE7in engelli: {b}.",
+    "rd.training": "{n} yapay zek\xE2 e\u011Fitim botu engelli (bir tercih, eksik de\u011Fil)",
+    "rd.training.one": "1 yapay zek\xE2 e\u011Fitim botu engelli (bir tercih, eksik de\u011Fil)",
+    "rd.partial": "Yaln\u0131zca taranan sayfalara dayan\u0131r (k\u0131smi tarama).",
+    "rd.showRows": "Sat\u0131rlar\u0131 g\xF6ster",
+    "rd.aiAccess": "Yapay zek\xE2 eri\u015Fimi",
+    "rd.na.sd": "\xD6l\xE7\xFClmedi: bu \xE7al\u0131\u015Ft\u0131rmada i\xE7erik sayfas\u0131 veya sayfa verisi yok.",
+    "rd.na.content": "\xD6l\xE7\xFClmedi: sayfa t\xFCrleri i\xE7in sayfa verisi gerekir (site derlemesi veya web sitesi denetimi).",
+    "rd.na.ai": "\xD6l\xE7\xFClmedi: robots.txt okunmad\u0131 (eri\u015Filemedi veya repoda yok).",
+    "ptype.home": "Ana sayfa",
+    "ptype.product": "\xDCr\xFCn",
+    "ptype.category": "Kategori",
+    "ptype.blog-post": "Blog yaz\u0131s\u0131",
+    "ptype.blog-index": "Blog dizini",
+    "ptype.docs": "Dok\xFCman",
+    "ptype.pricing": "Fiyatland\u0131rma",
+    "ptype.about": "Hakk\u0131nda",
+    "ptype.contact": "\u0130leti\u015Fim",
+    "ptype.legal": "Yasal",
+    "ptype.careers": "Kariyer",
+    "ptype.landing": "A\xE7\u0131l\u0131\u015F sayfas\u0131",
+    "ptype.tag-archive": "Etiket ar\u015Fivi",
+    "ptype.author": "Yazar",
+    "ptype.search": "Arama",
+    "ptype.service": "Hizmet",
+    "ptype.other": "Di\u011Fer",
     "ov.fixFirst": "{n} \xF6ncelikli d\xFCzeltme.",
     "ov.shared": "\xC7o\u011Fu sorun ortak \u015Fablonda: tek de\u011Fi\u015Fiklik \xE7ok sayfay\u0131 d\xFCzeltir.",
     "ov.notMeasured": "{n} alan \xF6l\xE7\xFClmedi",
@@ -39837,6 +39997,12 @@ h2{font-size:19px;margin:0;font-weight:600;letter-spacing:-.012em}h3{font-size:1
 .herotext h2{font-size:23px;letter-spacing:-.018em}.herotext>p{margin:6px 0 0}
 .stats{display:flex;flex-wrap:wrap;gap:14px 40px;margin-top:22px}.stat b{display:block;font-size:25px;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.2}.stat span{font-size:13px;color:var(--muted)}.stat.hot b{color:var(--accent)}
 .statrow{padding:22px 26px;margin-bottom:8px}.statrow .stats{margin:0}
+/* search readiness: neutral + teal only, never the accent */
+.ready{margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}.rdhead{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:10px}
+.rditems{display:flex;flex-wrap:wrap;gap:8px}.rd{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 14px;font-size:13.5px;color:var(--muted);cursor:pointer;min-height:32px}
+.rd:hover{border-color:var(--line-2);color:var(--text)}.rd[aria-expanded=true]{border-color:var(--brand);color:var(--text)}.rd b{color:var(--text);font-weight:650;font-variant-numeric:tabular-nums}.rd.na b{color:var(--faint);font-weight:500}
+.rd-dot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--brand)}.rd-dot.low{background:transparent;box-shadow:inset 0 0 0 2px var(--muted)}.rd-dot.na{background:var(--line-2)}
+.rdetail{margin-top:10px;font-size:13.5px;color:var(--muted);background:var(--sunken);border-radius:12px;padding:12px 14px;max-width:640px}.rdetail p{margin:0 0 6px}.rdetail p:last-child{margin:0}.rdetail .link{font-size:13.5px}
 .gaps{margin-top:18px;font-size:13.5px;color:var(--muted)}.gaps summary{cursor:pointer;list-style:none;width:max-content}.gaps summary::-webkit-details-marker{display:none}.gaps summary::after{content:" \u203A";color:var(--faint)}.gaps[open] summary::after{content:" \u2304"}.gaps ul{margin:8px 0 0}
 /* lists + rows */
 .list{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}.list+.list{margin-top:12px}.list.isempty{background:none;border:0;box-shadow:none}
@@ -39907,7 +40073,7 @@ th{color:var(--muted);font-weight:600;font-size:12.5px;background:var(--sunken)}
 .dhead,.dfoot{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.dialog p{margin:0}.dialog h2{font-size:19px}.dnote{color:var(--muted);border-left:2px solid var(--brand);padding-left:10px}
 .dialog textarea{width:100%;min-height:46vh;flex:1;resize:vertical;background:var(--sunken);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font:12.5px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:4px}
 footer{max-width:1080px;margin:0 auto;padding:8px 24px 32px;color:var(--muted);font-size:12.5px}
-@media (max-width:720px){.wrap{padding:0 16px}h1{font-size:26px}.head{padding-top:22px}.hero{grid-template-columns:1fr;gap:18px;padding:22px}.stats{gap:14px 28px}.stat b{font-size:22px}
+@media (max-width:720px){.rditems{flex-direction:column;align-items:stretch}.rd{justify-content:flex-start}.rd b{margin-left:auto}.wrap{padding:0 16px}h1{font-size:26px}.head{padding-top:22px}.hero{grid-template-columns:1fr;gap:18px;padding:22px}.stats{gap:14px 28px}.stat b{font-size:22px}
 .areas{grid-template-columns:repeat(2,1fr)}.area{border-left:0;border-top:1px solid var(--line)}.area:nth-child(-n+2){border-top:0}.area:nth-child(even){border-left:1px solid var(--line)}
 .row{padding-left:14px;gap:12px}.rowbtn{padding:13px 14px 13px 0;gap:10px}.detail{padding:4px 16px 18px}.kv{grid-template-columns:1fr;gap:2px 0}.kv dd{margin-bottom:10px}
 .tabs .wrap{gap:20px}#actionbar{left:12px;right:12px;transform:none;bottom:12px;max-width:none}#actionbar .btn.ghost{display:none}.abinfo{flex:1}
@@ -40039,6 +40205,11 @@ function renderMarkdown(r, opts = {}) {
     if (r.crawl.blocked) L.push(`| Blocked by robots.txt | ${r.crawl.blocked} |`);
   } else L.push(`| Routes/pages | ${r.crawl.crawled}${r.crawl.truncated ? " (file limit reached)" : ""} |`);
   L.push(`| Indexable HTML pages | ${indexableSummary(r).replace(/ indexable/, "")} |`);
+  const rd = r.readiness;
+  if (rd && rd.ready !== null) {
+    const st = (s, v) => s.status === "not-measured" ? "not measured" : `${v} (${s.status})`;
+    L.push(`| Search readiness (separate from the score) | structured data ${st(rd.structuredData, `${rd.structuredData.percent} %`)} \xB7 content pages ${st(rd.contentPages, String(rd.contentPages.pages))} \xB7 AI search ${st(rd.aiSearch, rd.aiSearch.blocked?.length ? `blocked: ${md(rd.aiSearch.blocked.join(", "))}` : "open")} |`);
+  }
   L.push(`| Likely site type (heuristic) | ${md(r.inventory.businessModel.label)} |`);
   L.push(`| Findings | ${r.findings.filter((f) => f.severity !== "info").length} issues + ${r.findings.filter((f) => f.severity === "info").length} informational |`);
   if (r.traffic) L.push(`| Priorities weighted by | ${r.traffic.clicks} clicks \xB7 ${r.traffic.impressions} impressions on ${r.traffic.pages} pages (${md(r.traffic.source)}; verified data, ${r.traffic.metric}) |`);
@@ -42633,6 +42804,7 @@ function auditRepository(root2, opts = {}) {
     sections: [],
     structuredData: { types: [], pagesWithStructuredData: 0, invalidJsonLdPages: 0 }
   };
+  let readiness = notMeasuredReadiness();
   let first2 = true;
   for (const app of scan.apps) {
     if (!app.staticSite) continue;
@@ -42647,6 +42819,7 @@ function auditRepository(root2, opts = {}) {
       geo = appGeo;
       content = appContent;
       inventory = buildInventory(ctx);
+      readiness = buildReadiness({ inventory, geo, hasStructuredData: structuredDataProbe(ctx), robotsMeasured: ctx.crawl.robots.state === "ok" });
       first2 = false;
     }
     const origin = app.staticSite.origin;
@@ -42717,6 +42890,7 @@ function auditRepository(root2, opts = {}) {
     findings,
     geo,
     content,
+    ...nothingToAudit ? {} : { readiness },
     scores: nothingToAudit ? notApplicableScores(NOTHING_TO_AUDIT) : computeScores(findings, Math.max(1, scan.routes.length)),
     measurement: {
       verified: findings.filter((f) => f.confidence === "verified").length,

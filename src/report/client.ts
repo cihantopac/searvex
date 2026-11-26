@@ -88,7 +88,8 @@ function overview(P,issues){
 var warn=R.crawl.interrupted?T('warn.interrupted',{n:fmt(R.crawl.queuedRemaining),run:R.runId}):R.crawl.truncated?T('warn.truncated',{n:fmt(R.crawl.queuedRemaining)}):null;
 if(warn)P.appendChild(el('p',{class:'notice',role:'note',text:warn}));
 var na=!!R.scores.notApplicable,score=na?null:R.scores.overall,top=issues.slice().sort(byPriority).slice(0,3);
-var verdict=na?T('ov.verdict.na'):!issues.length?T('ov.verdict.none'):score>=90?T('ov.verdict.good'):score>=70?T('ov.verdict.fair'):T('ov.verdict.poor');
+var RD=R.readiness,notReady=!!RD&&RD.ready===false;
+var verdict=na?T('ov.verdict.na'):!issues.length?T(notReady?'ov.verdict.noneNotReady':'ov.verdict.none'):score>=90?T(notReady?'ov.verdict.goodNotReady':'ov.verdict.good'):score>=70?T('ov.verdict.fair'):T('ov.verdict.poor');
 if(top.length)verdict+=' '+T('ov.fixFirst',{n:top.length});
 var shared=issues.filter(function(f){return groupsOf(f).some(function(g){return g.kind==='layout'||(g.kind==='template'&&g.pages>1)})}).length;
 var sub=issues.length&&shared*2>=issues.length?T('ov.shared'):T('kpi.scoreNote');
@@ -97,6 +98,7 @@ var auto=issues.filter(function(f){return D.rem[f.ruleId]==='auto'}).length,optO
 var lim=lims();
 P.appendChild(el('div',{class:'surface hero'},[el('div',{title:T('kpi.score')+' — '+T('kpi.scoreNote')},[ring(score)]),el('div',{class:'herotext'},[el('h2',{text:verdict}),el('p',{class:'muted',text:sub}),
 stats([stat(T('kpi.typesLabel'),fmt(issues.length)),stat(T(R.mode==='website'?'kpi.affectedShort':'kpi.affectedFilesShort'),fmt(R.affectedUrls!==undefined?R.affectedUrls:0)),stat(T('kpi.critical'),fmt(hot),hot?'hot':''),auto||optOnly?stat(T(auto?'kpi.auto':'kpi.autoRepoShort'),fmt(auto||optOnly),'',T('rem.auto.help')):null]),
+na?null:readiness(RD),
 lim.length?el('details',{class:'gaps'},[el('summary',{text:T('ov.notMeasured',{n:lim.length})}),el('ul',{},lim.map(function(l){return el('li',{text:l[1]})}))]):null])]));
 var LC=R.findings.filter(function(f){return f.context==='launch-checklist'}),EV=R.findings.filter(function(f){return f.context==='environment'});
 function ctxRow(f){var r=rt(f.ruleId);return el('div',{class:'row static'},[el('span'),dot(f.severity),el('div',{class:'rmain'},[el('div',{class:'rt',text:r.title}),r.fix?el('div',{class:'rs',text:r.fix}):null]),el('span',{class:'rc',text:fmt(f.count)})])}
@@ -112,6 +114,25 @@ b.onclick=function(){FILT.cat=cats.length===1?cats[0]:'';FILT.q='';FILT.sev='';F
 P.appendChild(h2(T('ov.pillars'),T('ov.healthNote')));P.appendChild(areas);
 if(D.diff){var X=D.diff,dd=X.scoreBefore===null||X.scoreAfter===null?null:X.scoreAfter-X.scoreBefore,go=el('button',{type:'button',class:'link',text:T('nav.changes')+' ›'});go.onclick=function(){showTab('changes');window.scrollTo(0,0)};
 P.appendChild(h2(T('kpi.change'),null,go));P.appendChild(statrow([stat(T('ch.score'),dd===null?'—':(dd>=0?'+':'')+dd),stat(T('ch.new'),fmt(X.newFindings.length),X.newFindings.length?'hot':''),stat(T('ch.resolved'),fmt(X.resolved.length))]))}}
+function readiness(RD){if(!RD||RD.ready===null||RD.ready===undefined)return null;
+var hasGeo=R.mode==='website'&&R.geo&&R.geo.bots&&R.geo.bots.length,th=RD.thresholds,box=el('div',{class:'ready'}),items=el('div',{class:'rditems'}),det=el('div',{class:'rdetail',id:'rd-detail',role:'region',hidden:true}),cur=null;
+function go(label,fn){var b=el('button',{type:'button',class:'link',text:label+' ›'});b.onclick=fn;return el('p',{},[b])}
+function detail(k,s){var out=[];if(s.status==='not-measured')return[el('p',{text:T('rd.na.'+k)})];
+if(k==='sd'){out.push(el('p',{text:T('rd.sd.detail',{p:fmt(s.pages),n:fmt(s.of),t:th.structuredDataPercent})}));if(s.partial)out.push(el('p',{text:T('rd.partial')}));
+out.push(go(T('rd.showRows'),function(){SHOWINFO=true;FILT={sev:'',cat:'structured-data',rem:'',conf:'',q:'',pillar:null};showTab('issues');issuesPanel(document.getElementById('p-issues'));window.scrollTo(0,0)}))}
+if(k==='content'){out.push(el('p',{text:T('rd.content.detail',{n:fmt(s.pages),i:fmt(s.indexable),l:fmt(s.legal),t:th.contentPages})}));
+var ty=Object.keys(s.byType||{});if(ty.length)out.push(el('p',{text:ty.map(function(t){return TT('ptype.'+t,t)+' '+fmt(s.byType[t])}).join(' · ')}));if(s.partial)out.push(el('p',{text:T('rd.partial')}))}
+if(k==='ai'){out.push(el('p',{text:s.blocked.length?T('rd.ai.blocked',{b:s.blocked.join(', ')}):T('rd.ai.open')}));
+out.push(el('p',{text:'llms.txt: '+T(s.llmsTxt==='present'?'geo.present':s.llmsTxt==='absent'?'geo.absent':'geo.notChecked')+' · '+T('rd.training',{n:fmt(s.trainingBlocked)})}));
+if(hasGeo)out.push(go(T('rd.aiAccess'),function(){showTab('geo');window.scrollTo(0,0)}))}
+return out}
+[['sd',RD.structuredData],['content',RD.contentPages],['ai',RD.aiSearch]].forEach(function(x){var k=x[0],s=x[1],na=s.status==='not-measured';
+var v=na?T('rd.notMeasured'):k==='sd'?T('rd.pct',{n:s.percent}):k==='content'?fmt(s.pages):T(s.blocked.length?'rd.blocked':'rd.open');
+var st=na?T('rd.notMeasured'):T('rd.'+s.status);
+var b=el('button',{type:'button',class:'rd'+(na?' na':''),'aria-expanded':'false','aria-controls':'rd-detail','aria-label':T('rd.'+k)+': '+v+(na?'':', '+st),'data-rd':k},[el('i',{class:'rd-dot '+(na?'na':s.status),'aria-hidden':'true'}),el('span',{text:T('rd.'+k)}),el('b',{text:v})]);
+b.onclick=function(){var open=cur!==b;if(cur)cur.setAttribute('aria-expanded','false');det.textContent='';det.hidden=!open;cur=open?b:null;if(open){b.setAttribute('aria-expanded','true');detail(k,s).forEach(function(n){det.appendChild(n)})}};
+items.appendChild(b)});
+var hn=hint(T('rd.note'));box.appendChild(el('div',{class:'rdhead'},[el('span',{text:T('rd.title')}),hn[0]]));box.appendChild(hn[1]);box.appendChild(items);box.appendChild(det);return box}
 function openIssue(f){OPEN[f.ruleId]=1;FILT={sev:'',cat:'',rem:'',conf:'',q:'',pillar:null};showTab('issues');issuesPanel(document.getElementById('p-issues'));var r=document.getElementById('row-'+f.ruleId);if(r&&r.scrollIntoView)r.scrollIntoView({block:'center'})}
 function issueRow(f,compact){var r=rt(f.ruleId),G=groupsOf(f),rem=D.rem[f.ruleId],rv=reviewOf(f.ruleId);
 var cb=el('input',{type:'checkbox','aria-label':T('iss.selectFinding')+': '+r.title});var n=selCount(f);cb.checked=G.length>0&&n===G.length;cb.indeterminate=n>0&&n<G.length;

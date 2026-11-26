@@ -22,7 +22,7 @@ It finds what is wrong, groups it by root cause and fixes the safe parts, with r
 <p align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/cihantopac/searvex/main/docs/assets/dashboard-dark.webp">
-  <img alt="Searvex report: health score 94, a one-line verdict, key numbers and the issues to fix first" src="https://raw.githubusercontent.com/cihantopac/searvex/main/docs/assets/dashboard-light.webp" width="880">
+  <img alt="Searvex report: health score 94, a one-line verdict, key numbers, search readiness and the issues to fix first" src="https://raw.githubusercontent.com/cihantopac/searvex/main/docs/assets/dashboard-light.webp" width="880">
 </picture>
 <br><sub>A real report, captured unedited (ovokodo.com, 52 pages). One offline HTML file, no data leaves it.</sub>
 </p>

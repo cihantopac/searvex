@@ -18,6 +18,7 @@ import { runLab, type LabData } from './lab.js';
 import { runPackChecks } from './packs.js';
 import { annotateReport, type RootCauseGroup } from '../report/remediation.js';
 import { SCHEMA_VERSION } from '../contract.js';
+import { buildReadiness, structuredDataProbe, type Readiness } from './readiness.js';
 
 export interface AuditReport {
   /** Version of the report schema (`searvex schema report`); independent of the package version. Since 1.3.0. */
@@ -68,6 +69,12 @@ export interface AuditReport {
   findings: Array<Finding & { count: number }>;
   geo: GeoReport;
   content: ContentReport;
+  /**
+   * Search readiness, separate from the defect-based score: structured-data coverage of content pages, the
+   * number of content pages, and search/AI-search crawler access. Absent when nothing was audited (unreachable or
+   * robots-blocked target) and in reports written before schema 1.3.
+   */
+  readiness?: Readiness;
   scores: Scores;
   measurement: { verified: number; heuristic: number; unmeasurable: number };
   /** Real-user field data when a CrUX API key is configured. */
@@ -452,6 +459,7 @@ export async function analyzeCrawl(result: CrawlResult, kb: KnowledgeBase, opts:
     findings,
     geo,
     content,
+    readiness: buildReadiness({ inventory, geo, hasStructuredData: structuredDataProbe(ctx), partial: result.truncated || !!interrupted }),
     scores: { ...computeScores(findings, Math.max(1, ctx.indexable.length)), ...(opts.preLaunch ? { profile: 'pre-launch' as const } : {}) },
     measurement: {
       verified: findings.filter((f) => f.confidence === 'verified').length,

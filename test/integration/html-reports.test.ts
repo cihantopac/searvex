@@ -99,3 +99,77 @@ describe.runIf(browserType)('HTML reports in a browser', () => {
     }
   });
 });
+
+type RdPage = {
+  on: (e: string, f: (x: { message?: string }) => void) => void;
+  goto: (u: string) => Promise<void>;
+  click: (s: string) => Promise<void>;
+  evaluate: <T>(f: string) => Promise<T>;
+  locator: (s: string) => { first: () => { click: () => Promise<void> }; innerText: () => Promise<string>; count: () => Promise<number>; getAttribute: (a: string) => Promise<string | null> };
+  close: () => Promise<void>;
+};
+
+describe('search readiness in the report', () => {
+  it('report.json carries readiness for a site without structured data', () => {
+    expect(before.readiness).toMatchObject({ ready: false, structuredData: { status: 'low', percent: 0, of: 6 }, contentPages: { status: 'low', pages: 6 }, aiSearch: { status: 'ok', llmsTxt: 'not-checked' } });
+  });
+});
+
+describe.runIf(browserType)('search readiness strip in a browser', () => {
+  it('shows the strip, a readiness-aware verdict and the details, without the accent colour', async () => {
+    // A defect-free version of the fixture: only informational rows remain, so the score reads 100.
+    const clean: AuditReport = { ...before, findings: before.findings.filter((f) => f.severity === 'info'), scores: { ...before.scores, overall: 100 } };
+    const old: AuditReport = { ...clean };
+    delete old.readiness;
+    const browser = (await browserType!.launch()) as unknown as { newContext: (o: object) => Promise<{ newPage: () => Promise<RdPage>; close: () => Promise<void> }>; close: () => Promise<void> };
+    try {
+      const ctx = await browser.newContext({ locale: 'en-US' });
+      const p = await ctx.newPage();
+      const errors: string[] = [];
+      p.on('pageerror', (e) => errors.push(String(e.message)));
+      const file = path.join(ws, 'readiness.html');
+      fs.writeFileSync(file, renderHtml(clean, kb));
+      await p.goto('file://' + file);
+      expect(await p.locator('#p-overview .herotext h2').innerText()).toBe('No issues found. Not search-ready yet.');
+      expect(await p.locator('#p-overview .ready').innerText()).toMatch(/Search readiness[\s\S]*Structured data[\s\S]*0%[\s\S]*Content pages[\s\S]*6[\s\S]*AI search[\s\S]*Open/);
+      expect(await p.locator('#p-overview .ready .rd').count()).toBe(3);
+      expect(await p.locator('.rd[data-rd="sd"]').getAttribute('aria-label')).toBe('Structured data: 0%, low');
+      // No accent (coral) anywhere in the strip, in text, background or borders.
+      const colours = await p.evaluate<string[]>(`Array.prototype.concat.apply([],[].map.call(document.querySelectorAll('.ready, .ready *'),function(e){var c=getComputedStyle(e);return[c.color,c.backgroundColor,c.borderTopColor,c.boxShadow]}))`);
+      expect(colours.join(' ')).not.toContain('184, 67, 45');
+      // One detail panel at a time.
+      await p.click('.rd[data-rd="content"]');
+      expect(await p.locator('.rd[data-rd="content"]').getAttribute('aria-expanded')).toBe('true');
+      expect(await p.locator('#rd-detail').innerText()).toMatch(/6 of 6 indexable pages are content pages[\s\S]*Low below 10/);
+      await p.click('.rd[data-rd="sd"]');
+      expect(await p.locator('.rd[data-rd="content"]').getAttribute('aria-expanded')).toBe('false');
+      expect(await p.locator('#rd-detail').innerText()).toMatch(/0 of 6 content pages have structured data\. Low below 50%\./);
+      // "Show rows" opens the issues tab with informational rows on, filtered to structured data.
+      await p.locator('#rd-detail .link').first().click();
+      expect(await p.locator('#tab-issues').getAttribute('aria-selected')).toBe('true');
+      expect(await p.evaluate<boolean>(`document.querySelector('#p-issues label.check input').checked`)).toBe(true);
+      expect(await p.locator('#p-issues [data-rule="sd.none"]').count()).toBeGreaterThan(0);
+      expect(await p.locator('#p-issues [data-rule^="geo."]').count()).toBe(0);
+      // Closing again hides the detail.
+      await p.click('#tab-overview');
+      await p.click('.rd[data-rd="ai"]');
+      expect(await p.locator('#rd-detail').innerText()).toMatch(/llms\.txt: not checked/);
+      await p.click('.rd[data-rd="ai"]');
+      expect(await p.evaluate<boolean>(`document.getElementById('rd-detail').hidden`)).toBe(true);
+      // Turkish.
+      await p.locator('.seg button:text-is("TR")').first().click();
+      expect(await p.locator('#p-overview .herotext h2').innerText()).toBe('Sorun bulunmadı. Aramaya henüz hazır değil.');
+      expect(await p.locator('#p-overview .ready').innerText()).toMatch(/Arama hazırlığı[\s\S]*%0/);
+      // A report written before schema 1.3 has no strip and the old verdict.
+      fs.writeFileSync(file, renderHtml(old, kb));
+      await p.locator('.seg button:text-is("EN")').first().click();
+      await p.goto('file://' + file);
+      expect(await p.locator('#p-overview .ready').count()).toBe(0);
+      expect(await p.locator('#p-overview .herotext h2').innerText()).toBe('No issues found.');
+      expect(errors).toEqual([]);
+      await ctx.close();
+    } finally {
+      await browser.close();
+    }
+  });
+});
