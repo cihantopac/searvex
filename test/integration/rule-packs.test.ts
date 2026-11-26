@@ -94,7 +94,7 @@ describe('H4: pack findings in an audit', () => {
     expect(og).toMatchObject({ pack: 'shop' });
     expect(og.evidence.map((e) => new URL(e.url!).pathname)).toEqual(['/about']);
     expect(report.tool.packs).toEqual([{ name: 'shop', version: '2026.11.12', rules: 2 }]);
-    expect(report.schemaVersion).toBe('1.2');
+    expect(report.schemaVersion).toBe('1.3');
     expect(renderMarkdown(report)).toMatch(/No og:image _\(shop pack\)_/);
     // A report re-rendered without the pack still produces SARIF.
     expect(JSON.stringify(renderSarif(report, loadKnowledge()))).toMatch(/"pack":"shop"/);

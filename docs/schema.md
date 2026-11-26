@@ -13,7 +13,7 @@ The files ship in the npm package (`node_modules/searvex-seo/schema/`). Their `$
 
 ## Versioning
 
-- `report.json` carries `schemaVersion` (currently `"1.1"`); each schema states its version in
+- `report.json` carries `schemaVersion` (currently `"1.3"`); each schema states its version in
   `x-searvex-schema-version`.
 - **Minor** (`1.0` → `1.1`): additive changes only, such as a new optional field or a new enum value.
 - **Major** (`1.x` → `2.0`): a field is removed or renamed, or its type or meaning changes.
@@ -27,6 +27,7 @@ The files ship in the npm package (`node_modules/searvex-seo/schema/`). Their `$
 
 | Version | Package | Change |
 |---|---|---|
+| 1.3 | 1.7.0 | Added `readiness` (search readiness: structured-data coverage of content pages, content page count, search and AI-search crawler access; each signal `ok`, `low` or `not-measured`, with the thresholds used). Absent when nothing was audited |
 | 1.2 | 1.5.0 | Added `findings[].pack` and `tool.packs` (community rule packs, `--rules-pack`) |
 | 1.1 | 1.4.0 | Added `crawl.proxy` (upstream proxy endpoint and resolution mode), `crawl.artefacts` and `findings[].evidence[].artefact` (evidence artefacts), `traffic` (traffic-weighted priorities), `findings[].priority.causedBy` / `.effects` (root causes), `findings[].structures` (page-structure templates), `privateRoutes` (repository mode), `labData` (Lighthouse lab data with `--lab`) |
 | 1.0 | 1.3.0 | First published schema |
