@@ -28,6 +28,11 @@ export function renderMarkdown(r: AuditReport, opts: { maxEvidence?: number } = 
     if (r.crawl.blocked) L.push(`| Blocked by robots.txt | ${r.crawl.blocked} |`);
   } else L.push(`| Routes/pages | ${r.crawl.crawled}${r.crawl.truncated ? ' (file limit reached)' : ''} |`);
   L.push(`| Indexable HTML pages | ${indexableSummary(r).replace(/ indexable/, '')} |`);
+  const rd = r.readiness;
+  if (rd && rd.ready !== null) {
+    const st = (s: { status: string }, v: string) => (s.status === 'not-measured' ? 'not measured' : `${v} (${s.status})`);
+    L.push(`| Search readiness (separate from the score) | structured data ${st(rd.structuredData, `${rd.structuredData.percent} %`)} · content pages ${st(rd.contentPages, String(rd.contentPages.pages))} · AI search ${st(rd.aiSearch, rd.aiSearch.blocked?.length ? `blocked: ${md(rd.aiSearch.blocked.join(', '))}` : 'open')} |`);
+  }
   L.push(`| Likely site type (heuristic) | ${md(r.inventory.businessModel.label)} |`);
   L.push(`| Findings | ${r.findings.filter((f) => f.severity !== 'info').length} issues + ${r.findings.filter((f) => f.severity === 'info').length} informational |`);
   if (r.traffic) L.push(`| Priorities weighted by | ${r.traffic.clicks} clicks · ${r.traffic.impressions} impressions on ${r.traffic.pages} pages (${md(r.traffic.source)}; verified data, ${r.traffic.metric}) |`);

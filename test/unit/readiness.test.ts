@@ -102,3 +102,14 @@ describe('readiness in repository mode', () => {
     expect(next.ready).toBeNull();
   });
 });
+
+describe('readiness in the Markdown report', () => {
+  it('prints one summary row, and none when nothing was measured', async () => {
+    const path = await import('node:path');
+    const { auditRepository } = await import('../../src/repo/audit.js');
+    const { renderMarkdown } = await import('../../src/report/markdown.js');
+    const r = auditRepository(path.resolve('test/fixtures/repos/static-site')).report;
+    expect(renderMarkdown(r)).toMatch(/\| Search readiness \(separate from the score\) \| structured data .+ · content pages \d+ \((low|ok)\) · AI search not measured \|/);
+    expect(renderMarkdown({ ...r, readiness: notMeasuredReadiness() })).not.toContain('Search readiness');
+  });
+});
